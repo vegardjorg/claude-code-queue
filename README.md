@@ -155,7 +155,7 @@ Provided as is, with no warranty.
 
 - Free for private use and for single-person coding teams (also in their own paid work).
 - Teams of two or more developers need a commercial license. Contact the author for a commercial license: contact
-  Vegard Cowie Jørgensen via GitHub, <GITHUB_PROFILE_URL>.
+  Vegard Cowie Jørgensen via GitHub, https://github.com/vegardjorg.
 - Use, copy, modify and develop further, with attribution to Vegard Cowie Jørgensen, as long as the picture in the
   upper-left corner of the board stays. You may decorate it, but the person must still be recognisable.
 
