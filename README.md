@@ -7,6 +7,13 @@ subagents. One chat plans and coordinates; each task runs as a track agent in it
 branch, with a small self-contained mission. Results are reviewed, merged and pushed in batches. Sessions stay
 small, so the token bill stays small.
 
+I built it so I can remote control from my phone, and control a large project. I check the qeue dashbord daily. Its kanban inspired.
+Claude code works on all the tasks I have queued, often hundreds, and I leave it on overnight. It also tracks all my plans. 
+In the morning I answer any questions an make decisions. 
+I optimized it, with context window and task size, and from my not ideal earlier working style, it cut spend by a lot. 
+This runs for 5 days, until my max(x20) is out of tokens. Mileage may vary on smaller projects with smaller budgets. 
+
+
 By Vegard Cowie Jørgensen.
 
 ## What you get
