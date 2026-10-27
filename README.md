@@ -1,13 +1,13 @@
-<p align="center"><img src="assets/logo.webp" alt="claude-cowie-qeue logo" width="160"></p>
+<p align="center"><img src="assets/logo.webp" alt="claude-cowie-queue logo" width="160"></p>
 
-# claude-cowie-qeue
+# claude-cowie-queue
 
 A work queue, a plan register and a local board for running **Claude Code as an orchestrator** with parallel
 subagents. One chat plans and coordinates; each task runs as a track agent in its own git worktree, on its own
 branch, with a small self-contained mission. Results are reviewed, merged and pushed in batches. Sessions stay
 small, so the token bill stays small.
 
-I built it so I can remote control from my phone, and control a large project. I check the qeue dashbord daily. Its kanban inspired.
+I built it so I can remote control from my phone, and control a large project. I check the queue dashbord daily. Its kanban inspired.
 Claude code works on all the tasks I have queued, often hundreds, and I leave it on overnight. It also tracks all my plans. 
 In the morning I answer any questions an make decisions. 
 I optimized it, with context window and task size, and from my not ideal earlier working style, it cut spend by a lot. 
@@ -38,7 +38,7 @@ By Vegard Cowie Jørgensen.
 
 Clone or download this repository, open Claude Code in YOUR project and say:
 
-> Install claude-cowie-qeue from `<path-to-this-repo>`; follow its INSTALL.md.
+> Install claude-cowie-queue from `<path-to-this-repo>`; follow its INSTALL.md.
 
 Claude Code then runs `node scripts/install.mjs <your-project>`, merges the hooks and settings into your
 `.claude/settings.json` without overwriting anything, configures `queue.config.json` with you, runs
