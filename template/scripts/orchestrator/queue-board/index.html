@@ -1,0 +1,299 @@
+<!doctype html>
+<!--
+  Kanban board for the work queue (see docs/board.md). Served by scripts/orchestrator/queue-board.mjs, which also builds
+  theme.css (the neutral palette in lib/queueBoard.js) and inserts the title from queue.config.json. Vanilla JS in board.js,
+  no build step, no CDN. The "Dependencies" view: graph.js draws, the layout is the pure functions in
+  lib/queueGraph.js. The top: two rows with the logo in the left corner; row 1 the workspaces Plans and Queue, title, status,
+  "Waiting on you" and the gear, row 2 the view tabs, search, Filter, Selection and grouping. The Plans room
+  (plans/plans.js) sits below the top. Below it: the strip with "Next up" and the chain around the chosen card.
+  Multi-select with the selection bar at the bottom, "Select all matches" by the search, the bulk action dialog (preview before
+  saving) and "Undo".
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{TITLE}}</title>
+    <link rel="stylesheet" href="/theme.css" />
+    <link rel="stylesheet" href="/board.css" />
+    <link rel="stylesheet" href="/plans/plans.css" />
+    <script src="/a11y.js" defer></script>
+    <script src="/queueGraph.js" defer></script>
+    <script src="/graph.js" defer></script>
+    <script src="/plan.js" defer></script>
+    <!-- The card buffer (the diff) and the keyboard between the columns; same file the tests use. -->
+    <script src="/performance.js" defer></script>
+    <script src="/board.js" defer></script>
+    <!-- The Plans room. The rules (queuePlanView.js) are the same file the tests use; plans.js draws. After
+         board.js, so the key from the link is saved before Plans fetches the register. -->
+    <script src="/queuePlanView.js" defer></script>
+    <!-- The Documents and agreements surface (before plans.js, which draws it). -->
+    <script src="/plans/documents.js" defer></script>
+    <!-- Priority map and the deadline band (before plans.js, which draws them). -->
+    <script src="/plans/map.js" defer></script>
+    <!-- Tree map and dependencies for the selection (before plans.js, which draws them). -->
+    <script src="/plans/structure.js" defer></script>
+    <!-- The reading view of documents and the Unregistered box (before plans.js, which draws them). -->
+    <script src="/plans/read.js" defer></script>
+    <!-- The Legal, Decisions and Launch surfaces (before plans.js, which draws them). -->
+    <script src="/plans/legal.js" defer></script>
+    <!-- Overview, and the keyboard, Ctrl+K, multi-select and editing in the row (before plans.js). -->
+    <script src="/plans/overview.js" defer></script>
+    <script src="/plans/work.js" defer></script>
+    <script src="/plans/plans.js" defer></script>
+  </head>
+  <body>
+    <!--
+      The top is a two-row grid with the mascot (the logo) in the left corner spanning both. Row 1: title,
+      status, "Waiting on you" and the gear (help and theme live in the settings). Row 2: the view tabs, then search,
+      Filter, Selection and grouping. Which side the mascot sits on is controlled by one line in board.css (.top).
+    -->
+    <header class="top">
+      <!-- The logo is inserted by drawLogo() in board.js when /logo exists; otherwise the zone stays empty as a placeholder. -->
+      <div id="mascot" class="mascot empty"></div>
+      <!-- The speech bubble by the mascot. The text is always set with textContent. -->
+      <p id="bubble" class="bubble" role="note" hidden></p>
+      <div class="top-row top-row1">
+        <!-- The workspaces Plans and Queue. The choice is kept in the URL (?room=plans), and each room
+             has its own accent color (plans/plans.css). -->
+        <div id="room-option" class="toggles room-option" role="tablist" aria-label="Workspace">
+          <button
+            type="button"
+            id="room-plans"
+            class="toggles-button"
+            role="tab"
+            aria-controls="plans-room"
+            aria-selected="false"
+            tabindex="-1"
+            title="The plan register: modules, projects and plan entries"
+          >
+            Plans
+          </button>
+          <button
+            type="button"
+            id="room-queue"
+            class="toggles-button"
+            role="tab"
+            aria-controls="board"
+            aria-selected="true"
+            tabindex="0"
+            title="Work queue: the cards, the focus and the statistics"
+          >
+            Queue
+          </button>
+        </div>
+        <h1 class="title">{{TITLE}}</h1>
+        <p id="status" class="status" role="status" aria-live="polite">Fetching the queue …</p>
+        <button
+          type="button"
+          id="inbox"
+          class="button button-outline inbox-button"
+          aria-haspopup="dialog"
+          aria-expanded="false"
+        >
+          Waiting on you
+        </button>
+        <span class="top-fill"></span>
+        <button
+          type="button"
+          id="settings"
+          class="button-icon"
+          aria-label="Settings"
+          title="Settings"
+        ></button>
+      </div>
+      <div class="top-row top-row2">
+        <div id="tabs" class="toggles" role="tablist" aria-label="View">
+          <button
+            type="button"
+            id="show-flat"
+            class="toggles-button"
+            role="tab"
+            aria-controls="board"
+            aria-selected="true"
+            tabindex="0"
+            title="The columns In queue, In progress, Review and Built"
+          >
+            Flat
+          </button>
+          <button
+            type="button"
+            id="show-lanes"
+            class="toggles-button"
+            role="tab"
+            aria-controls="board"
+            aria-selected="false"
+            tabindex="-1"
+            title="One row per project; drag lanes to change project priority"
+          >
+            Project lanes
+          </button>
+          <button
+            type="button"
+            id="show-plan"
+            class="toggles-button"
+            role="tab"
+            aria-controls="board"
+            aria-selected="false"
+            tabindex="-1"
+            title="Focus as Now, Next, Later and Waiting: drag areas and projects, and save the focus"
+          >
+            Focus
+          </button>
+          <button
+            type="button"
+            id="show-graph"
+            class="toggles-button"
+            role="tab"
+            aria-controls="board"
+            aria-selected="false"
+            tabindex="-1"
+            title="Which tasks are waiting on which"
+          >
+            Dependencies
+          </button>
+          <button
+            type="button"
+            id="show-cloud"
+            class="toggles-button"
+            role="tab"
+            aria-controls="board"
+            aria-selected="false"
+            tabindex="-1"
+            title="Tasks that can run in the cloud, and the cloud sessions"
+          >
+            Cloud
+          </button>
+          <button
+            type="button"
+            id="show-statistics"
+            class="toggles-button"
+            role="tab"
+            aria-controls="board"
+            aria-selected="false"
+            tabindex="-1"
+            title="Throughput, lead time and usage over time"
+          >
+            Statistics
+          </button>
+        </div>
+        <span class="top-fill"></span>
+        <div id="search-filter" class="search-filter">
+          <input
+            id="search"
+            class="search"
+            type="search"
+            placeholder="Search id, title or feature"
+            aria-label="Search id, title or feature"
+            autocomplete="off"
+          />
+          <div class="filter">
+            <button
+              type="button"
+              id="filter-button"
+              class="button button-outline filter-button"
+              aria-expanded="false"
+              aria-controls="filter-menu"
+            >
+              Filter
+            </button>
+            <div id="filter-menu" class="filter-menu" role="group" aria-label="Filter" hidden></div>
+          </div>
+          <button type="button" id="mark-match" class="button button-outline mark-match" hidden>
+            Select all matches
+          </button>
+          <div class="filter">
+            <button
+              type="button"
+              id="views"
+              class="button button-outline filter-button"
+              aria-expanded="false"
+              aria-controls="views-menu"
+              title="Built-in selections and your saved selections (search, filter, grouping and view)"
+            >
+              Selection
+            </button>
+            <div
+              id="views-menu"
+              class="filter-menu"
+              role="group"
+              aria-label="Selection"
+              hidden
+            ></div>
+          </div>
+        </div>
+        <select
+          id="grouping"
+          class="grouping"
+          aria-label="Grouping"
+          title="Split the cards into groups: area and project, project and feature, or focus step"
+        ></select>
+      </div>
+    </header>
+    <!-- The focus line (the steps, the rest, ready ones in focus, a notice when the focus has nothing ready). -->
+    <div id="focusLine" class="focusLine" aria-label="Focus" hidden></div>
+    <div id="stripe" class="stripe" aria-label="Next up and the chain" hidden></div>
+    <!-- Shown when the server answers 401 (restarted); polling stops until the key is in place. -->
+    <div id="key-banner" class="key-banner" role="alert" hidden>
+      <p class="key-banner-text">The board has been restarted. Paste the link from the terminal.</p>
+      <form id="key-form" class="key-form">
+        <input
+          id="key-link"
+          class="search"
+          type="text"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="http://127.0.0.1:…/#key=…"
+          aria-label="Link from the terminal"
+        />
+        <button type="submit" class="button button-filled">Use link</button>
+      </form>
+      <p id="key-error" class="key-error" hidden></p>
+    </div>
+    <main id="board" class="board" role="tabpanel" aria-label="Board"></main>
+    <!-- The Plans room (breadcrumb trail and three panes), drawn by plans/plans.js. -->
+    <section
+      id="plans-room"
+      class="plans-room"
+      role="tabpanel"
+      aria-label="Plans"
+      hidden
+    ></section>
+    <div id="panel-background" class="panel-background" hidden></div>
+    <aside
+      id="panel"
+      class="panel"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="panel-title"
+      hidden
+    ></aside>
+    <div id="guard-background" class="guard-background" hidden>
+      <div
+        id="guard"
+        class="guard"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="guard-title"
+        aria-describedby="guard-text"
+      ></div>
+    </div>
+    <!-- The selection bar (shown when something is selected), the bulk action dialog and the "Undo" message. -->
+    <div id="optionLine" class="optionLine" role="region" aria-label="Marked tasks" hidden></div>
+    <div id="bulk-background" class="guard-background" hidden>
+      <div
+        id="bulk"
+        class="guard bulk"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="bulk-title"
+        aria-describedby="bulk-explanation"
+      ></div>
+    </div>
+    <!-- One stack for the message and "Undo" (the order is controlled by the toast queue in a11y.js). -->
+    <div id="toaster" class="toaster">
+      <div id="undo-message" class="undo-message" role="status" hidden></div>
+      <div id="message" class="message" role="alert" hidden></div>
+    </div>
+  </body>
+</html>

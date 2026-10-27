@@ -1,10 +1,10 @@
-// Testoppsett for claude-cowie-qeue (bare lokalt, ingen CI). Testene ligger i mal/scripts/orkestrator/**/__tests__.
-// TZ settes her fordi flere regler (nattvindu, døgn, ukekvote) regnes i Europe/Oslo.
+// Test setup for claude-cowie-qeue (local only, no CI). The tests live in template/scripts/orchestrator/**/__tests__.
+// TZ is set here because several rules (night window, day, weekly quota) are computed in Europe/Oslo.
 process.env.TZ = process.env.TZ || 'Europe/Oslo';
 import { defineConfig } from 'vitest/config';
 export default defineConfig({
   test: {
-    include: ['mal/scripts/orkestrator/**/__tests__/**/*.test.{ts,mjs}'],
+    include: ['template/scripts/orchestrator/**/__tests__/**/*.test.{ts,mjs}'],
     testTimeout: 60000,
     pool: 'forks',
   },

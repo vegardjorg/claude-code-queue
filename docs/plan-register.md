@@ -1,8 +1,8 @@
-# The plan register (`ko.mjs plan …`)
+# The plan register (`queue.mjs plan …`)
 
 The queue holds work that is ready to run. The plan register holds everything before that: ideas, plans,
 investigations and decisions, with priority and maturity, and links to the documents where the details live. It is
-stored in `scripts/.ko/planer.json` (gitignored) and only written through `ko.mjs plan …`, with a change log and
+stored in `scripts/.queue/plans.json` (gitignored) and only written through `queue.mjs plan …`, with a change log and
 undo.
 
 ## A plan entry
@@ -10,49 +10,49 @@ undo.
 ```json
 {
   "id": "PL-OFFLINE",
-  "tittel": "Offline sync for the mobile app",
-  "prosjekt": "offline",
-  "prioritet": "eier",
-  "prioritet_grunn": "No owner decision yet",
-  "prioritet_satt_av": "agent",
-  "modenhet": "ide",
-  "kilder": [{ "sti": "docs/offline-plan.md", "anker": "## Sync" }]
+  "title": "Offline sync for the mobile app",
+  "project": "offline",
+  "priority": "owner",
+  "priority_reason": "No owner decision yet",
+  "priority_set_by": "agent",
+  "maturity": "idea",
+  "sources": [{ "path": "docs/offline-plan.md", "anchor": "## Sync" }]
 }
 ```
 
-- `prosjekt` (required): must exist (`ko.mjs prosjekter`; create with `ko.mjs prosjekt <pid> --tittel "…"`). It links
-  the entry to queue tasks in the same project. The module (area) comes from the project: `ko.mjs prosjekt <pid>
-  --omrade <oid>`, with modules from `moduler` in `ko.config.json` (`ko.mjs plan moduler` creates them).
-- `prioritet`: `naa` (now), `eier` (owner must decide), `senere` (later), `dropp` (dropped). Categories such as
-  `sikkerhet` (security), `for-prod` (before production) and `viktig` (important) explain why.
-- `modenhet` (maturity): from `ide` (idea) to a plan that is ready to become queue tasks.
-- `kilder`: list of `{ sti, anker?, rolle? }` pointing to the documents. The entry points to them, it never copies
+- `project` (required): must exist (`queue.mjs projects`; create with `queue.mjs project <pid> --title "…"`). It links
+  the entry to queue tasks in the same project. The module (area) comes from the project: `queue.mjs project <pid>
+  --area <oid>`, with modules from `modules` in `queue.config.json` (`queue.mjs plan modules` creates them).
+- `priority`: `now` (now), `owner` (owner must decide), `later` (later), `drop` (dropped). Categories such as
+  `security` (security), `for-prod` (before production) and `important` (important) explain why.
+- `maturity` (maturity): from `idea` (idea) to a plan that is ready to become queue tasks.
+- `sources`: list of `{ path, anchor?, role? }` pointing to the documents. The entry points to them, it never copies
   them.
-- `prioritet_grunn`: one sentence (which priority rule, and why). Required when an agent sets the priority.
+- `priority_reason`: one sentence (which priority rule, and why). Required when an agent sets the priority.
 
 ## Commands
 
 | Command | What it does |
 |---|---|
-| `plan vis [--modul m] [--prosjekt p] [--prioritet …] [--sok "…"]` | List entries |
-| `plan hent <id\|project\|module>` | Entries with sources, queue status and owner questions |
-| `plan ny --fil entry.json` | New entry or list of entries |
-| `plan endre <id> --felt name=value` / `--sett '{…}'` | Change fields (`kilder` is replaced as a whole list) |
-| `plan prioriter <id…> <naa\|eier\|senere\|dropp>` | Set priority |
-| `plan slaa-sammen <to-id> <from-id…>` | Merge entries (the others go to the archive) |
-| `plan verifiser <id> --funn "…"` | Record that a plan was checked against the code |
-| `plan regler` | The priority rules |
-| `plan aktiv <id>` | "Working now" marker shown on the board |
-| `plan sjekk` | Unregistered documents, dead paths, stale entries |
-| `plan angre` | Undo |
+| `plan show [--module m] [--project p] [--priority …] [--search "…"]` | List entries |
+| `plan get <id\|project\|module>` | Entries with sources, queue status and owner questions |
+| `plan new --file entry.json` | New entry or list of entries |
+| `plan edit <id> --field name=value` / `--set '{…}'` | Change fields (`sources` is replaced as a whole list) |
+| `plan prioritize <id…> <now\|owner\|later\|drop>` | Set priority |
+| `plan combine <to-id> <from-id…>` | Merge entries (the others go to the archive) |
+| `plan verify <id> --findings "…"` | Record that a plan was checked against the code |
+| `plan rules` | The priority rules |
+| `plan active <id>` | "Working now" marker shown on the board |
+| `plan check` | Unregistered documents, dead paths, stale entries |
+| `plan undo` | Undo |
 | `plan backup` | Runs the script in `planBackup` (optional; for example a private backup repo) |
-| `plan dok …` | Optional register of controlled documents (versions, revisions, links) |
+| `plan doc …` | Optional register of controlled documents (versions, revisions, links) |
 
 ## Rules that keep it useful
 
 1. A new plan or investigation document is registered in the SAME session it is written, either as a new entry or as
-   a source on an existing one (`plan vis --sok "…"` first).
-2. An entry created by an agent without the owner's decision gets `"prioritet": "eier"`, `"modenhet": "ide"`,
-   `"prioritet_satt_av": "agent"` and a reason, and an owner question (`ko.mjs sporsmal`).
-3. Plan work and building are separate: the skill `/planer` works on plans only and turns a mature plan into queue
+   a source on an existing one (`plan show --search "…"` first).
+2. An entry created by an agent without the owner's decision gets `"priority": "owner"`, `"maturity": "idea"`,
+   `"priority_set_by": "agent"` and a reason, and an owner question (`queue.mjs question`).
+3. Plan work and building are separate: the skill `/plans` works on plans only and turns a mature plan into queue
    proposals; the queue builds.

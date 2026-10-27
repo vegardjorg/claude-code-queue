@@ -1,192 +1,192 @@
 #!/usr/bin/env node
 // =============================================================
-// install.mjs: installerer køsystemet (claude-cowie-qeue) i et eksisterende prosjekt.
+// install.mjs: installs the queue system (claude-cowie-qeue) into an existing project.
 //
-// Bruk:
-//   node scripts/install.mjs <målprosjekt> [--overskriv] [--med-tester] [--torr]
+// Usage:
+//   node scripts/install.mjs <target-project> [--overwrite] [--with-tester] [--dry]
 //
-// Hva den gjør (alt er «legg til», ingenting slettes):
-//   1. Kopierer mal/scripts/orkestrator/ → <mål>/scripts/orkestrator/ (uten __tests__ med mindre --med-tester).
-//      Finnes en fil fra før, hoppes den over (med --overskriv erstattes den).
-//   2. Kopierer skills (mal/.claude/skills/*) og agenter (mal/.claude/agents/*) på samme måte.
-//   3. Kopierer docs/*.md → <mål>/docs/ko/, CLAUDE.ko.md → <mål>/CLAUDE.ko.md og
-//      ko.config.example.json → <mål>/ko.config.json (bare når de mangler).
-//   4. Fletter mal/.claude/settings.ko.json inn i <mål>/.claude/settings.json: nøkler som mangler legges til,
-//      eksisterende verdier beholdes alltid, og hooks legges til bare når samme kommando ikke finnes fra før.
-//   5. Legger linjene for køens datamappe og worktrees til i <mål>/.gitignore når de mangler.
-// --torr viser hva som ville skjedd, uten å skrive noe.
+// What it does (everything is "add to", nothing is deleted):
+//   1. Copies template/scripts/orchestrator/ -> <target>/scripts/orchestrator/ (without __tests__ unless --with-tester).
+//      If a file already exists, it is skipped (with --overwrite it is replaced).
+//   2. Copies skills (template/.claude/skills/*) and agents (template/.claude/agents/*) the same way.
+//   3. Copies docs/*.md -> <target>/docs/queue/, CLAUDE.queue.md -> <target>/CLAUDE.queue.md and
+//      queue.config.example.json -> <target>/queue.config.json (only when they are missing).
+//   4. Merges template/.claude/settings.queue.json into <target>/.claude/settings.json: missing keys are added,
+//      existing values are always kept, and hooks are added only when the same command does not already exist.
+//   5. Adds the lines for the queue's data folder and worktrees to <target>/.gitignore when they are missing.
+// --dry shows what would happen, without writing anything.
 // =============================================================
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const HER = path.dirname(fileURLToPath(import.meta.url));
-const REPO = path.resolve(HER, '..');
-const MAL = path.join(REPO, 'mal');
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const REPO = path.resolve(HERE, '..');
+const TEMPLATE = path.join(REPO, 'template');
 
 const args = process.argv.slice(2);
-const flagg = new Set(args.filter((a) => a.startsWith('--')));
-const malArg = args.find((a) => !a.startsWith('--'));
-if (!malArg) {
-  console.error('bruk: node scripts/install.mjs <målprosjekt> [--overskriv] [--med-tester] [--torr]');
+const flag = new Set(args.filter((a) => a.startsWith('--')));
+const templateArg = args.find((a) => !a.startsWith('--'));
+if (!templateArg) {
+  console.error('usage: node scripts/install.mjs <target-project> [--overwrite] [--with-tester] [--dry]');
   process.exit(2);
 }
-const MAL_ROT = path.resolve(malArg);
-const OVERSKRIV = flagg.has('--overskriv');
-const MED_TESTER = flagg.has('--med-tester');
-const TORR = flagg.has('--torr');
+const TEMPLATE_ROOT = path.resolve(templateArg);
+const OVERWRITE = flag.has('--overwrite');
+const WITH_TESTS = flag.has('--with-tester');
+const DRY = flag.has('--dry');
 
-if (!fs.existsSync(MAL_ROT) || !fs.statSync(MAL_ROT).isDirectory()) {
-  console.error(`Fant ikke målmappa: ${MAL_ROT}`);
+if (!fs.existsSync(TEMPLATE_ROOT) || !fs.statSync(TEMPLATE_ROOT).isDirectory()) {
+  console.error(`Could not find the target folder: ${TEMPLATE_ROOT}`);
   process.exit(2);
 }
-if (path.resolve(MAL_ROT) === REPO) {
-  console.error('Målet kan ikke være selve claude-cowie-qeue-repoet.');
+if (path.resolve(TEMPLATE_ROOT) === REPO) {
+  console.error('The target cannot be the claude-cowie-qeue repo itself.');
   process.exit(2);
 }
 
-// Tellere for oppsummeringen til slutt.
-const logg = { kopiert: [], hoppetOver: [], erstattet: [] };
+// Counters for the summary at the end.
+const log = { copied: [], skippedOver: [], replaced: [] };
 
-/** Lager mappa (rekursivt) når vi ikke kjører tørt. */
-function lagMappe(dir) {
-  if (!TORR) fs.mkdirSync(dir, { recursive: true });
+/** Creates the folder (recursively) when we are not doing a dry run. */
+function makeFolder(dir) {
+  if (!DRY) fs.mkdirSync(dir, { recursive: true });
 }
 
-/** Kopierer én fil, men respekterer eksisterende filer med mindre --overskriv. */
-function kopierFil(fra, til) {
-  const rel = path.relative(MAL_ROT, til);
-  if (fs.existsSync(til)) {
-    if (!OVERSKRIV) {
-      logg.hoppetOver.push(rel);
+/** Copies one file, but respects existing files unless --overwrite. */
+function copyFile(from, to) {
+  const rel = path.relative(TEMPLATE_ROOT, to);
+  if (fs.existsSync(to)) {
+    if (!OVERWRITE) {
+      log.skippedOver.push(rel);
       return;
     }
-    logg.erstattet.push(rel);
+    log.replaced.push(rel);
   } else {
-    logg.kopiert.push(rel);
+    log.copied.push(rel);
   }
-  if (TORR) return;
-  lagMappe(path.dirname(til));
-  fs.copyFileSync(fra, til);
+  if (DRY) return;
+  makeFolder(path.dirname(to));
+  fs.copyFileSync(from, to);
 }
 
-/** Kopierer en mappe rekursivt. `hopp(navn)` kan utelate mapper (f.eks. __tests__). */
-function kopierMappe(fra, til, hopp = () => false) {
-  for (const e of fs.readdirSync(fra, { withFileTypes: true })) {
-    if (hopp(e.name)) continue;
-    const f = path.join(fra, e.name);
-    const t = path.join(til, e.name);
-    if (e.isDirectory()) kopierMappe(f, t, hopp);
-    else kopierFil(f, t);
+/** Copies a folder recursively. `skip(name)` can leave out folders (e.g. __tests__). */
+function copyFolder(from, to, skip = () => false) {
+  for (const e of fs.readdirSync(from, { withFileTypes: true })) {
+    if (skip(e.name)) continue;
+    const f = path.join(from, e.name);
+    const t = path.join(to, e.name);
+    if (e.isDirectory()) copyFolder(f, t, skip);
+    else copyFile(f, t);
   }
 }
 
-// ---- 1-3: filer ----
-kopierMappe(
-  path.join(MAL, 'scripts', 'orkestrator'),
-  path.join(MAL_ROT, 'scripts', 'orkestrator'),
-  (navn) => !MED_TESTER && navn === '__tests__',
+// ---- 1-3: files ----
+copyFolder(
+  path.join(TEMPLATE, 'scripts', 'orchestrator'),
+  path.join(TEMPLATE_ROOT, 'scripts', 'orchestrator'),
+  (name) => !WITH_TESTS && name === '__tests__',
 );
-// Bibliotekene er CommonJS (.js med require). En package.json med "type": "commonjs" i mappa gjør at de virker
-// også når målprosjektet selv har "type": "module".
+// The libraries are CommonJS (.js with require). A package.json with "type": "commonjs" in the folder makes them work
+// also when the target project itself has "type": "module".
 {
-  const pj = path.join(MAL_ROT, 'scripts', 'orkestrator', 'package.json');
+  const pj = path.join(TEMPLATE_ROOT, 'scripts', 'orchestrator', 'package.json');
   if (!fs.existsSync(pj)) {
-    logg.kopiert.push(path.relative(MAL_ROT, pj));
-    if (!TORR) {
-      lagMappe(path.dirname(pj));
+    log.copied.push(path.relative(TEMPLATE_ROOT, pj));
+    if (!DRY) {
+      makeFolder(path.dirname(pj));
       fs.writeFileSync(pj, JSON.stringify({ type: 'commonjs' }, null, 2) + '\n');
     }
   }
 }
-kopierMappe(path.join(MAL, '.claude', 'skills'), path.join(MAL_ROT, '.claude', 'skills'));
-kopierMappe(path.join(MAL, '.claude', 'agents'), path.join(MAL_ROT, '.claude', 'agents'));
+copyFolder(path.join(TEMPLATE, '.claude', 'skills'), path.join(TEMPLATE_ROOT, '.claude', 'skills'));
+copyFolder(path.join(TEMPLATE, '.claude', 'agents'), path.join(TEMPLATE_ROOT, '.claude', 'agents'));
 for (const f of fs.readdirSync(path.join(REPO, 'docs'))) {
-  if (f.endsWith('.md')) kopierFil(path.join(REPO, 'docs', f), path.join(MAL_ROT, 'docs', 'ko', f));
+  if (f.endsWith('.md')) copyFile(path.join(REPO, 'docs', f), path.join(TEMPLATE_ROOT, 'docs', 'queue', f));
 }
-kopierFil(path.join(REPO, 'CLAUDE.ko.md'), path.join(MAL_ROT, 'CLAUDE.ko.md'));
-// ko.config.json overskrives aldri, heller ikke med --overskriv (den er prosjektets egne valg).
+copyFile(path.join(REPO, 'CLAUDE.queue.md'), path.join(TEMPLATE_ROOT, 'CLAUDE.queue.md'));
+// queue.config.json is never overwritten, not even with --overwrite (it holds the project's own options).
 {
-  const til = path.join(MAL_ROT, 'ko.config.json');
-  if (fs.existsSync(til)) logg.hoppetOver.push('ko.config.json');
+  const to = path.join(TEMPLATE_ROOT, 'queue.config.json');
+  if (fs.existsSync(to)) log.skippedOver.push('queue.config.json');
   else {
-    logg.kopiert.push('ko.config.json');
-    if (!TORR) fs.copyFileSync(path.join(REPO, 'ko.config.example.json'), til);
+    log.copied.push('queue.config.json');
+    if (!DRY) fs.copyFileSync(path.join(REPO, 'queue.config.example.json'), to);
   }
 }
 
 // ---- 4: settings ----
-/** Alle kommandoene i en hook-liste (for å se om en hook finnes fra før). */
-function kommandoer(grupper) {
-  const ut = new Set();
-  for (const g of grupper ?? []) for (const h of g.hooks ?? []) if (h.command) ut.add(h.command);
-  return ut;
+/** All the commands in a hook list (to see whether a hook already exists). */
+function commands(groups) {
+  const out = new Set();
+  for (const g of groups ?? []) for (const h of g.hooks ?? []) if (h.command) out.add(h.command);
+  return out;
 }
 
-const settingsSti = path.join(MAL_ROT, '.claude', 'settings.json');
-const ny = JSON.parse(fs.readFileSync(path.join(MAL, '.claude', 'settings.ko.json'), 'utf8'));
-let eksisterende = {};
-if (fs.existsSync(settingsSti)) {
+const settingsPath = path.join(TEMPLATE_ROOT, '.claude', 'settings.json');
+const fresh = JSON.parse(fs.readFileSync(path.join(TEMPLATE, '.claude', 'settings.queue.json'), 'utf8'));
+let existing = {};
+if (fs.existsSync(settingsPath)) {
   try {
-    eksisterende = JSON.parse(fs.readFileSync(settingsSti, 'utf8'));
+    existing = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
   } catch (e) {
-    console.error(`Kunne ikke lese ${settingsSti} som JSON (${e.message}). Rett fila og kjør på nytt.`);
+    console.error(`Could not read ${settingsPath} as JSON (${e.message}). Fix the file and run again.`);
     process.exit(1);
   }
 }
-const endringer = [];
-for (const [nokkel, verdi] of Object.entries(ny)) {
-  if (nokkel.startsWith('_') || nokkel.startsWith('$')) continue; // kommentarer
-  if (nokkel === 'hooks') continue;
-  if (eksisterende[nokkel] === undefined) {
-    eksisterende[nokkel] = verdi;
-    endringer.push(`la til ${nokkel}`);
-  } else if (typeof verdi === 'object' && !Array.isArray(verdi) && typeof eksisterende[nokkel] === 'object') {
-    for (const [k, v] of Object.entries(verdi)) {
-      if (eksisterende[nokkel][k] === undefined) {
-        eksisterende[nokkel][k] = v;
-        endringer.push(`la til ${nokkel}.${k}`);
+const changes = [];
+for (const [key, val] of Object.entries(fresh)) {
+  if (key.startsWith('_') || key.startsWith('$')) continue; // comments
+  if (key === 'hooks') continue;
+  if (existing[key] === undefined) {
+    existing[key] = val;
+    changes.push(`added ${key}`);
+  } else if (typeof val === 'object' && !Array.isArray(val) && typeof existing[key] === 'object') {
+    for (const [k, v] of Object.entries(val)) {
+      if (existing[key][k] === undefined) {
+        existing[key][k] = v;
+        changes.push(`added ${key}.${k}`);
       }
     }
   } else {
-    endringer.push(`beholdt eksisterende ${nokkel}`);
+    changes.push(`kept existing ${key}`);
   }
 }
-eksisterende.hooks = eksisterende.hooks ?? {};
-for (const [hendelse, grupper] of Object.entries(ny.hooks ?? {})) {
-  const liste = (eksisterende.hooks[hendelse] = eksisterende.hooks[hendelse] ?? []);
-  const finnes = kommandoer(liste);
-  for (const g of grupper) {
-    const nyeHooks = (g.hooks ?? []).filter((h) => !finnes.has(h.command));
-    if (nyeHooks.length === 0) continue;
-    liste.push({ ...g, hooks: nyeHooks });
-    endringer.push(`hook ${hendelse}: ${nyeHooks.map((h) => h.command.split('/').pop()).join(', ')}`);
+existing.hooks = existing.hooks ?? {};
+for (const [event, groups] of Object.entries(fresh.hooks ?? {})) {
+  const list = (existing.hooks[event] = existing.hooks[event] ?? []);
+  const exists = commands(list);
+  for (const g of groups) {
+    const newHooks = (g.hooks ?? []).filter((h) => !exists.has(h.command));
+    if (newHooks.length === 0) continue;
+    list.push({ ...g, hooks: newHooks });
+    changes.push(`hook ${event}: ${newHooks.map((h) => h.command.split('/').pop()).join(', ')}`);
   }
 }
-if (!TORR) {
-  lagMappe(path.dirname(settingsSti));
-  fs.writeFileSync(settingsSti, JSON.stringify(eksisterende, null, 2) + '\n');
+if (!DRY) {
+  makeFolder(path.dirname(settingsPath));
+  fs.writeFileSync(settingsPath, JSON.stringify(existing, null, 2) + '\n');
 }
 
 // ---- 5: .gitignore ----
-const gitignoreSti = path.join(MAL_ROT, '.gitignore');
-const gitignore = fs.existsSync(gitignoreSti) ? fs.readFileSync(gitignoreSti, 'utf8') : '';
-const harLinje = (l) => gitignore.split(/\r?\n/).some((x) => x.trim() === l);
-const nyeLinjer = ['scripts/.ko/', '.claude/worktrees/'].filter((l) => !harLinje(l));
-if (nyeLinjer.length && !TORR) {
+const gitignorePath = path.join(TEMPLATE_ROOT, '.gitignore');
+const gitignore = fs.existsSync(gitignorePath) ? fs.readFileSync(gitignorePath, 'utf8') : '';
+const hasLine = (l) => gitignore.split(/\r?\n/).some((x) => x.trim() === l);
+const newLines = ['scripts/.queue/', '.claude/worktrees/'].filter((l) => !hasLine(l));
+if (newLines.length && !DRY) {
   const pre = gitignore && !gitignore.endsWith('\n') ? '\n' : '';
-  fs.appendFileSync(gitignoreSti, `${pre}\n# claude-cowie-qeue (køens data og agentenes worktrees)\n${nyeLinjer.join('\n')}\n`);
+  fs.appendFileSync(gitignorePath, `${pre}\n# claude-cowie-qeue (the queue's data and the agents' worktrees)\n${newLines.join('\n')}\n`);
 }
 
-// ---- Oppsummering ----
-console.log(`${TORR ? '[TØRR] ' : ''}Installerte claude-cowie-qeue i ${MAL_ROT}`);
-console.log(`  kopiert: ${logg.kopiert.length}, erstattet: ${logg.erstattet.length}, hoppet over (fantes): ${logg.hoppetOver.length}`);
-if (logg.hoppetOver.length) console.log(`  hoppet over: ${logg.hoppetOver.slice(0, 15).join(', ')}${logg.hoppetOver.length > 15 ? ' …' : ''}`);
-console.log(`  .claude/settings.json: ${endringer.length ? endringer.join('; ') : 'ingen endringer'}`);
-console.log(`  .gitignore: ${nyeLinjer.length ? 'la til ' + nyeLinjer.join(' ') : 'uendret'}`);
+// ---- Summary ----
+console.log(`${DRY ? '[DRY] ' : ''}Installed claude-cowie-qeue in ${TEMPLATE_ROOT}`);
+console.log(`  copied: ${log.copied.length}, replaced: ${log.replaced.length}, skipped (already existed): ${log.skippedOver.length}`);
+if (log.skippedOver.length) console.log(`  skipped: ${log.skippedOver.slice(0, 15).join(', ')}${log.skippedOver.length > 15 ? ' ...' : ''}`);
+console.log(`  .claude/settings.json: ${changes.length ? changes.join('; ') : 'no changes'}`);
+console.log(`  .gitignore: ${newLines.length ? 'added ' + newLines.join(' ') : 'unchanged'}`);
 console.log('');
-console.log('Neste steg:');
-console.log('  1. Rediger ko.config.json (baseGren, gater, moduler).');
-console.log('  2. Legg linja @CLAUDE.ko.md i prosjektets CLAUDE.md.');
-console.log('  3. node scripts/orkestrator/ko.mjs init');
-console.log('  4. node scripts/orkestrator/ko.mjs vis');
+console.log('Next steps:');
+console.log('  1. Edit queue.config.json (baseBranch, gates, modules).');
+console.log('  2. Add the line @CLAUDE.queue.md to the project\'s CLAUDE.md.');
+console.log('  3. node scripts/orchestrator/queue.mjs init');
+console.log('  4. node scripts/orchestrator/queue.mjs show');

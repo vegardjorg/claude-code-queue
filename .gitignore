@@ -1,5 +1,5 @@
 node_modules/
-# Data fra en testinstallasjon skal aldri inn i repoet
-scripts/.ko/
-mal/scripts/.ko/
+# Data from a test installation must never go into the repo
+scripts/.queue/
+template/scripts/.queue/
 *.log

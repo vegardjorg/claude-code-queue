@@ -1,0 +1,3416 @@
+/*
+  Kanban board for the work queue (see docs/board.md). All colors are the tokens from the neutral palette
+  (PALETTE in lib/queueBoard.js), served as --color-<token> in /theme.css (light, dark following the system, dark via
+  the switch). Never hex here. Radius 4/8/12 px, spacing 4/8/16/24 px, the system font.
+  Roles: app-root = surface-container-low, card = surface-container-lowest, sheet/panel = surface.
+*/
+
+:root {
+  --radius: 4px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  /* The font and spacing scale. Use the tokens, not raw px: queueBoardScale.test.ts counts the
+     raw values and stops any drift back. The font floor is 12 px, and the weight is 400 or 600 (only those
+     two weights are used). Half values (6, 10, 12 px …) are rounded to the nearest step, ties up. */
+  --text-xs: 12px;
+  --text-sm: 14px;
+  --text-md: 16px;
+  --text-lg: 20px;
+  --text-xl: 28px;
+  --distance-xs: 4px;
+  --distance-sm: 8px;
+  --distance-md: 16px;
+  --distance-lg: 24px;
+  --focus: 2px solid var(--color-primary);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface-container-low);
+  color: var(--color-on-surface);
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  font-size: var(--text-sm);
+  line-height: 20px;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: var(--focus);
+  outline-offset: 2px;
+}
+
+/* ---- The top: title, status, search, view, theme, filters ---- */
+
+/* A grid in two rows (6 + 48 + 4 + 48 + 6 = 112 px) with the mascot spanning both rows.
+   The mascot sits in the LEFT corner. To move it right, change only `grid-template` below to
+   "row1 mascot" auto "row2 mascot" auto / minmax(0, 1fr) auto (the bubble does not follow automatically; see .bubble). */
+.top {
+  flex: none;
+  position: relative; /* the anchor for the speech bubble */
+  display: grid;
+  grid-template:
+    'mascot row1' auto
+    'mascot row2' auto / auto minmax(0, 1fr);
+  column-gap: var(--distance-md);
+  row-gap: 4px;
+  background: var(--color-surface-container-lowest);
+  border-bottom: 1px solid var(--color-outline-variant);
+  padding: 6px var(--distance-lg);
+}
+
+.top-row {
+  display: flex;
+  align-items: center;
+  gap: var(--distance-md);
+  flex-wrap: wrap;
+  min-height: 48px;
+  min-width: 0;
+}
+
+.top-row1 {
+  grid-area: row1;
+}
+
+.top-row2 {
+  grid-area: row2;
+  gap: var(--distance-sm);
+}
+
+/* The filler pushes the rest of the row to the right (the gear in row 1, search and grouping in row 2). */
+.top-fill {
+  flex: 1 1 0;
+}
+
+/* The mascot zone: fixed space (52 × 104) even without a logo, so the top does not jump. The feet poke 8 px down past
+   the border (6 px gap + 1 px edge + 8 px), and sit above the focus line and the strip (below the menus and the panel). */
+.mascot {
+  grid-area: mascot;
+  position: relative;
+  z-index: 3;
+  align-self: end;
+  width: 52px;
+  height: 104px;
+  margin-bottom: -15px;
+}
+
+.mascot .logo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: bottom center;
+}
+
+/* The speech bubble (the mascot fills it): right of the head, above the title row, with an arrow toward the mouth.
+   z-index 9 keeps it below the panel backdrop (10) and the panel (11). */
+.bubble {
+  position: absolute;
+  z-index: 9;
+  top: 10px;
+  left: calc(var(--distance-lg) + 52px + 12px);
+  max-width: 340px;
+  margin: 0;
+  padding: 10px 14px;
+  background: var(--color-surface-container-high);
+  color: var(--color-on-surface);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.16); /* shadow: black in both modes */
+  font-size: 14px;
+  line-height: 20px;
+  animation: bubble-in 200ms ease-out;
+}
+
+.bubble[hidden] {
+  display: none;
+}
+
+/* The arrow: a rotated square with the bubble's background and two of its edges, pointing at the mouth on the left. */
+.bubble::before {
+  content: '';
+  position: absolute;
+  top: 18px;
+  left: -7px;
+  width: 12px;
+  height: 12px;
+  background: inherit;
+  border-left: 1px solid var(--color-outline-variant);
+  border-bottom: 1px solid var(--color-outline-variant);
+  transform: rotate(45deg);
+}
+
+@keyframes bubble-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bubble {
+    animation: none;
+  }
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-lg);
+  line-height: 28px;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.status {
+  margin: 0;
+  color: var(--color-on-surface-variant);
+  font-size: var(--text-xs);
+}
+
+.status.error {
+  color: var(--color-error);
+  font-weight: 600;
+}
+
+.search {
+  min-height: 40px;
+  width: 260px;
+  max-width: 60vw;
+  padding: 0 var(--distance-md);
+  border: 1px solid var(--color-outline);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-container-lowest);
+}
+
+.search::placeholder {
+  color: var(--color-placeholder);
+}
+
+.toggles {
+  display: inline-flex;
+  border: 1px solid var(--color-outline);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.toggles-button {
+  min-height: 40px;
+  padding: 0 var(--distance-md);
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.toggles-button + .toggles-button {
+  border-left: 1px solid var(--color-outline);
+}
+
+.toggles-button[aria-pressed='true'],
+.toggles-button[aria-selected='true'] {
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+  font-weight: 600;
+}
+
+/* ---- Search and the Filter menu (the logo sits in the mascot zone above) ---- */
+
+.search-filter {
+  display: flex;
+  align-items: center;
+  gap: var(--distance-sm);
+}
+
+.search-filter[hidden] {
+  display: none;
+}
+
+.filter {
+  position: relative;
+}
+
+.filter-button {
+  padding: 0 var(--distance-md);
+}
+
+.filter-button.active {
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+  border-color: transparent;
+}
+
+.filter-menu {
+  position: absolute;
+  z-index: 12;
+  top: calc(100% + 6px);
+  left: 0;
+  width: min(360px, calc(100vw - 32px));
+  max-height: min(70vh, 560px);
+  overflow-y: auto;
+  padding: var(--distance-sm) 0;
+  background: var(--color-surface-container-lowest);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.16); /* shadow: black in both modes */
+}
+
+.filter-section + .filter-section {
+  border-top: 1px solid var(--color-outline-variant);
+  margin-top: var(--distance-sm);
+  padding-top: var(--distance-sm);
+}
+
+.filter-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--distance-md);
+}
+
+.filter-section-header h3 {
+  margin: 0;
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-on-surface-variant);
+}
+
+.filter-section-header .link-button {
+  margin: 0;
+  border-color: transparent;
+}
+
+.filter-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: var(--distance-sm);
+  min-height: 44px;
+  padding: 0 var(--distance-md);
+}
+
+.filter-row:hover {
+  background: var(--color-surface-container-high);
+}
+
+.filter-row input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--color-primary);
+}
+
+.filter-row label {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--distance-sm);
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.filter-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filter-count {
+  margin-left: auto;
+  color: var(--color-on-surface-variant);
+  font-size: var(--text-xs);
+}
+
+.paused {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-on-surface-variant);
+}
+
+.pause-button {
+  flex: none;
+  min-height: 32px;
+  padding: 0 var(--distance-sm);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--color-primary);
+  cursor: pointer;
+  font-size: var(--text-xs);
+}
+
+.pause-button:hover {
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+}
+
+.filter-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--distance-sm) var(--distance-md) 0;
+  margin-top: var(--distance-sm);
+  border-top: 1px solid var(--color-outline-variant);
+}
+
+.dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  background: var(--p, var(--color-outline));
+}
+
+/* ---- Board ---- */
+
+.board {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.board.flat {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(280px, 1fr));
+  gap: var(--distance-md);
+  padding: var(--distance-md) var(--distance-lg);
+  overflow: auto hidden;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.col-header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--distance-sm);
+  padding: 0 var(--distance-xs) var(--distance-sm);
+}
+
+.col-header h2 {
+  margin: 0;
+  font-size: var(--text-md);
+  line-height: 24px;
+  font-weight: 600;
+}
+
+.counter {
+  color: var(--color-on-surface-variant);
+  font-size: var(--text-xs);
+}
+
+.wip {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  padding: 2px var(--distance-sm);
+  border-radius: 9999px;
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+  white-space: nowrap;
+}
+
+.wip.full {
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+}
+
+.col-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 2px var(--distance-xs) var(--distance-lg);
+}
+
+.section-title,
+.section > summary {
+  margin: var(--distance-sm) 0;
+  font-size: var(--text-xs);
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-on-surface-variant);
+}
+
+.section > summary {
+  cursor: pointer;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+}
+
+.shortlist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--distance-sm);
+  min-height: 8px;
+}
+
+.empty {
+  margin: var(--distance-sm) 0;
+  color: var(--color-on-surface-variant);
+  font-size: var(--text-xs);
+}
+
+.show-more {
+  margin-top: var(--distance-sm);
+}
+
+/* ---- The card ---- */
+
+.summary {
+  position: relative;
+  padding: var(--distance-sm) var(--distance-md) var(--distance-sm) var(--distance-md);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface-container-lowest);
+  cursor: pointer;
+  overflow: hidden;
+}
+
+/* The project color as a stripe on the left. */
+.summary::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 5px;
+  background: var(--p, var(--color-outline));
+}
+
+.summary:hover {
+  border-color: var(--color-outline);
+}
+
+.summary.ready {
+  border-color: var(--color-primary);
+}
+
+/* Blocked: muted (dashed edge, no card surface), but the text keeps its contrast. */
+.summary.blocked {
+  background: transparent;
+  border-style: dashed;
+}
+
+.summary.blocked .summary-title {
+  color: var(--color-on-surface-variant);
+}
+
+.summary.drags {
+  opacity: 0.5;
+}
+
+.summary.boosted,
+.lane.boosted > .lane-header {
+  outline: var(--focus);
+  outline-offset: 2px;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.18); /* M3 shadow: black in both modes */
+}
+
+.summary-header {
+  display: flex;
+  align-items: center;
+  gap: var(--distance-sm);
+  flex-wrap: wrap;
+}
+
+.summary-id {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--color-on-surface-variant);
+  margin-right: auto;
+}
+
+/* The project's short name in the card header (the color stripe alone is below 3:1). */
+.summary-project {
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 14ch;
+}
+
+.summary-title {
+  margin: var(--distance-xs) 0 0;
+}
+
+/* The metadata is one group (aria-describedby points here), but sits in the header's flex row as before. */
+.summary-meta {
+  display: contents;
+}
+
+/* The title is the button that opens the panel (and the tab stop in the column). Looks like text. */
+.summary-button {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* Focus on the button highlights the whole card (the button is only the title). */
+.summary:has(.summary-button:focus-visible) {
+  outline: var(--focus);
+  outline-offset: 2px;
+}
+.summary-button:focus-visible {
+  outline: none;
+}
+
+.summary-footer {
+  margin: var(--distance-sm) 0 0;
+  display: flex;
+  align-items: center;
+  gap: var(--distance-sm);
+  flex-wrap: wrap;
+  font-size: var(--text-xs);
+  line-height: 16px;
+  color: var(--color-on-surface-variant);
+}
+
+.blocker {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--distance-xs);
+  padding: 0 var(--distance-sm);
+  min-height: 20px;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 9999px;
+  font-size: var(--text-xs);
+  line-height: 18px;
+  color: var(--color-on-surface-variant);
+  white-space: nowrap;
+}
+
+.badge.class-dplus {
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.badge.visual {
+  background: var(--color-module-purple-container);
+  color: var(--color-on-surface);
+  border-color: transparent;
+}
+
+.badge.ready-badge {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.badge.qa {
+  background: var(--color-module-amber-container);
+  color: var(--color-on-surface);
+  border-color: transparent;
+  font-weight: 600;
+}
+
+/* The cloud badge in In progress, the checkbox for a cloud bundle and the line above In queue. */
+.badge.cloud-badge {
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.cloud-select {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--distance-xs);
+  min-height: 44px;
+  min-width: 44px;
+  margin-left: auto;
+  padding: 0 var(--distance-sm);
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+  cursor: pointer;
+}
+
+.cloud-select input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-primary);
+}
+
+.col-header:has(.cloud-bundle) {
+  flex-wrap: wrap;
+}
+
+.cloud-bundle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--distance-sm);
+  flex-base: 100%;
+  margin: var(--distance-xs) 0 0;
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.cloud-package-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--distance-xs);
+  flex-base: 100%;
+}
+
+.cloud-package-field textarea {
+  min-height: 120px;
+  padding: var(--distance-sm) var(--distance-sm);
+  border: 1px solid var(--color-outline);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-container-lowest);
+  color: var(--color-on-surface);
+  font-family: ui-monospace, monospace;
+  font-size: var(--text-xs);
+}
+
+.badge.old,
+.badge.deviation {
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.lock {
+  color: var(--color-on-surface-variant);
+}
+
+/* ---- Project lanes ---- */
+
+.board.lanes {
+  padding: 0 var(--distance-lg) var(--distance-lg);
+}
+
+.lane-headers,
+.lane-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(240px, 1fr));
+  gap: var(--distance-md);
+}
+
+.lane-headers {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: var(--distance-md) 0 var(--distance-sm);
+  background: var(--color-surface-container-low);
+  border-bottom: 1px solid var(--color-outline-variant);
+}
+
+.lane-headers .col-header {
+  padding-bottom: 0;
+}
+
+.laneList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.lane {
+  padding: var(--distance-md) 0;
+  border-bottom: 1px solid var(--color-outline-variant);
+}
+
+.lane-header {
+  display: flex;
+  align-items: center;
+  gap: var(--distance-sm);
+  min-height: 40px;
+  margin-bottom: var(--distance-sm);
+  padding: 0 var(--distance-sm);
+  border-radius: var(--radius-lg);
+}
+
+.lane-header[draggable='true'] {
+  cursor: grab;
+}
+
+.lane-header h2 {
+  margin: 0;
+  font-size: var(--text-md);
+  line-height: 24px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lane-header .pid,
+.lane-header .counts {
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+  white-space: nowrap;
+}
+
+.lane-header .counts {
+  margin-left: auto;
+}
+
+.handle {
+  color: var(--color-on-surface-variant);
+}
+
+.lane.drags {
+  opacity: 0.5;
+}
+
+.lane-cell .section-title:first-child {
+  margin-top: 0;
+}
+
+/* ---- Detail panel ---- */
+
+.panel-background {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  background: rgb(0 0 0 / 0.32); /* M3 scrim: black in both modes */
+}
+
+.panel {
+  position: fixed;
+  z-index: 11;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(600px, 100vw);
+  overflow-y: auto;
+  background: var(--color-surface);
+  border-left: 1px solid var(--color-outline-variant);
+  padding: var(--distance-lg);
+}
+
+.panel-header {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--distance-sm);
+}
+
+.panel-header > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.panel-header h2 {
+  margin: var(--distance-xs) 0 0;
+  font-size: var(--text-lg);
+  line-height: 28px;
+  font-weight: 600;
+}
+
+.button-icon {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.button-icon:hover {
+  background: var(--color-surface-container-high);
+}
+
+.button-icon .icon {
+  width: 20px;
+  height: 20px;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: var(--distance-sm) var(--distance-md);
+  margin: var(--distance-md) 0;
+}
+
+.facts dt {
+  color: var(--color-on-surface-variant);
+  font-size: var(--text-xs);
+}
+
+.facts dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.facts ul {
+  margin: 0;
+  padding-left: var(--distance-md);
+}
+
+code,
+pre {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: var(--text-xs);
+}
+
+code {
+  padding: 1px var(--distance-xs);
+  border-radius: var(--radius);
+  background: var(--color-surface-container-high);
+}
+
+.link-button {
+  min-height: 32px;
+  padding: 0 var(--distance-sm);
+  margin: 0 var(--distance-sm) var(--distance-sm) 0;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--color-primary);
+  cursor: pointer;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--distance-sm);
+  padding: var(--distance-md) 0;
+  border-top: 1px solid var(--color-outline-variant);
+  border-bottom: 1px solid var(--color-outline-variant);
+}
+
+.actions .field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--distance-xs);
+  flex: 1 1 220px;
+}
+
+.actions label {
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.actions input,
+.actions textarea {
+  min-height: 44px;
+  padding: var(--distance-sm) var(--distance-md);
+  border: 1px solid var(--color-outline);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-container-lowest);
+}
+
+.actions textarea {
+  min-height: 88px;
+  resize: vertical;
+}
+
+.actions .none {
+  margin: 0;
+  color: var(--color-on-surface-variant);
+  font-size: var(--text-xs);
+}
+
+.button {
+  min-height: 44px;
+  padding: 0 var(--distance-lg);
+  border-radius: 9999px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Press color and hover, so a click shows at once. */
+.button:not(:disabled):hover {
+  filter: brightness(0.95);
+}
+
+.button:not(:disabled):active {
+  filter: brightness(0.85);
+  transform: scale(0.97);
+}
+
+.button {
+  transition:
+    filter 0.1s,
+    transform 0.1s;
+}
+
+/* While saving: the button shows "Saving …" and a busy cursor, the row is dimmed. */
+.button[aria-busy='true'] {
+  opacity: 0.7;
+  cursor: progress;
+}
+
+.saves {
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .button,
+  .saves {
+    transition: none;
+  }
+
+  .button:not(:disabled):active {
+    transform: none;
+  }
+}
+
+.button-filled {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.button-muted {
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+}
+
+.button-outline {
+  min-height: 40px;
+  background: transparent;
+  border-color: var(--color-outline);
+  color: var(--color-primary);
+}
+
+.button-fare {
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+}
+
+.mission {
+  margin-top: var(--distance-md);
+  overflow-wrap: anywhere;
+}
+
+.mission h3,
+.mission h4 {
+  margin: var(--distance-md) 0 var(--distance-sm);
+  font-size: var(--text-md);
+  line-height: 22px;
+  font-weight: 600;
+}
+
+.mission h3.mission-title {
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-on-surface-variant);
+}
+
+.mission p,
+.mission ul,
+.mission ol {
+  margin: 0 0 var(--distance-sm);
+}
+
+.mission ul,
+.mission ol {
+  padding-left: var(--distance-lg);
+}
+
+.mission pre {
+  margin: 0 0 var(--distance-sm);
+  padding: var(--distance-sm) var(--distance-md);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-container-high);
+  overflow-x: auto;
+  white-space: pre;
+}
+
+/* ---- Statistics ---- */
+
+.board.statistics {
+  display: block;
+  padding: var(--distance-lg);
+}
+
+.keyFigures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--distance-md);
+  margin-bottom: var(--distance-lg);
+}
+
+.tile {
+  padding: var(--distance-md);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface-container-lowest);
+  border: 1px solid var(--color-outline-variant);
+}
+
+.tile p {
+  margin: 0;
+}
+
+.tile-name {
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.tile-value {
+  margin: var(--distance-xs) 0 !important;
+  font-size: var(--text-xl);
+  line-height: 36px;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.tile-under {
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.graphs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: var(--distance-md);
+}
+
+.graph {
+  margin: 0;
+  padding: var(--distance-md);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface-container-lowest);
+  border: 1px solid var(--color-outline-variant);
+}
+
+.graph figcaption {
+  margin-bottom: var(--distance-sm);
+  font-weight: 600;
+}
+
+.graph-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.graph-svg text {
+  fill: var(--color-on-surface-variant);
+  font-size: var(--text-xs);
+}
+
+.graph-svg text.label-strong {
+  fill: var(--color-on-surface);
+  font-weight: 600;
+}
+
+.graph-svg .axis {
+  stroke: var(--color-outline-variant);
+  stroke-width: 1;
+}
+
+.graph-svg rect {
+  fill: var(--s, var(--color-primary));
+}
+
+.graph-svg rect.match {
+  fill: transparent;
+}
+
+.line-estimate {
+  --s: var(--color-on-surface);
+  stroke: var(--s);
+  stroke-width: 2;
+  stroke-dasharray: 4 3;
+}
+
+.line-quota {
+  --s: var(--color-error);
+  stroke: var(--s);
+  stroke-width: 2;
+  stroke-dasharray: 6 3;
+}
+
+/* The series colors: the category tokens (made to be distinguishable, also with color blindness) in both modes. */
+.s-K {
+  --s: var(--color-category-teal);
+}
+.s-D {
+  --s: var(--color-category-ocean-blue);
+}
+.s-Dp {
+  --s: var(--color-category-plum);
+}
+.s-U {
+  --s: var(--color-category-slate);
+}
+.s-work {
+  --s: var(--color-category-teal);
+}
+.s-review {
+  --s: var(--color-category-moss);
+}
+.s-day {
+  --s: var(--color-category-ocean-blue);
+}
+.s-night {
+  --s: var(--color-category-violet);
+}
+.s-context {
+  --s: var(--color-category-petrol);
+}
+.s-over {
+  --s: var(--color-error);
+}
+
+.explanation {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--distance-xs) var(--distance-md);
+  margin: var(--distance-sm) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.explanation li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--distance-sm);
+}
+
+.draw-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--s);
+}
+
+.draw-line {
+  width: 16px;
+  border-top: 2px dashed var(--s);
+}
+
+.graph-remark {
+  margin: var(--distance-sm) 0 0;
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+/* ---- Settings (the gear, in the side panel) ---- */
+
+.setting {
+  padding: var(--distance-md) 0;
+  border-top: 1px solid var(--color-outline-variant);
+}
+
+.setting:first-of-type {
+  margin-top: var(--distance-md);
+}
+
+.setting-title {
+  margin: 0 0 var(--distance-sm);
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-on-surface-variant);
+}
+
+.setting-field {
+  padding: var(--distance-sm) 0 var(--distance-md);
+}
+
+.setting-field + .setting-field {
+  border-top: 1px dashed var(--color-outline-variant);
+}
+
+.setting-field label {
+  font-weight: 600;
+}
+
+.setting-explanation,
+.setting-meta,
+.setting-source {
+  margin: 2px 0 0;
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.setting-control {
+  display: flex;
+  gap: var(--distance-sm);
+  margin-top: var(--distance-sm);
+}
+
+.setting-control input,
+.setting-control select {
+  width: 140px;
+  min-height: 44px;
+  padding: 0 var(--distance-md);
+  border: 1px solid var(--color-outline);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-container-lowest);
+  font: inherit;
+  color: inherit;
+}
+
+.setting-error {
+  margin: var(--distance-sm) 0 0;
+  color: var(--color-error);
+  font-weight: 600;
+  font-size: var(--text-xs);
+}
+
+.setting ul {
+  margin: 0;
+  padding-left: var(--distance-md);
+}
+
+.fare {
+  color: var(--color-error);
+}
+
+/* ---- The confirmation on a warning from the guard rules ---- */
+
+.guard-background {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--distance-md);
+  background: rgb(0 0 0 / 0.32); /* M3 scrim: black in both modes */
+}
+
+.guard-background[hidden] {
+  display: none;
+}
+
+.guard {
+  width: min(480px, 100%);
+  padding: var(--distance-lg);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+  border: 1px solid var(--color-outline-variant);
+}
+
+.guard h2 {
+  margin: 0 0 var(--distance-sm);
+  font-size: var(--text-lg);
+  line-height: 26px;
+  font-weight: 600;
+}
+
+.guard-list {
+  margin: 0 0 var(--distance-md);
+  padding-left: var(--distance-md);
+}
+
+.guard-list li + li {
+  margin-top: var(--distance-sm);
+}
+
+.guard-info {
+  color: var(--color-on-surface-variant);
+}
+
+.guard-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--distance-sm);
+}
+
+/* ---- Message (at the bottom) ---- */
+
+/* One stack for the message and "Undo". The stack is fixed at the bottom; the boxes sit below each other
+   (the order is set by the toast queue via `order`), so they never cover each other. */
+.toaster {
+  position: fixed;
+  z-index: 21;
+  left: 50%;
+  bottom: var(--distance-lg);
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--distance-sm);
+  width: max-content;
+  max-width: min(640px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+.toaster > * {
+  pointer-events: auto;
+}
+
+body.with-option-line .toaster {
+  bottom: 96px;
+}
+
+.message {
+  max-width: 100%;
+  padding: var(--distance-md) var(--distance-md);
+  border-radius: var(--radius-lg);
+  background: var(--color-inverse-surface);
+  color: var(--color-inverse-on-surface);
+  white-space: pre-line;
+}
+
+.message.error {
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+  font-weight: 600;
+}
+
+/* Live: summaryNode() in board.js sets it on the text for the screen reader. */
+.hidden-for-eye {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ---- The "Waiting on you" button ---- */
+
+.inbox-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--distance-sm);
+  padding: 0 var(--distance-md);
+}
+
+.inbox-button.active {
+  border-color: var(--color-primary);
+}
+
+.inbox-count {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 var(--distance-sm);
+  border-radius: 9999px;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: var(--text-xs);
+  line-height: 22px;
+  text-align: center;
+}
+
+/* ---- The strip: "Next up" and the chain ---- */
+
+.stripe {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--distance-xs) var(--distance-lg);
+  background: var(--color-surface-container-lowest);
+  border-bottom: 1px solid var(--color-outline-variant);
+  font-size: var(--text-xs);
+  line-height: 16px;
+}
+
+.stripe[hidden] {
+  display: none;
+}
+
+.stripe-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--distance-sm) var(--distance-sm);
+  min-height: 36px;
+}
+
+.stripe-name {
+  font-weight: 600;
+  color: var(--color-on-surface-variant);
+}
+
+.stripe-empty {
+  color: var(--color-on-surface-variant);
+}
+
+.stripe .link-button {
+  margin: 0;
+}
+
+.next-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--distance-sm);
+  max-width: 300px;
+  min-height: 32px;
+  padding: 0 var(--distance-sm);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 9999px;
+  background: var(--color-surface-container-low);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.next-summary:hover {
+  border-color: var(--color-outline);
+}
+
+.next-id {
+  flex: none;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.next-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The legend in the chain line: the same ring as on the cards. */
+.draw-chain {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--color-outline-variant);
+}
+
+.chain-for-draw {
+  box-shadow: 0 0 0 2px var(--color-secondary);
+}
+
+.chain-after-draw {
+  box-shadow: 0 0 0 2px var(--color-tertiary);
+}
+
+.chain-explanation {
+  color: var(--color-on-surface-variant);
+}
+
+/* ---- "Unlocks N", aging work and the chain on the cards ---- */
+
+.badge.locks {
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+  border-color: transparent;
+}
+
+/* Over p85 for the class: a subtle warm tone on the card; the explanation is in the tooltip. */
+.summary.aging {
+  background: color-mix(
+    in srgb,
+    var(--color-module-amber-container) 55%,
+    var(--color-surface-container-lowest)
+  );
+}
+
+.age-over {
+  font-weight: 600;
+  color: var(--color-on-surface);
+}
+
+/* The chain: the chosen card, the predecessors and the successors get a ring and a word; the rest is dimmed. The ring is a
+   shadow (not an outline), so the focus ring still shows. */
+.summary.chain-selected {
+  box-shadow: 0 0 0 3px var(--color-primary);
+}
+
+.summary.chain-for {
+  box-shadow: 0 0 0 2px var(--color-secondary);
+}
+
+.summary.chain-after {
+  box-shadow: 0 0 0 2px var(--color-tertiary);
+}
+
+.summary.chain-selected .summary-id::after {
+  content: ' · selected';
+}
+
+.summary.chain-for .summary-id::after {
+  content: ' · before';
+}
+
+.summary.chain-after .summary-id::after {
+  content: ' · after';
+}
+
+/* The rest is dimmed with the surface, not with opacity, so the text keeps its contrast. The card gets
+   the app root's surface and a dashed edge, the project stripe fades, and the text switches to on-surface-variant. */
+.board.chain-active .summary:not(.chain-selected):not(.chain-for):not(.chain-after) {
+  background: var(--color-surface-container-high);
+  border-style: dashed;
+  color: var(--color-on-surface-variant);
+}
+
+.board.chain-active .summary:not(.chain-selected):not(.chain-for):not(.chain-after)::before {
+  background: var(--color-outline-variant);
+}
+
+.facts-remark {
+  display: inline-block;
+  color: var(--color-on-surface-variant);
+  font-size: var(--text-xs);
+}
+
+.panel-header .back {
+  margin: 0 0 var(--distance-sm);
+}
+
+/* ---- The "Waiting on you" inbox (the side panel) ---- */
+
+.inbox-del {
+  padding: var(--distance-md) 0;
+  border-top: 1px solid var(--color-outline-variant);
+}
+
+.inbox-del:first-of-type {
+  margin-top: var(--distance-md);
+}
+
+.inbox-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--distance-sm);
+}
+
+.inbox-row {
+  padding: var(--distance-md);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface-container-lowest);
+}
+
+.inbox-row > p {
+  margin: var(--distance-sm) 0 0;
+}
+
+.inbox-row > .button {
+  margin-top: var(--distance-sm);
+}
+
+.row-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--distance-sm) var(--distance-sm);
+}
+
+.sp-id {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-on-surface-variant);
+  overflow-wrap: anywhere;
+}
+
+.sp-locks {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.badge.sp-type {
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+  border-color: transparent;
+  font-weight: 600;
+}
+
+/* Live: the class is built as `sp-${type}` (board.js and graph.js), so grepping for the whole name
+   does not find it. The types are condition, lawyer and owner-task. */
+.badge.sp-lawyer,
+.badge.sp-condition {
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+}
+
+.sp-text.missing {
+  color: var(--color-on-surface-variant);
+  font-style: italic;
+}
+
+.sp-meta {
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+  overflow-wrap: anywhere;
+}
+
+.sp-meta .link-button {
+  margin: var(--distance-xs) var(--distance-sm) 0 0;
+}
+
+.answer-form {
+  border: 0;
+  padding: var(--distance-sm) 0 0;
+}
+
+/* QA, proposed and stuck: checkbox (or id) and title on the left, one button on the right. */
+.row-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--distance-sm);
+  padding: var(--distance-sm) var(--distance-md);
+}
+
+.row-option {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 2px var(--distance-sm);
+  cursor: pointer;
+}
+
+div.row-option {
+  grid-template-columns: 1fr;
+  cursor: default;
+}
+
+.row-option input {
+  grid-row: span 3;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--color-primary);
+}
+
+.row-title {
+  overflow-wrap: anywhere;
+}
+
+.qa-project + .qa-project {
+  margin-top: var(--distance-md);
+}
+
+.qa-name {
+  margin: var(--distance-sm) 0 var(--distance-xs);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.qa-feature-name {
+  margin: var(--distance-sm) 0 var(--distance-xs);
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.inbox-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: var(--distance-sm);
+}
+
+.inbox-empty {
+  display: flex;
+  align-items: center;
+  gap: var(--distance-sm);
+  margin: var(--distance-lg) 0;
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.inbox-empty .icon {
+  width: 24px;
+  height: 24px;
+  color: var(--color-primary);
+}
+
+.inbox-info {
+  margin: var(--distance-md) 0 0;
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+/* ---- In versus out: the line chart ---- */
+
+.graph-svg polyline.line {
+  fill: none;
+  stroke: var(--s);
+  stroke-width: 2;
+}
+
+.graph-svg polyline.s-out {
+  stroke-dasharray: 5 3;
+}
+
+.graph-svg circle.point {
+  fill: var(--s);
+}
+
+.s-in {
+  --s: var(--color-category-plum);
+}
+
+.s-out {
+  --s: var(--color-category-teal);
+}
+
+.draw-line {
+  width: 16px;
+  border-top: 2px solid var(--s);
+}
+
+@media (max-width: 720px) {
+  .top {
+    padding: var(--distance-sm) var(--distance-md);
+  }
+  .board.flat,
+  .board.lanes,
+  .board.statistics {
+    padding-left: var(--distance-md);
+    padding-right: var(--distance-md);
+  }
+  .facts {
+    grid-template-columns: 1fr;
+  }
+  .graphs {
+    grid-template-columns: 1fr;
+  }
+  .stripe {
+    padding-left: var(--distance-md);
+    padding-right: var(--distance-md);
+  }
+}
+
+/* The top on a phone (below 720 px): the mascot becomes 56 px high and sits at the top, the rows wrap, the tabs get
+   their own row that scrolls sideways (overflow-x on the row, never on the page), and the bubble becomes a toast below the top.
+   No part of the top is wider than the viewport at 375 px (checked in lib/__tests__/queueBoardTop.test.ts). */
+@media (max-width: 720px) {
+  .top {
+    column-gap: var(--distance-sm);
+  }
+  .mascot {
+    align-self: start;
+    width: 28px;
+    height: 56px;
+    margin-bottom: 0;
+  }
+  .top-row {
+    gap: var(--distance-sm);
+  }
+  .top .toggles {
+    flex: 1 1 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+  .top .toggles-button {
+    flex: none;
+    padding: 0 var(--distance-sm);
+  }
+  .top-row2 .top-fill {
+    display: none;
+  }
+  .top .search-filter {
+    flex-wrap: wrap;
+    min-width: 0;
+    max-width: 100%;
+  }
+  .top .search {
+    width: 100%;
+    max-width: 100%;
+    flex: 1 1 160px;
+  }
+  /* The Filter and Selection menus are pinned to the top at full width, so they never stick out past the right of the screen. */
+  .top .filter {
+    position: static;
+  }
+  .top .filter-menu {
+    top: 100%;
+    left: var(--distance-md);
+    width: calc(100% - 2 * var(--distance-md));
+  }
+  .bubble {
+    top: calc(100% + var(--distance-sm));
+    left: var(--distance-md);
+    right: var(--distance-md);
+    max-width: none;
+  }
+  .bubble::before {
+    display: none;
+  }
+}
+
+/* ---- Dependencies: circles and strokes. The colors are the tokens; the fill is the project color (--p). ---- */
+
+.board.graph {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.graph-top {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--distance-sm) var(--distance-md);
+  padding: var(--distance-sm) var(--distance-lg);
+  border-bottom: 1px solid var(--color-outline-variant);
+}
+
+.graph-tall {
+  margin: 0;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: var(--distance-sm);
+}
+
+.graph-draw {
+  display: flex;
+  gap: var(--distance-md);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.graph-draw li {
+  display: flex;
+  align-items: center;
+  gap: var(--distance-sm);
+}
+
+.graph-draw .draw {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: var(--color-surface-container-high);
+  border: 1.5px solid var(--color-on-surface);
+}
+
+.graph-draw .t-blocked {
+  border-style: dashed;
+}
+
+.graph-draw .t-active {
+  border: 3px solid var(--color-primary);
+}
+
+.graph-draw .t-sp {
+  border-radius: var(--radius);
+  border-color: transparent;
+  background: var(--color-secondary-container);
+}
+
+.graph-option {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--distance-sm) var(--distance-md);
+  margin-left: auto;
+}
+
+.graph-switch {
+  display: flex;
+  align-items: center;
+  gap: var(--distance-sm);
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.graph-surface {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+}
+
+.graph-surface.drags {
+  cursor: grabbing;
+}
+
+.graph-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+}
+
+.graph-lane rect {
+  fill: color-mix(in srgb, var(--p, var(--color-outline)) 8%, transparent);
+  stroke: color-mix(in srgb, var(--p, var(--color-outline)) 35%, transparent);
+}
+
+/* One chain (component) in the packing: subtle background and edge. */
+.graph-svg rect.graph-compact {
+  fill: color-mix(in srgb, var(--color-on-surface) 3%, transparent);
+  stroke: var(--color-outline-variant);
+  stroke-width: 1;
+}
+
+.graph-lane text,
+.graph-free-title {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  fill: var(--color-on-surface-variant);
+}
+
+.edge {
+  fill: none;
+  stroke: var(--color-outline);
+  stroke-width: 1.4;
+  marker-end: url(#graph-arrow);
+}
+
+.edge.sp {
+  stroke: var(--color-secondary);
+  stroke-dasharray: 5 4;
+}
+
+.edge.muted {
+  opacity: 0.35;
+}
+
+.edge.cycle {
+  stroke: var(--color-error);
+}
+
+.arrow {
+  fill: var(--color-outline);
+}
+
+.node {
+  cursor: pointer;
+}
+
+.node:focus {
+  outline: none;
+}
+
+.node:focus-visible .ring,
+.node:focus-visible .sp-box,
+.node:focus-visible .fill {
+  stroke: var(--color-primary);
+  stroke-width: 3;
+}
+
+.task .fill {
+  fill: var(--p, var(--color-surface-container-high));
+  stroke: var(--color-surface-container-lowest);
+  stroke-width: 1;
+}
+
+.task .ring {
+  fill: none;
+  stroke: var(--color-on-surface);
+  stroke-width: 1.5;
+}
+
+.task.t-blocked .ring {
+  stroke-dasharray: 3 3;
+  stroke: var(--color-on-surface-variant);
+}
+
+.task.t-active .ring {
+  stroke: var(--color-primary);
+  stroke-width: 3.5;
+}
+
+.task.role-neighbor .fill {
+  fill: var(--color-outline-variant);
+}
+
+.task.role-done {
+  opacity: 0.45;
+}
+
+.qa-dot {
+  fill: var(--color-primary);
+}
+
+.sp-box {
+  fill: var(--color-secondary-container);
+  stroke: var(--color-secondary);
+  stroke-width: 1;
+}
+
+.sp-badge {
+  text-anchor: middle;
+  font-size: var(--text-md);
+  font-weight: 600;
+  fill: var(--color-on-secondary-container);
+}
+
+/* Live: `node sp sp-${n.type}` in graph.js (see also .badge.sp-lawyer). */
+.sp-condition .sp-box {
+  fill: var(--color-tertiary-container);
+  stroke: var(--color-tertiary);
+}
+
+.sp-condition .sp-badge {
+  fill: var(--color-on-tertiary-container);
+}
+
+.sp-lawyer .sp-box {
+  fill: var(--color-module-amber-container);
+  stroke: var(--color-outline);
+}
+
+.sp-lawyer .sp-badge {
+  fill: var(--color-on-surface);
+}
+
+.sp-owner-task .sp-box {
+  fill: var(--color-primary-container);
+  stroke: var(--color-primary);
+}
+
+.sp-owner-task .sp-badge {
+  fill: var(--color-on-primary-container);
+}
+
+.graph-locks {
+  text-anchor: middle;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  fill: var(--color-primary);
+}
+
+/* The id: when there is room (large circles at medium zoom, all when near), and always on hover and focus. */
+.label {
+  display: none;
+  text-anchor: middle;
+  font-size: var(--text-xs);
+  fill: var(--color-on-surface);
+  paint-order: stroke;
+  stroke: var(--color-surface-container-low);
+  stroke-width: 3px;
+}
+
+.zoom-medium .large .label,
+.zoom-medium .sp .label,
+.zoom-near .label,
+.node:hover .label,
+.node:focus-visible .label {
+  display: inline;
+}
+
+/* The chain (chain view): selected, before and after are highlighted, the rest is dimmed. */
+.graph-svg.chain-active .node:not(.selected):not(.before):not(.after):not(.i-chain),
+.graph-svg.chain-active .edge:not(.i-chain) {
+  opacity: 0.15;
+}
+
+.graph-svg.chain-active .edge.i-chain {
+  stroke-width: 2.4;
+}
+
+.node.selected .ring,
+.node.selected .fill {
+  stroke: var(--color-primary);
+  stroke-width: 4;
+}
+
+.node.before .ring {
+  stroke: var(--color-secondary);
+  stroke-width: 3;
+}
+
+.node.after .ring {
+  stroke: var(--color-tertiary);
+  stroke-width: 3;
+}
+
+.graph-svg.chain-active .label {
+  display: none;
+}
+
+.graph-svg.chain-active .selected .label,
+.graph-svg.chain-active .before .label,
+.graph-svg.chain-active .after .label,
+.graph-svg.chain-active .i-chain .label {
+  display: inline;
+}
+
+/* ---- The "Cloud" view: bundles with a ready cloud start command ---- */
+.cloud-view {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: var(--distance-md);
+  display: grid;
+  gap: var(--distance-md);
+}
+.cloud-help {
+  margin: 0;
+  color: var(--color-on-surface-variant);
+}
+.cloud-title {
+  font-size: 1rem;
+  margin: 0 0 var(--distance-sm);
+}
+.cloud-bundles {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--distance-md);
+}
+.cloud-bundle-summary {
+  padding: var(--distance-md);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface-container-lowest);
+  border: 1px solid var(--color-outline-variant);
+  display: grid;
+  gap: var(--distance-sm);
+}
+.cloud-bundle-header {
+  margin: 0;
+  font-weight: 600;
+}
+.cloud-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--distance-xs);
+}
+.cloud-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--distance-sm);
+}
+.cloud-id {
+  font-weight: 600;
+  min-width: 7rem;
+}
+.cloud-name {
+  flex: 1 1 16rem;
+  color: var(--color-on-surface-variant);
+}
+.cloud-command {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--distance-sm);
+}
+.cloud-command code {
+  flex: 1 1 20rem;
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  padding: var(--distance-sm) var(--distance-sm);
+  border-radius: var(--radius-md, 8px);
+  background: var(--color-surface-container);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+/* ---- The batch queue in In queue (groups with a sum toward the target, the cards are not started alone) ---- */
+
+.batch-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--distance-md);
+}
+
+.batch-group {
+  padding: var(--distance-sm) var(--distance-sm) var(--distance-sm);
+  border: 1px dashed var(--color-outline-variant);
+  border-left: 5px solid var(--p, var(--color-outline));
+  border-radius: var(--radius-xl);
+}
+
+.batch-group.ready {
+  border-style: solid;
+  border-color: var(--color-primary);
+  border-left-color: var(--p, var(--color-outline));
+}
+
+.batch-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--distance-sm);
+  margin-bottom: var(--distance-sm);
+}
+
+.batch-name {
+  font-weight: 600;
+  color: var(--color-on-surface);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.batch-missing {
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+/* The progress bar: filled up to the sum (share of the upper target), with a stroke at the lower target. */
+.batch-bar {
+  position: relative;
+  height: 8px;
+  border-radius: 9999px;
+  background: var(--color-surface-container-high);
+  overflow: hidden;
+}
+
+.batch-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc(var(--share, 0) * 100%);
+  background: var(--color-outline);
+  border-radius: 9999px;
+}
+
+.batch-group.ready .batch-fill {
+  background: var(--color-primary);
+}
+
+.batch-lower {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--lower, 0) * 100%);
+  width: 2px;
+  background: var(--color-on-surface);
+}
+
+.batch-sum {
+  margin: var(--distance-xs) 0 var(--distance-sm);
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.summary.batchCard {
+  background: transparent;
+}
+
+/* ---- Multi-select, the selection bar, the bulk action dialog and "Undo" ---- */
+
+/* The checkbox on the card: visible on hover and focus, and always when something is selected. 44 px touch target. */
+.mark-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  margin: -12px 0 -12px -10px;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.mark-box input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
+.summary:hover .mark-box,
+.summary:focus-within .mark-box,
+.summary:focus .mark-box,
+.board.has-option .mark-box,
+.summary.marked .mark-box {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .mark-box {
+    opacity: 1;
+  }
+}
+
+/* On-primary-container applies to the WHOLE selected card (id, project, footer and the neutral badges),
+   not just the title. The contrast against primary-container is computed from the palette in queueBoardA11y.test.ts (at least
+   4.5:1 in both modes). Badges with their own surface (Ready now, D+, QA …) keep their own pairs. */
+.summary.marked {
+  border-color: var(--color-primary);
+  background: var(--color-primary-container);
+  box-shadow: inset 0 0 0 1px var(--color-primary);
+  color: var(--color-on-primary-container);
+}
+
+.summary.marked .summary-title,
+.summary.marked .summary-id,
+.summary.marked .summary-project,
+.summary.marked .summary-footer,
+.summary.marked .age-over,
+.summary.marked .badge[class='badge'] {
+  color: var(--color-on-primary-container);
+}
+
+.summary.marked .badge[class='badge'] {
+  border-color: var(--color-on-primary-container);
+}
+
+.badge.wait-badge {
+  background: var(--color-module-amber-container);
+  color: var(--color-on-surface);
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.mark-match {
+  min-height: 40px;
+}
+
+.mark-match[hidden] {
+  display: none;
+}
+
+/* The selection bar: sticky at the bottom, only when something is selected. */
+.optionLine {
+  position: fixed;
+  z-index: 15;
+  left: 50%;
+  bottom: var(--distance-md);
+  transform: translateX(-50%);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--distance-sm) var(--distance-md);
+  max-width: min(1100px, calc(100vw - 32px));
+  padding: var(--distance-sm) var(--distance-md) var(--distance-sm) var(--distance-md);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface-container);
+  color: var(--color-on-surface);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.18); /* M3 shadow: black in both modes */
+}
+
+.optionLine[hidden] {
+  display: none;
+}
+
+/* Space below the last card, so the selection bar never covers it. */
+body.with-option-line .board {
+  padding-bottom: 96px;
+}
+
+.option-tall {
+  margin: 0;
+  font-weight: 600;
+}
+
+.option-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--distance-sm);
+}
+
+.button-small {
+  padding: 0 var(--distance-md);
+  font-size: var(--text-sm);
+}
+
+/* The buttons in a batch group and "Select" in the group. */
+.batch-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--distance-sm);
+  margin: 0 0 var(--distance-sm);
+}
+
+.mark-group {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--distance-sm);
+  min-height: 44px;
+  padding: 0 var(--distance-sm) 0 0;
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+  cursor: pointer;
+}
+
+.mark-group input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-primary);
+}
+
+.mark-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--distance-sm);
+  width: 100%;
+  padding-top: var(--distance-sm);
+  border-top: 1px dashed var(--color-outline-variant);
+}
+
+/* The bulk action dialog (builds on .guard). */
+.guard.bulk {
+  width: min(640px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+}
+
+.bulk-explanation,
+.bulk-count {
+  margin: 0 0 var(--distance-sm);
+  color: var(--color-on-surface-variant);
+}
+
+.bulk-count {
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}
+
+.bulk .field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--distance-xs);
+  margin-bottom: var(--distance-sm);
+}
+
+.bulk .field[hidden] {
+  display: none;
+}
+
+.bulk label {
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.bulk input,
+.bulk select {
+  min-height: 44px;
+  padding: var(--distance-sm) var(--distance-md);
+  border: 1px solid var(--color-outline);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-container-lowest);
+  color: var(--color-on-surface);
+}
+
+.field-help {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.bulk-show {
+  margin-bottom: var(--distance-md);
+}
+
+.bulk-preview {
+  margin-bottom: var(--distance-md);
+}
+
+.bulk-summary {
+  margin: 0 0 var(--distance-sm);
+  font-weight: 600;
+}
+
+.bulk-stop li,
+.bulk-error {
+  color: var(--color-error);
+  white-space: pre-line;
+}
+
+.bulk-error {
+  margin: 0 0 var(--distance-sm);
+  font-weight: 600;
+}
+
+.bulk-warning li {
+  white-space: pre-line;
+}
+
+.bulk-info li {
+  color: var(--color-on-surface-variant);
+}
+
+.bulk-remark {
+  margin: 0 0 var(--distance-sm);
+  padding: var(--distance-sm) var(--distance-md);
+  border-radius: var(--radius-lg);
+  background: var(--color-module-amber-container);
+  color: var(--color-on-surface);
+}
+
+.bulk-lines summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  color: var(--color-primary);
+}
+
+.bulk-lines ul {
+  max-height: 240px;
+  overflow: auto;
+  margin: 0;
+  padding-left: var(--distance-md);
+  font-size: var(--text-xs);
+}
+
+.bulk-package {
+  margin: var(--distance-sm) 0;
+  padding: var(--distance-sm) var(--distance-md);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-xl);
+}
+
+.bulk-package-title {
+  margin: 0 0 var(--distance-sm);
+  font-size: var(--text-md);
+}
+
+/* "Undo" for 30 seconds after a bulk action. */
+.undo-message {
+  display: flex;
+  align-items: center;
+  gap: var(--distance-sm);
+  max-width: 100%;
+  padding: var(--distance-sm) var(--distance-sm) var(--distance-sm) var(--distance-md);
+  border-radius: var(--radius-lg);
+  background: var(--color-inverse-surface);
+  color: var(--color-inverse-on-surface);
+}
+
+.undo-message[hidden] {
+  display: none;
+}
+
+.undo-text {
+  white-space: pre-line;
+}
+
+.undo-message .button-icon {
+  color: var(--color-inverse-on-surface);
+}
+
+/* The dependency graph: the batch queue with a dotted ring and "S". */
+.graph-draw .t-batch {
+  border-style: dotted;
+  border-width: 2px;
+}
+
+.task.t-batch .ring {
+  stroke-dasharray: 1 3;
+  stroke-linecap: round;
+  stroke: var(--color-on-surface);
+  stroke-width: 2;
+}
+
+.batch-badge circle {
+  fill: var(--color-secondary-container);
+  stroke: var(--color-secondary);
+  stroke-width: 1;
+}
+
+.batch-badge text {
+  fill: var(--color-on-secondary-container);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-anchor: middle;
+}
+
+/* ---- The focus line, grouping, views, help, the plan view and "Sort" ---- */
+
+/* The focus line below the top: same surface as the "Next up" strip, with a warning color when the focus has nothing ready. */
+.focusLine {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--distance-xs) var(--distance-lg);
+  background: var(--color-surface-container-lowest);
+  border-bottom: 1px solid var(--color-outline-variant);
+  font-size: var(--text-xs);
+  line-height: 16px;
+}
+
+.focusLine[hidden] {
+  display: none;
+}
+
+.focusLine.notice {
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+}
+
+.focus-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--distance-sm) var(--distance-sm);
+  min-height: 36px;
+}
+
+.focus-text {
+  color: var(--color-on-surface-variant);
+}
+
+.focus-step-list {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--distance-xs);
+}
+
+.focus-step {
+  padding: 2px var(--distance-sm);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 9999px;
+  white-space: nowrap;
+}
+
+.focus-step.now {
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.focus-arrow {
+  color: var(--color-on-surface-variant);
+}
+
+.focus-tall {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--distance-xs) var(--distance-sm);
+  color: var(--color-on-surface-variant);
+}
+
+/* Warning: all text in the line in on-error-container, so the contrast holds. */
+.focusLine.notice .stripe-name,
+.focusLine.notice .focus-tall,
+.focusLine.notice .focus-text,
+.focusLine.notice .focus-arrow {
+  color: var(--color-on-error-container);
+}
+
+.focus-warning {
+  margin: 0 0 var(--distance-xs);
+  font-weight: 600;
+}
+
+/* The grouping choice in the toolbar. */
+.grouping {
+  min-height: 36px;
+  padding: 0 var(--distance-sm);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-container-lowest);
+  color: var(--color-on-surface);
+  font: inherit;
+  font-size: var(--text-xs);
+}
+
+.grouping[hidden] {
+  display: none;
+}
+
+/* Groups in the columns (area → project, project → feature, focus step). */
+.groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--distance-sm);
+}
+
+.group > .shortlist {
+  margin-top: var(--distance-xs);
+}
+
+.group-header {
+  display: flex;
+  align-items: center;
+  gap: var(--distance-sm);
+  min-height: 36px;
+  padding: 0 var(--distance-xs);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-on-surface-variant);
+}
+
+.group-header:hover {
+  background: var(--color-surface-container-high);
+}
+
+.group-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-header .counter {
+  margin-left: auto;
+  font-weight: 400;
+}
+
+.mark-group-box,
+.sort-row .row-header input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--color-primary);
+}
+
+/* Area heading between the project lanes (grouping "Area → project"). */
+.area-heading {
+  padding: var(--distance-md) var(--distance-sm) 0;
+}
+
+.area-heading h2 {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-on-surface-variant);
+}
+
+/* The Views menu. */
+.view-option {
+  flex: 1;
+  min-height: 44px;
+  text-align: left;
+}
+
+.view-option[aria-current='true'] {
+  font-weight: 600;
+}
+
+.view-save {
+  gap: var(--distance-sm);
+  align-items: center;
+}
+
+.view-save input,
+.plan-field input[type='text'],
+.plan-field input[type='date'],
+.plan-field select,
+.plan-area-row select {
+  min-height: 36px;
+  padding: 0 var(--distance-sm);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  color: var(--color-on-surface);
+  font: inherit;
+}
+
+.view-save input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* The help in the side panel and the ? button. */
+.help-del {
+  margin-bottom: var(--distance-md);
+}
+
+.help-text {
+  margin: var(--distance-xs) 0 0;
+  color: var(--color-on-surface-variant);
+}
+
+/* "Waiting on you": what the answer unlocks in focus. */
+.sp-focus {
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+}
+
+.sp-focus.empty-focus {
+  background: transparent;
+  color: var(--color-on-surface-variant);
+}
+
+/* The plan view: toolbar and four columns (Now, Next, Later, Waiting). */
+.board.plan {
+  padding: var(--distance-md) var(--distance-lg);
+}
+
+.plan-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--distance-md);
+}
+
+.plan-tool {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--distance-sm) var(--distance-md);
+  padding: var(--distance-sm) var(--distance-md);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface-container-lowest);
+}
+
+.plan-field {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--distance-sm);
+  min-height: 44px;
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.plan-field input[type='text'] {
+  width: 200px;
+}
+
+.plan-check-mark input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--color-primary);
+}
+
+.plan-draft {
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.plan-draft.active {
+  padding: 2px var(--distance-sm);
+  border-radius: 9999px;
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+  font-weight: 600;
+}
+
+.plan-remark {
+  margin: var(--distance-xs) 0 0;
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.plan-columns {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(240px, 1fr));
+  gap: var(--distance-md);
+  align-items: start;
+  overflow-x: auto;
+}
+
+.plan-column {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: var(--distance-sm);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface-container);
+}
+
+/* Live: plan.js builds `plan-${k.key}`, and the key for Now is 'now'. */
+.plan-column.plan-now {
+  background: var(--color-secondary-container);
+}
+
+.plan-column.plan-now > .col-header h2,
+.plan-column.plan-now > .col-header .counter,
+.plan-column.plan-now > .plan-col-help {
+  color: var(--color-on-secondary-container);
+}
+
+.plan-col-help {
+  margin: 0 var(--distance-xs) var(--distance-sm);
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.plan-list {
+  list-style: none;
+  margin: 0;
+  padding: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--distance-sm);
+  min-height: 88px;
+  border: 2px dashed transparent;
+  border-radius: var(--radius-lg);
+}
+
+.plan-list.release-her {
+  border-color: var(--color-primary);
+  background: var(--color-surface-container-high);
+}
+
+.plan-empty {
+  padding: var(--distance-md) var(--distance-sm);
+  text-align: center;
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.plan-element {
+  padding: var(--distance-sm) var(--distance-sm);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface-container-lowest);
+  color: var(--color-on-surface);
+  cursor: grab;
+}
+
+.plan-element:hover {
+  border-color: var(--color-outline);
+}
+
+.plan-element.dragged {
+  opacity: 0.5;
+}
+
+.plan-element.boosted {
+  border-color: var(--color-primary);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.16); /* shadow: black in both modes */
+}
+
+.plan-child-element,
+.plan-feature-row {
+  padding: var(--distance-sm) var(--distance-sm);
+  border-radius: var(--radius-lg);
+}
+
+.plan-header {
+  display: flex;
+  align-items: center;
+  gap: var(--distance-sm);
+  min-height: 32px;
+}
+
+.plan-header svg {
+  flex: none;
+  color: var(--color-on-surface-variant);
+}
+
+.plan-step {
+  flex: none;
+  padding: 0 var(--distance-sm);
+  border-radius: var(--radius);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.plan-type {
+  flex: none;
+}
+
+.plan-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.plan-header .pid {
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.plan-tall {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--distance-sm);
+  margin-top: 2px;
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.plan-sp {
+  color: var(--color-error);
+  font-weight: 600;
+}
+
+.plan-dragged {
+  color: var(--color-tertiary);
+}
+
+.plan-under {
+  list-style: none;
+  margin: var(--distance-sm) 0 0;
+  padding: 0 0 0 var(--distance-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--distance-xs);
+  border-left: 2px solid var(--color-outline-variant);
+}
+
+.plan-expand {
+  min-height: 32px;
+  font-size: var(--text-xs);
+}
+
+/* The dialogs in the plan (focus preview and "Areas …"). */
+.plan-lines {
+  margin: 0 0 var(--distance-sm);
+  padding-left: var(--distance-lg);
+}
+
+.plan-lines li + li {
+  margin-top: var(--distance-xs);
+}
+
+.plan-area-list {
+  list-style: none;
+  margin: 0 0 var(--distance-md);
+  padding: 0;
+}
+
+.plan-area-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--distance-sm);
+  min-height: 44px;
+  border-bottom: 1px solid var(--color-outline-variant);
+}
+
+.plan-area-row .plan-name {
+  flex: 1;
+}
+
+.plan-area-new {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--distance-sm);
+  margin-bottom: var(--distance-md);
+}
+
+@media (max-width: 720px) {
+  .board.plan {
+    padding: var(--distance-sm);
+  }
+
+  .plan-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .focusLine {
+    padding: var(--distance-xs) var(--distance-md);
+  }
+}
+
+/* ---- The banner after a restart, the theme choice, the legend and "Show all" in Selection ---- */
+
+/* The server has been restarted (401). A clear banner below the top, with the field for the link. */
+.key-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--distance-sm) var(--distance-md);
+  padding: var(--distance-md) var(--distance-md);
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+}
+
+.key-banner[hidden] {
+  display: none;
+}
+
+.key-banner-text {
+  margin: 0;
+  font-weight: 600;
+}
+
+.key-form {
+  display: flex;
+  flex: 1 1 360px;
+  gap: var(--distance-sm);
+  min-width: 0;
+}
+
+.key-form input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+}
+
+.key-form .button {
+  min-height: 44px;
+}
+
+.key-error {
+  flex-base: 100%;
+  margin: 0;
+}
+
+.key-error[hidden] {
+  display: none;
+}
+
+/* The theme choice in the settings. */
+fieldset.setting {
+  margin: 0;
+  border-width: 1px 0 0;
+  border-style: solid;
+  border-color: var(--color-outline-variant);
+  padding: var(--distance-md) 0;
+}
+
+fieldset.setting legend {
+  float: left;
+  width: 100%;
+  padding: 0;
+}
+
+.theme-row {
+  display: flex;
+  align-items: center;
+  gap: var(--distance-sm);
+  min-height: 44px;
+  cursor: pointer;
+  clear: left;
+}
+
+.theme-row input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--color-primary);
+}
+
+/* The legend (the help and the statistics tab). */
+.legend {
+  margin: var(--distance-md) 0;
+  padding-top: var(--distance-md);
+  border-top: 1px solid var(--color-outline-variant);
+}
+
+.explanation-title {
+  margin: var(--distance-sm) 0 var(--distance-xs);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.explanation {
+  display: grid;
+  gap: var(--distance-sm);
+  margin: 0;
+}
+
+.explanation-row {
+  display: grid;
+  grid-template-columns: minmax(96px, max-content) 1fr;
+  align-items: start;
+  gap: var(--distance-sm);
+}
+
+.explanation dt,
+.explanation dd {
+  margin: 0;
+}
+
+.explanation dd {
+  color: var(--color-on-surface-variant);
+}
+
+.explanation .wip {
+  display: inline-block;
+  margin-left: 0;
+  white-space: normal;
+}
+
+.explanation-edge {
+  display: inline-block;
+  padding: 0 var(--distance-sm);
+  border: 1px dashed var(--color-outline);
+  border-radius: var(--radius-lg);
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+/* "Show all" at the top of the Selection menu. */
+.show-all {
+  margin-top: 0;
+  padding-bottom: var(--distance-sm);
+  border-top: 0;
+  border-bottom: 1px solid var(--color-outline-variant);
+}
+
+/* ---- Empty state, stale status, reduced motion, forced colors and touch targets ---- */
+
+/* One shared empty state (emptyState() in board.js): why the list is empty, and the action that shows the cards. */
+.empty-state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--distance-xs) var(--distance-sm);
+}
+
+.empty-state[hidden] {
+  display: none;
+}
+
+.empty-state p {
+  margin: 0;
+}
+
+.empty-state .link-button {
+  margin: 0;
+}
+
+.lane-empty > .empty-state {
+  margin: 0;
+}
+
+/* The last fetch is over one minute old. The warning surface (amber) and its own text, not just the color. */
+.status.stale {
+  padding: 0 var(--distance-sm);
+  border-radius: 9999px;
+  background: var(--color-module-amber-container);
+  color: var(--color-on-surface);
+  font-weight: 600;
+}
+
+/* Reduced motion turns off smooth scrolling (also scrollIntoView, which follows scroll-behavior), transitions
+   and animations everywhere, including those added later. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* Forced colors (Windows contrast mode) remove surfaces and shadows, so the highlights get an edge or outline. */
+@media (forced-colors: active) {
+  .toggles-button[aria-pressed='true'],
+  .toggles-button[aria-selected='true'],
+  .view-option[aria-current='true'] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+
+  .filter-button.active,
+  .inbox-button.active,
+  .plan-draft.active {
+    outline: 2px solid Highlight;
+  }
+
+  .summary.marked,
+  .summary.boosted,
+  .summary.chain-selected {
+    outline: 3px solid Highlight;
+    outline-offset: 1px;
+  }
+
+  .summary.chain-for,
+  .summary.chain-after {
+    outline: 2px dashed Highlight;
+    outline-offset: 1px;
+  }
+
+  .summary.ready {
+    border-width: 2px;
+  }
+
+  .badge,
+  .status.stale {
+    border: 1px solid CanvasText;
+  }
+
+  :focus-visible {
+    outline: 2px solid Highlight;
+  }
+}
+
+/* Touch targets of at least 44 px on touch screens (section headers, the switcher, the search, the menu buttons and the
+   clickable badges). Mouse and trackpad keep the dense board. */
+@media (pointer: coarse) {
+  .section > summary,
+  .lane-header,
+  .group-header,
+  .plan-header,
+  .toggles-button,
+  .search,
+  .grouping,
+  .button-outline,
+  .mark-match,
+  .link-button,
+  .pause-button,
+  .plan-expand,
+  .next-summary,
+  .stripe-row,
+  .focus-row,
+  button.badge,
+  a.badge,
+  .badge[role='button'] {
+    min-height: 44px;
+  }
+}

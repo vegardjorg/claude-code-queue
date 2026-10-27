@@ -1,0 +1,2922 @@
+/*
+  The Plans room on the queue board (see docs/board.md). Uses the tokens and
+  components from board.css: --text-*, --distance-*, --radius-*, .button, .badge,
+  .link-button, .toggles and .empty. All colors are the tokens from /theme.css; never hex. Font never below 12 px,
+  weight 400 or 600.
+*/
+
+/* ---- The work rooms: each room has its own accent, and the other room is hidden ---- */
+
+.room-option {
+  flex: none;
+}
+
+/* Queue: the primary color under the top. Plans: the tertiary color, also on the chosen room. The text in the switch carries the choice. */
+.top {
+  box-shadow: inset 0 -3px 0 var(--color-primary);
+}
+
+body.room-plans .top {
+  box-shadow: inset 0 -3px 0 var(--color-tertiary);
+}
+
+body.room-plans #room-plans[aria-selected='true'] {
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+}
+
+/* In Plans the queue's row 2 (the view tabs and the search), the focus line, the strip, the board and the selection bar are gone. */
+body.room-plans .top-row2,
+body.room-plans #focusLine,
+body.room-plans #stripe,
+body.room-plans #board,
+body.room-plans #optionLine {
+  display: none !important;
+}
+
+.plans-room {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.plans-room[hidden] {
+  display: none;
+}
+
+.plans-fetching {
+  padding: var(--distance-lg);
+}
+
+/* ---- The breadcrumb ---- */
+
+.plans-path {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--distance-sm);
+  padding: var(--distance-xs) var(--distance-lg);
+  border-bottom: 1px solid var(--color-outline-variant);
+  background: var(--color-surface-container-lowest);
+}
+
+.plans-path-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--distance-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  flex: 1;
+  min-width: 0;
+}
+
+.plans-path-part {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--distance-xs);
+}
+
+.plans-path-part + .plans-path-part::before {
+  content: '›';
+  color: var(--color-on-surface-variant);
+  padding: 0 var(--distance-xs);
+}
+
+.plans-path-part .link-button {
+  margin: 0;
+}
+
+.plans-path-here {
+  font-weight: 600;
+  padding: 0 var(--distance-sm);
+}
+
+/* The filter button for the drawer is shown only on narrow screens. */
+.plans-drawer-button {
+  display: none;
+}
+
+/* ---- The three panes ---- */
+
+.plans-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(220px, 260px) minmax(0, 1fr) minmax(320px, 420px);
+}
+
+.plans-filters,
+.plans-middle,
+.plans-detail {
+  min-height: 0;
+  overflow: auto;
+  padding: var(--distance-md);
+}
+
+.plans-filters {
+  border-right: 1px solid var(--color-outline-variant);
+  background: var(--color-surface-container-lowest);
+}
+
+.plans-detail {
+  border-left: 1px solid var(--color-outline-variant);
+  background: var(--color-surface);
+}
+
+.plans-cell-title {
+  margin: var(--distance-md) 0 var(--distance-xs);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+/* ---- Left: search, views and facets ---- */
+
+.plans-search {
+  width: 100%;
+}
+
+.plans-view-list,
+.plans-facet-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plans-view {
+  display: flex;
+  align-items: center;
+  gap: var(--distance-xs);
+}
+
+.plans-view .link-button {
+  flex: 1;
+  margin: 0 0 var(--distance-xs);
+  text-align: left;
+}
+
+.plans-view .link-button[aria-pressed='true'] {
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+  border-color: var(--color-tertiary);
+  font-weight: 600;
+}
+
+.plans-remove {
+  width: 32px;
+  height: 32px;
+}
+
+.plans-save {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--distance-xs);
+  margin-top: var(--distance-xs);
+}
+
+.plans-save label {
+  flex: 1 1 100%;
+}
+
+.plans-save-name {
+  width: 100%;
+}
+
+.plans-facet {
+  margin-top: var(--distance-sm);
+  border-top: 1px solid var(--color-outline-variant);
+  padding-top: var(--distance-xs);
+}
+
+.plans-facet-title {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.plans-facet-option {
+  display: flex;
+  align-items: center;
+  gap: var(--distance-sm);
+  min-height: 32px;
+  cursor: pointer;
+  font-size: var(--text-sm);
+}
+
+.plans-facet-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plans-count {
+  min-width: 24px;
+  padding: 0 var(--distance-xs);
+  border-radius: 9999px;
+  background: var(--color-surface-container-high);
+  color: var(--color-on-surface);
+  font-size: var(--text-xs);
+  text-align: center;
+}
+
+.plans-match {
+  margin-top: var(--distance-md);
+  color: var(--color-on-surface-variant);
+  font-size: var(--text-xs);
+}
+
+/* ---- Middle: the chips and the foldable list ---- */
+
+.plans-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--distance-xs);
+  margin-bottom: var(--distance-sm);
+}
+
+.plans-chips:empty {
+  display: none;
+}
+
+.plans-chip {
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+}
+
+.plans-chip-remove {
+  min-width: 24px;
+  min-height: 20px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.plans-tree,
+.plans-projects,
+.plans-entries {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plans-projects {
+  padding-left: var(--distance-md);
+}
+
+.plans-entries {
+  padding-left: var(--distance-md);
+}
+
+.plans-row {
+  display: flex;
+  align-items: center;
+  gap: var(--distance-sm);
+  min-height: 40px;
+  border-bottom: 1px solid var(--color-outline-variant);
+}
+
+.plans-row-module {
+  font-size: var(--text-md);
+}
+
+.plans-row-project {
+  font-size: var(--text-sm);
+}
+
+.plans-fold {
+  flex: 1;
+  min-width: 0;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: var(--distance-sm);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.plans-row-module .plans-group-title {
+  font-weight: 600;
+}
+
+.plans-group-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plans-fold-arrow {
+  width: 16px;
+  color: var(--color-on-surface-variant);
+}
+
+/* The progress: a bar with a number beside it (the number carries the value, the bar is a help). */
+.plans-progress {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--distance-xs);
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.plans-bar {
+  display: inline-block;
+  width: 64px;
+  height: 8px;
+  border-radius: 9999px;
+  background: var(--color-surface-container-high);
+  border: 1px solid var(--color-outline-variant);
+  overflow: hidden;
+}
+
+.plans-bar-fill {
+  display: block;
+  height: 100%;
+  width: var(--share, 0%);
+  background: var(--color-tertiary);
+}
+
+/* The copy button on a row: visible when the row is hovered or has focus, always on touch screens. */
+.plans-copy {
+  opacity: 0;
+}
+
+.plans-row:hover .plans-copy,
+.plans-row:focus-within .plans-copy,
+.plans-entry:hover .plans-copy,
+.plans-entry:focus-within .plans-copy {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .plans-copy {
+    opacity: 1;
+  }
+}
+
+.plans-entry {
+  display: flex;
+  align-items: center;
+  gap: var(--distance-xs);
+  border-bottom: 1px solid var(--color-outline-variant);
+}
+
+.plans-entry-button {
+  flex: 1;
+  min-width: 0;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: var(--distance-sm);
+  padding: 0 var(--distance-sm);
+  border: 0;
+  border-left: 4px solid transparent;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.plans-entry-button:hover {
+  background: var(--color-surface-container-high);
+}
+
+/* The selected row is always marked: surface, edge on the left and bold title (not only color). */
+.plans-entry.selected .plans-entry-button {
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+  border-left-color: var(--color-tertiary);
+}
+
+.plans-entry.selected .plans-entry-title {
+  font-weight: 600;
+}
+
+.plans-entry-id {
+  flex: none;
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.plans-entry.selected .plans-entry-id {
+  color: inherit;
+}
+
+.plans-entry-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The priority: symbol and text, color only as a bonus. */
+.plans-pri {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--distance-xs);
+  min-width: 72px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.plans-pri.pri-now .plans-pri-symbol,
+.plans-facet-option .plans-pri.pri-now {
+  color: var(--color-error);
+}
+
+.plans-pri.pri-owner .plans-pri-symbol,
+.plans-facet-option .plans-pri.pri-owner {
+  color: var(--color-tertiary);
+}
+
+.plans-pri.pri-later .plans-pri-symbol,
+.plans-pri.pri-drop .plans-pri-symbol {
+  color: var(--color-on-surface-variant);
+}
+
+.plans-facet-option .plans-pri {
+  min-width: 0;
+}
+
+.plans-entry.selected .plans-pri-symbol {
+  color: inherit;
+}
+
+.plans-warnings {
+  flex: none;
+  display: inline-flex;
+  gap: var(--distance-xs);
+}
+
+.plans-warning {
+  min-width: 20px;
+  text-align: center;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius);
+  font-size: var(--text-xs);
+}
+
+.plans-warning.v-deadline-overdue,
+.plans-warning.v-legal {
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+}
+
+.plans-warning.v-owner {
+  background: var(--color-module-amber-container);
+  color: var(--color-on-surface);
+}
+
+/* ---- Right: the detail panel ---- */
+
+.plans-detail-id {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.plans-detail-title {
+  margin: var(--distance-xs) 0 var(--distance-sm);
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.plans-detail-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--distance-xs);
+  margin: 0 0 var(--distance-sm);
+}
+
+.plans-active {
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+}
+
+.plans-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--distance-sm);
+  margin-bottom: var(--distance-sm);
+}
+
+.plans-control {
+  margin-bottom: var(--distance-sm);
+  padding: var(--distance-sm) var(--distance-md);
+  border-radius: var(--radius-lg);
+  background: var(--color-module-amber-container);
+  color: var(--color-on-surface);
+  font-size: var(--text-sm);
+}
+
+.plans-control-title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.plans-control ul {
+  margin: var(--distance-xs) 0 0;
+  padding-left: var(--distance-md);
+}
+
+.plans-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--distance-xs);
+  border-bottom: 1px solid var(--color-outline-variant);
+  margin-bottom: var(--distance-sm);
+}
+
+.plans-tab {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--distance-xs);
+  padding: 0 var(--distance-sm);
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--color-on-surface-variant);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.plans-tab[aria-selected='true'] {
+  border-bottom-color: var(--color-tertiary);
+  color: var(--color-on-surface);
+  font-weight: 600;
+}
+
+.plans-summary {
+  margin-top: 0;
+}
+
+.plans-field {
+  display: grid;
+  grid-template-columns: minmax(96px, auto) 1fr;
+  gap: var(--distance-xs) var(--distance-sm);
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.plans-field dt {
+  color: var(--color-on-surface-variant);
+}
+
+.plans-field dd {
+  margin: 0;
+}
+
+.plans-help {
+  color: var(--color-on-surface-variant);
+  font-size: var(--text-sm);
+}
+
+.plans-detail-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-sm);
+}
+
+.plans-detail-list > li {
+  padding: var(--distance-xs) 0;
+  border-bottom: 1px solid var(--color-outline-variant);
+}
+
+.plans-detail-list .link-button {
+  margin: 0 var(--distance-xs) 0 0;
+  text-align: left;
+}
+
+.plans-source,
+.plans-queue-task {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--distance-xs);
+}
+
+.plans-source code {
+  word-break: break-all;
+}
+
+.plans-queue-status.queue-queue {
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+}
+
+.plans-point p {
+  margin: var(--distance-xs) 0;
+}
+
+.plans-point-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--distance-xs);
+}
+
+.plans-point.resolved {
+  color: var(--color-on-surface-variant);
+}
+
+.plans-back {
+  display: none;
+}
+
+/* The queue card: marker for the plan entry. */
+.badge.plan-entry-badge {
+  cursor: pointer;
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+  border-color: var(--color-tertiary);
+}
+
+/* ---- Narrow screen: the filters become a drawer, and the panel lies over the list ---- */
+
+@media (max-width: 1100px) {
+  .plans-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+  }
+
+  .plans-drawer-button {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .plans-filters {
+    display: none;
+  }
+
+  .plans-room.drawer-open .plans-filters {
+    display: block;
+    position: fixed;
+    z-index: 20;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: min(320px, 90vw);
+    box-shadow: 0 0 0 100vmax color-mix(in srgb, var(--color-inverse-surface) 40%, transparent);
+  }
+}
+
+@media (max-width: 720px) {
+  .plans-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .plans-detail {
+    display: none;
+  }
+
+  .plans-room.has-selected .plans-detail {
+    display: block;
+    position: fixed;
+    z-index: 15;
+    inset: 0;
+    border-left: 0;
+  }
+
+  .plans-room.has-selected .plans-back {
+    display: inline-flex;
+    align-items: center;
+    margin-bottom: var(--distance-sm);
+  }
+
+  .plans-bar {
+    width: 40px;
+  }
+
+  .plans-pri {
+    min-width: 0;
+  }
+
+  .plans-entry-id {
+    display: none;
+  }
+}
+
+/* ---- Reduced motion, forced colors and touch targets (like board.css) ---- */
+
+@media (forced-colors: active) {
+  .plans-entry.selected .plans-entry-button,
+  .plans-tab[aria-selected='true'],
+  .plans-view .link-button[aria-pressed='true'] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+
+  .plans-bar-fill {
+    background: Highlight;
+  }
+
+  .plans-copy {
+    opacity: 1;
+  }
+}
+
+@media (pointer: coarse) {
+  .plans-fold,
+  .plans-entry-button,
+  .plans-tab,
+  .plans-facet-title,
+  .plans-facet-option,
+  .plans-chip-remove,
+  .plans-remove {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* ---- The surfaces in the room, and Documents and agreements ----
+   Same tokens and components as the plan entries. Status, priority and notices always have symbol and text;
+   the color is only a bonus. */
+
+.plans-surfaces {
+  flex: none;
+  display: flex;
+  gap: var(--distance-xs);
+  padding: 0 var(--distance-lg);
+  border-bottom: 1px solid var(--color-outline-variant);
+  background: var(--color-surface-container-lowest);
+}
+
+.plans-surface {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--distance-xs);
+  padding: 0 var(--distance-sm);
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--color-on-surface-variant);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.plans-surface[aria-selected='true'] {
+  border-bottom-color: var(--color-tertiary);
+  color: var(--color-on-surface);
+  font-weight: 600;
+}
+
+.doc-section-title {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: var(--distance-xs);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.doc-must,
+.doc-time {
+  margin-bottom: var(--distance-md);
+  padding: 0 var(--distance-sm) var(--distance-xs);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius);
+}
+
+.doc-must {
+  border-left: 4px solid var(--color-error);
+}
+
+.doc-alt-ok {
+  margin: 0 0 var(--distance-md);
+  font-size: var(--text-sm);
+  color: var(--color-on-surface-variant);
+}
+
+.doc-must-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.doc-must-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--distance-xs) var(--distance-sm);
+  padding: var(--distance-xs) 0;
+  border-top: 1px solid var(--color-outline-variant);
+  font-size: var(--text-sm);
+}
+
+.doc-must-reasons,
+.doc-small,
+.doc-group-summary {
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.doc-group-summary {
+  flex: none;
+}
+
+/* The timeline: one column per month, scrollable horizontally. */
+.doc-time-band {
+  display: flex;
+  gap: var(--distance-sm);
+  margin: 0;
+  padding: 0 0 var(--distance-xs);
+  list-style: none;
+  overflow-x: auto;
+}
+
+.doc-time-month {
+  flex: none;
+  min-width: 150px;
+  padding: var(--distance-xs) var(--distance-sm);
+  border-top: 3px solid var(--color-tertiary);
+  background: var(--color-surface-container-lowest);
+}
+
+.doc-time-month.overdue {
+  border-top-color: var(--color-error);
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+}
+
+.doc-time-month-title {
+  margin: 0 0 var(--distance-xs);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.doc-time-month ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.doc-time-point {
+  display: flex;
+  flex-direction: column;
+  padding: var(--distance-xs) 0;
+  font-size: var(--text-xs);
+}
+
+/* The table per group. */
+.doc-group {
+  margin-bottom: var(--distance-md);
+}
+
+.doc-table-frame {
+  overflow-x: auto;
+}
+
+.doc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.doc-table th,
+.doc-table td {
+  padding: var(--distance-xs) var(--distance-sm);
+  border-bottom: 1px solid var(--color-outline-variant);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.doc-table thead th {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-on-surface-variant);
+  white-space: nowrap;
+}
+
+.doc-table th.doc-name {
+  font-weight: 400;
+  padding: 0;
+}
+
+.doc-select {
+  width: 100%;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: var(--distance-sm);
+  padding: 0 var(--distance-sm);
+  border: 0;
+  border-left: 4px solid transparent;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.doc-select:hover {
+  background: var(--color-surface-container-high);
+}
+
+/* Selected row: surface, edge on the left and bold title (not only color). */
+.doc-row.selected {
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+}
+
+.doc-row.selected .doc-select {
+  border-left-color: var(--color-tertiary);
+}
+
+.doc-row.selected .doc-title {
+  font-weight: 600;
+}
+
+.doc-row.selected .plans-entry-id,
+.doc-row.selected .doc-small {
+  color: inherit;
+}
+
+.doc-row:hover .plans-copy,
+.doc-row:focus-within .plans-copy {
+  opacity: 1;
+}
+
+.doc-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--distance-xs);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.doc-status.st-missing .doc-status-symbol,
+.doc-status.st-outdated .doc-status-symbol,
+.doc-facet-symbol.st-missing,
+.doc-facet-symbol.st-outdated {
+  color: var(--color-error);
+}
+
+.doc-status.st-to-lawyer .doc-status-symbol,
+.doc-status.st-ai-assessed .doc-status-symbol,
+.doc-facet-symbol.st-to-lawyer,
+.doc-facet-symbol.st-ai-assessed {
+  color: var(--color-tertiary);
+}
+
+.doc-status.st-approved .doc-status-symbol,
+.doc-status.st-published .doc-status-symbol,
+.doc-facet-symbol.st-approved,
+.doc-facet-symbol.st-published {
+  color: var(--color-primary);
+}
+
+.doc-row.selected .doc-status-symbol {
+  color: inherit;
+}
+
+.doc-warning {
+  display: inline-block;
+  margin-left: var(--distance-xs);
+  padding: 0 var(--distance-xs);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.doc-warning.v-high,
+.doc-warning.v-miss,
+.doc-warning.v-must {
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+}
+
+.doc-overdue {
+  color: var(--color-error);
+  font-weight: 600;
+}
+
+.doc-soon {
+  font-weight: 600;
+}
+
+/* Detail panel. */
+.doc-section {
+  margin-top: var(--distance-sm);
+}
+
+.doc-miss,
+.doc-problem.a-high {
+  color: var(--color-error);
+}
+
+.doc-rev-line {
+  margin: 0;
+  padding: 0 0 0 var(--distance-md);
+  list-style: none;
+  border-left: 2px solid var(--color-outline-variant);
+}
+
+.doc-rev {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: var(--distance-xs) 0;
+  font-size: var(--text-sm);
+}
+
+.doc-rev::before {
+  content: '';
+  position: absolute;
+  left: calc(-1 * var(--distance-md) - 5px);
+  top: 10px;
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background: var(--color-tertiary);
+}
+
+.doc-rev.next::before {
+  background: var(--color-surface);
+  border: 2px solid var(--color-tertiary);
+}
+
+.doc-rev.overdue::before {
+  border-color: var(--color-error);
+}
+
+.doc-rev-date {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-on-surface-variant);
+}
+
+@media (forced-colors: active) {
+  .plans-surface[aria-selected='true'],
+  .doc-row.selected .doc-select {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+}
+
+@media (pointer: coarse) {
+  .plans-surface,
+  .doc-select,
+  .doc-section-title {
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 720px) {
+  .doc-table thead {
+    display: none;
+  }
+
+  .doc-table tr {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--distance-xs);
+    border-bottom: 1px solid var(--color-outline-variant);
+  }
+
+  .doc-table th,
+  .doc-table td {
+    border-bottom: 0;
+  }
+
+  .doc-table th.doc-name {
+    flex-base: 100%;
+  }
+}
+
+/* ---- The view choice, the priority map and the deadline band ----
+   Same tokens and components as the list (.toggles, .button, .badge, .plans-pri, .plans-count). The columns have
+   symbol and text; the color is only a bonus. A draft is marked with ✎ and a dashed edge, not only with color. */
+
+.plans-surfaces-row {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--distance-md);
+  padding-right: var(--distance-lg);
+  border-bottom: 1px solid var(--color-outline-variant);
+  background: var(--color-surface-container-lowest);
+}
+
+.plans-surfaces-row .plans-surfaces {
+  flex: 1;
+  border-bottom: 0;
+}
+
+.plans-show .toggles-button {
+  min-height: 32px;
+  font-size: var(--text-sm);
+}
+
+.map-help,
+.map-remark {
+  margin: var(--distance-xs) 0 var(--distance-sm);
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.map-scroll {
+  overflow: auto;
+}
+
+.map {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: var(--distance-xs);
+  table-layout: fixed;
+}
+
+.map th,
+.map td {
+  vertical-align: top;
+  text-align: left;
+}
+
+.map-corner,
+.map-module {
+  width: 120px;
+}
+
+.map-drop-folded .col-drop {
+  width: 96px;
+}
+
+.map-column {
+  padding: var(--distance-xs);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  border-bottom: 2px solid var(--color-outline-variant);
+}
+
+.map-column.col-now {
+  border-bottom-color: var(--color-error);
+}
+
+.map-column.col-owner {
+  border-bottom-color: var(--color-tertiary);
+}
+
+.map-column .plans-pri {
+  min-width: 0;
+}
+
+.map-column .plans-count {
+  margin-left: var(--distance-xs);
+}
+
+.map-fold {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--distance-xs);
+  min-height: 32px;
+  padding: 0 var(--distance-xs);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--color-on-surface);
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.map-module {
+  padding: var(--distance-xs);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.map-module .plans-count {
+  display: block;
+  font-weight: 400;
+}
+
+.map-cell {
+  min-height: 48px;
+  padding: var(--distance-xs);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-container-lowest);
+}
+
+.map-cell.drop-template {
+  outline: var(--focus);
+  outline-offset: -2px;
+  background: var(--color-surface-container-high);
+}
+
+.map-cell-folded {
+  text-align: center;
+}
+
+.map-folded-tall {
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.map-chips {
+  display: flex;
+  flex-direction: column;
+  gap: var(--distance-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.map-chip {
+  width: 100%;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  gap: var(--distance-xs);
+  padding: 2px var(--distance-xs);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-on-surface);
+  font: inherit;
+  font-size: var(--text-xs);
+  text-align: left;
+  cursor: grab;
+}
+
+.map-chip:hover {
+  background: var(--color-surface-container-high);
+}
+
+.map-chip:focus-visible {
+  outline: var(--focus);
+  outline-offset: 1px;
+}
+
+.map-chip.selected {
+  border-color: var(--color-tertiary);
+  box-shadow: inset 3px 0 0 var(--color-tertiary);
+}
+
+.map-chip.moved {
+  border-style: dashed;
+  border-color: var(--color-tertiary);
+}
+
+.map-chip.boosted {
+  outline: var(--focus);
+  outline-offset: 2px;
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+}
+
+.map-chip.dragged {
+  opacity: 0.5;
+}
+
+.map-chip-id {
+  flex: none;
+  font-weight: 600;
+}
+
+.map-chip-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-chip-est,
+.map-chip-deadline,
+.map-draft-badge {
+  flex: none;
+  color: var(--color-on-surface-variant);
+}
+
+/* Draft and preview above the map. */
+.map-draft {
+  margin-bottom: var(--distance-sm);
+  padding: var(--distance-sm);
+  border: 1px dashed var(--color-tertiary);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.map-draft-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--distance-sm);
+}
+
+.map-draft-title,
+.map-preview-title {
+  flex: 1;
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.map-changes,
+.map-written,
+.map-warnings,
+.map-error {
+  margin: var(--distance-sm) 0 0;
+  padding-left: var(--distance-md);
+  font-size: var(--text-xs);
+}
+
+.map-change {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--distance-sm);
+  padding: 2px 0;
+}
+
+.map-change-text {
+  flex: 1;
+  min-width: 200px;
+}
+
+.map-reason {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--distance-xs);
+}
+
+.map-reason input {
+  min-width: 240px;
+  min-height: 32px;
+  padding: 0 var(--distance-xs);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius);
+  background: var(--color-surface-container-lowest);
+  color: var(--color-on-surface);
+  font: inherit;
+  font-size: var(--text-xs);
+}
+
+.map-reason input[aria-invalid='true'] {
+  border-color: var(--color-error);
+}
+
+.map-preview {
+  margin-top: var(--distance-sm);
+  padding-top: var(--distance-sm);
+  border-top: 1px solid var(--color-outline-variant);
+}
+
+.map-preview:focus-visible {
+  outline: var(--focus);
+}
+
+.map-error {
+  color: var(--color-error);
+}
+
+/* The deadline band: one horizontal strip over the next 90 days, the overdue ones separately on the left. */
+.deadlineBand {
+  flex: none;
+  padding: var(--distance-xs) var(--distance-lg);
+  border-bottom: 1px solid var(--color-outline-variant);
+  background: var(--color-surface);
+}
+
+.deadline-band-title {
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  gap: var(--distance-sm);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.deadline-band-selection {
+  font-weight: 400;
+  color: var(--color-on-surface-variant);
+}
+
+.deadline-band-empty {
+  margin: 0 0 var(--distance-xs);
+}
+
+.deadline-band-content {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--distance-md);
+  padding-bottom: var(--distance-xs);
+}
+
+.deadline-band-overdue {
+  flex: none;
+  max-width: 240px;
+}
+
+.deadline-band-overdue-title {
+  display: block;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-error);
+}
+
+.deadline-band-overdue-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--distance-xs);
+  margin-top: var(--distance-xs);
+}
+
+.deadline-band-stripe {
+  --row-height: 28px;
+  position: relative;
+  flex: 1;
+  min-width: 320px;
+  height: calc(var(--rows) * var(--row-height) + 24px);
+  border-left: 2px solid var(--color-tertiary);
+}
+
+.deadline-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 24px;
+  max-width: 140px;
+  padding: 0 var(--distance-xs);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 9999px;
+  background: var(--color-surface-container-lowest);
+  color: var(--color-on-surface);
+  font: inherit;
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.deadline-band-stripe .deadline-badge {
+  position: absolute;
+  left: var(--x);
+  top: calc(var(--row) * var(--row-height));
+  /* The anchor slides from the left edge (today) to the right edge (day 90), so the marks never stick out of the strip. */
+  transform: translateX(calc(var(--x) * -1));
+}
+
+.deadline-badge:focus-visible {
+  outline: var(--focus);
+  outline-offset: 1px;
+  z-index: 1;
+}
+
+.deadline-badge:hover {
+  background: var(--color-surface-container-high);
+}
+
+.deadline-badge.deadline-overdue {
+  border-color: var(--color-error);
+  color: var(--color-error);
+}
+
+.deadline-badge.deadline-owner {
+  border-color: var(--color-tertiary);
+}
+
+.deadline-id {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.deadline-band-scale {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 20px;
+  border-top: 1px solid var(--color-outline-variant);
+}
+
+.deadline-band-line {
+  position: absolute;
+  left: var(--x);
+  bottom: 0;
+  transform: translateX(-50%);
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+  white-space: nowrap;
+}
+
+.deadline-band-line:first-child {
+  transform: none;
+}
+
+.deadline-band-line:last-child {
+  transform: translateX(-100%);
+}
+
+.deadline-band-more summary,
+.deadline-band-draw {
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.deadline-band-draw {
+  flex-base: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--distance-md);
+  margin: var(--distance-md) 0 0;
+}
+
+.deadline-list {
+  margin: var(--distance-xs) 0 0;
+  padding-left: var(--distance-md);
+  font-size: var(--text-xs);
+}
+
+@media (forced-colors: active) {
+  .map-chip.boosted,
+  .map-chip.selected,
+  .map-cell.drop-template {
+    outline: 2px solid Highlight;
+  }
+}
+
+@media (pointer: coarse) {
+  .map-chip,
+  .map-fold,
+  .deadline-badge,
+  .plans-show .toggles-button,
+  .map-reason input {
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 720px) {
+  .plans-surfaces-row {
+    flex-wrap: wrap;
+    padding: 0 var(--distance-sm) var(--distance-xs);
+  }
+
+  .map {
+    table-layout: auto;
+    min-width: 640px;
+  }
+
+  .deadline-band-stripe {
+    min-width: 0;
+    flex-base: 100%;
+  }
+}
+
+/* ---- The reader for documents and the Unregistered box (plans/read.js) ---- */
+
+.unreg {
+  flex: none;
+  padding: var(--distance-xs) var(--distance-lg);
+  border-bottom: 1px solid var(--color-outline-variant);
+  background: var(--color-surface);
+}
+
+.unregistered-title {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.unregistered-toggle {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--distance-xs);
+  padding: 0 var(--distance-xs);
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--color-on-surface);
+  font: inherit;
+  cursor: pointer;
+}
+
+.unregistered-toggle:disabled {
+  cursor: default;
+  color: var(--color-on-surface-variant);
+}
+
+.unregistered-toggle:focus-visible {
+  outline: var(--focus);
+}
+
+/* The count is always in the text; the accent edge is only an extra marker. */
+.unreg.has-unregistered {
+  border-left: 3px solid var(--color-tertiary);
+}
+
+.unregistered-content {
+  max-height: 50vh;
+  overflow: auto;
+  padding-bottom: var(--distance-sm);
+}
+
+.unregistered-group h3 {
+  margin: var(--distance-sm) 0 var(--distance-xs);
+}
+
+.unregistered-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-sm);
+}
+
+.unregistered-row {
+  padding: var(--distance-xs) 0;
+  border-bottom: 1px solid var(--color-outline-variant);
+}
+
+.unregistered-row code {
+  word-break: break-all;
+}
+
+.read-selected {
+  background: var(--color-surface-container-high);
+}
+
+.unregistered-form {
+  margin: var(--distance-xs) 0 var(--distance-xs) var(--distance-md);
+  padding: var(--distance-sm);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius);
+  background: var(--color-surface-container-lowest);
+}
+
+.unregistered-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--distance-sm);
+}
+
+.unregistered-field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 180px;
+  flex: 1 1 180px;
+}
+
+.unregistered-field label {
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.unregistered-field input,
+.unregistered-field select {
+  min-height: 32px;
+  padding: 0 var(--distance-xs);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-on-surface);
+  font: inherit;
+}
+
+.unregistered-field input:focus-visible,
+.unregistered-field select:focus-visible {
+  outline: var(--focus);
+}
+
+.unregistered-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--distance-xs);
+  margin-top: var(--distance-sm);
+}
+
+.unregistered-preview {
+  margin-top: var(--distance-sm);
+  padding-top: var(--distance-sm);
+  border-top: 1px solid var(--color-outline-variant);
+}
+
+.unregistered-preview:focus-visible {
+  outline: var(--focus);
+}
+
+.unregistered-error,
+.read-error {
+  color: var(--color-error);
+}
+
+.unregistered-warnings {
+  color: var(--color-on-surface-variant);
+}
+
+.read {
+  margin-top: var(--distance-sm);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius);
+  background: var(--color-surface-container-lowest);
+}
+
+.read-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--distance-xs);
+  padding: var(--distance-xs) var(--distance-sm);
+  border-bottom: 1px solid var(--color-outline-variant);
+  font-size: var(--text-sm);
+}
+
+.read-path {
+  word-break: break-all;
+}
+
+.read-doc {
+  max-height: 60vh;
+  overflow: auto;
+  padding: var(--distance-sm) var(--distance-md);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  color: var(--color-on-surface);
+}
+
+.read-doc:focus-visible {
+  outline: var(--focus);
+}
+
+.read-text > :first-child {
+  margin-top: 0;
+}
+
+.read-h {
+  margin: var(--distance-md) 0 var(--distance-xs);
+  line-height: 1.3;
+}
+
+.read-h1 {
+  font-size: var(--text-lg);
+}
+
+.read-h2 {
+  font-size: var(--text-md);
+}
+
+.read-h3,
+.read-h4,
+.read-h5,
+.read-h6 {
+  font-size: var(--text-sm);
+}
+
+.read-doc p {
+  margin: var(--distance-xs) 0;
+}
+
+.read-doc code {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  padding: 0 2px;
+  border-radius: 3px;
+  background: var(--color-surface-container-high);
+}
+
+.read-code {
+  margin: var(--distance-xs) 0;
+  padding: var(--distance-xs) var(--distance-sm);
+  overflow: auto;
+  border-radius: var(--radius);
+  background: var(--color-surface-container-high);
+}
+
+.read-code code {
+  padding: 0;
+  background: none;
+  white-space: pre;
+}
+
+.read-code:focus-visible,
+.read-table:focus-visible {
+  outline: var(--focus);
+}
+
+.read-list {
+  margin: var(--distance-xs) 0;
+  padding-left: 1.4em;
+}
+
+.read-quote {
+  margin: var(--distance-xs) 0;
+  padding-left: var(--distance-sm);
+  border-left: 3px solid var(--color-outline-variant);
+  color: var(--color-on-surface-variant);
+}
+
+.read-line {
+  border: 0;
+  border-top: 1px solid var(--color-outline-variant);
+}
+
+.read-table {
+  overflow-x: auto;
+  margin: var(--distance-xs) 0;
+}
+
+.read-table table {
+  border-collapse: collapse;
+}
+
+.read-table th,
+.read-table td {
+  padding: 2px var(--distance-xs);
+  border: 1px solid var(--color-outline-variant);
+  text-align: left;
+  vertical-align: top;
+}
+
+.read-table th {
+  background: var(--color-surface-container-high);
+}
+
+.read-link {
+  text-decoration: underline;
+}
+
+.read-url {
+  color: var(--color-on-surface-variant);
+  word-break: break-all;
+}
+
+@media (forced-colors: active) {
+  .unreg.has-unregistered {
+    border-left-color: CanvasText;
+  }
+
+  .read-selected {
+    outline: 1px solid Highlight;
+  }
+}
+
+@media (pointer: coarse) {
+  .unregistered-toggle,
+  .unregistered-field input,
+  .unregistered-field select,
+  .unregistered-row .button-small,
+  .read-top .button-small,
+  .plans-source .button-small {
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 720px) {
+  .unreg {
+    padding: var(--distance-xs) var(--distance-sm);
+  }
+
+  .unregistered-form {
+    margin-left: 0;
+  }
+
+  .read-doc {
+    max-height: none;
+  }
+}
+
+/* ---- The Legal, Decisions and Launch surfaces ----
+   Same building blocks as the plan entries and documents (plans-grid, plans-facet, doc-group, plans-detail).
+   Status and blocking always have symbol and text; the color is only an extra carrier. */
+.jb-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.jb-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--distance-xs) var(--distance-sm);
+  padding: var(--distance-xs) var(--distance-sm);
+  border-bottom: 1px solid var(--color-outline-variant);
+}
+
+.jb-select {
+  display: flex;
+  flex: 1 1 22rem;
+  gap: var(--distance-sm);
+  align-items: baseline;
+  min-height: 44px;
+  padding: var(--distance-xs) var(--distance-sm);
+  border: 0;
+  border-left: 4px solid transparent;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.jb-select:hover {
+  background: var(--color-surface-container-high);
+}
+
+/* Selected row: surface, edge on the left and bold text (not only color). */
+.jb-row.selected {
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+}
+
+.jb-row.selected .jb-select {
+  border-left-color: var(--color-tertiary);
+}
+
+.jb-row.selected .jb-text {
+  font-weight: 600;
+}
+
+.jb-row.selected .plans-entry-id {
+  color: inherit;
+}
+
+.jb-row.resolved .jb-text {
+  color: var(--color-on-surface-variant);
+}
+
+.jb-row .plans-copy {
+  opacity: 0;
+}
+
+.jb-row:hover .plans-copy,
+.jb-row:focus-within .plans-copy {
+  opacity: 1;
+}
+
+.jb-meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--distance-xs);
+  align-items: center;
+  font-size: var(--text-sm);
+}
+
+.jb-entry,
+.jb-age {
+  color: var(--color-on-surface-variant);
+  font-size: var(--text-xs);
+}
+
+.jb-badge.jst-open,
+.jb-badge.jbl-prod,
+.jb-facet-symbol.jbl-prod,
+.jb-overdue {
+  color: var(--color-error);
+}
+
+.jb-badge.jst-to-lawyer,
+.jb-badge.jst-ai-assessed,
+.jb-facet-symbol.jst-to-lawyer,
+.jb-facet-symbol.jst-ai-assessed {
+  color: var(--color-tertiary);
+}
+
+.jb-badge.jst-resolved,
+.jb-facet-symbol.jst-resolved,
+.jb-answered,
+.jb-check {
+  color: var(--color-primary);
+}
+
+.jb-overdue {
+  font-weight: 600;
+}
+
+.jb-package {
+  margin: var(--distance-sm) 0;
+  padding: var(--distance-sm) var(--distance-md);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-container-low);
+}
+
+.jb-package-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--distance-sm);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.jb-package-header p {
+  margin: 0;
+}
+
+.jb-package-text {
+  max-height: 24rem;
+  overflow: auto;
+  padding: var(--distance-sm);
+  border: 1px solid var(--color-outline-variant);
+  background: var(--color-surface);
+  color: var(--color-on-surface);
+  font-size: var(--text-xs);
+  white-space: pre-wrap;
+}
+
+.jb-answer {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 6rem;
+  padding: var(--distance-xs);
+  border: 1px solid var(--color-outline);
+  background: var(--color-surface);
+  color: var(--color-on-surface);
+  font: inherit;
+}
+
+.jb-launch {
+  padding: var(--distance-md);
+}
+
+.jb-launch-header {
+  margin-bottom: var(--distance-md);
+}
+
+.jb-launch-del {
+  margin-bottom: var(--distance-lg);
+}
+
+.jb-check {
+  min-width: 1.2em;
+  font-weight: 600;
+}
+
+/* ---- The overview ---- */
+
+.plans-overview {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--distance-md) var(--distance-lg) var(--distance-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--distance-lg);
+}
+
+.overview-box {
+  padding: var(--distance-md);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-container-lowest);
+}
+
+.overview-working {
+  border-color: var(--color-tertiary);
+}
+
+.overview-title {
+  margin: 0 0 var(--distance-sm);
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.overview-box .overview-title + .empty,
+.overview-list + .overview-title {
+  margin-top: var(--distance-md);
+}
+
+.overview-under {
+  font-size: var(--text-xs);
+  font-weight: 400;
+  color: var(--color-on-surface-variant);
+}
+
+.overview-shortlist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--distance-md);
+}
+
+.overview-summary {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--distance-xs);
+  padding: var(--distance-md);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-container-lowest);
+  color: var(--color-on-surface);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.overview-summary:hover {
+  background: var(--color-surface-container-high);
+}
+
+.overview-summary:focus-visible {
+  outline: var(--focus);
+  outline-offset: 2px;
+}
+
+.overview-summary-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--distance-sm);
+}
+
+.overview-summary-title {
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.overview-summary-count,
+.overview-label,
+.overview-explanation,
+.overview-time {
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.overview-label {
+  margin-top: var(--distance-xs);
+}
+
+/* The bars: the segments are only a bonus; the legend below carries text and numbers. */
+.overview-bar {
+  display: flex;
+  height: 8px;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--color-surface-container-high);
+}
+
+.overview-del {
+  width: var(--share);
+  min-width: 2px;
+}
+
+.overview-del + .overview-del {
+  border-left: 2px solid var(--color-surface-container-lowest);
+}
+
+.overview-bar .pri-now {
+  background: var(--color-error);
+}
+
+.overview-bar .pri-owner {
+  background: var(--color-tertiary);
+}
+
+.overview-bar .pri-later {
+  background: var(--color-outline);
+}
+
+.mod-early {
+  background: var(--color-outline-variant);
+}
+
+.mod-planned {
+  background: var(--color-secondary-container);
+}
+
+.mod-work {
+  background: var(--color-tertiary-container);
+}
+
+.mod-built {
+  background: var(--color-tertiary);
+}
+
+.overview-built {
+  margin-top: var(--distance-xs);
+  font-weight: 600;
+}
+
+.overview-warnings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--distance-xs);
+  margin-top: var(--distance-xs);
+}
+
+.overview-warning {
+  padding: 0 var(--distance-xs);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius);
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.overview-warning.has {
+  color: var(--color-on-surface);
+  font-weight: 600;
+}
+
+.overview-warning.has.v-owner {
+  background: var(--color-module-amber-container);
+}
+
+.overview-warning.has.v-legal {
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+}
+
+.overview-bottom {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: var(--distance-md);
+  align-items: start;
+}
+
+.overview-column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--distance-md);
+}
+
+.overview-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+ol.overview-list {
+  padding-left: var(--distance-md);
+  list-style: decimal;
+}
+
+.overview-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--distance-xs) var(--distance-sm);
+  padding: var(--distance-xs) 0;
+  border-bottom: 1px solid var(--color-outline-variant);
+  font-size: var(--text-sm);
+}
+
+ol.overview-list > .overview-row {
+  display: list-item;
+}
+
+ol.overview-list > .overview-row > * {
+  margin-right: var(--distance-sm);
+}
+
+.overview-row.undone {
+  color: var(--color-on-surface-variant);
+}
+
+.overview-id {
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.overview-text {
+  min-width: 0;
+}
+
+.overview-mark {
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.overview-warning {
+  margin: var(--distance-sm) 0 0;
+  padding: var(--distance-xs) var(--distance-sm);
+  border-radius: var(--radius);
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+  font-size: var(--text-sm);
+}
+
+.overview-capacity {
+  margin: 0;
+}
+
+@media (max-width: 900px) {
+  .overview-bottom {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ---- "Working now": the pulse marker. The text "Being worked on in Claude Code" carries the meaning. ---- */
+
+.pulse,
+.plans-warning.v-active {
+  color: var(--color-tertiary);
+}
+
+.pulse,
+.plans-entry.under-work .plans-warning.v-active {
+  animation: plans-pulse 1.6s ease-in-out infinite;
+}
+
+.plans-warning.v-active {
+  border-color: var(--color-tertiary);
+}
+
+@keyframes plans-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse,
+  .plans-entry.under-work .plans-warning.v-active {
+    animation: none;
+  }
+}
+
+/* ---- Multi select, "changed by session" and the row menu ---- */
+
+.plans-mark {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0 0 0 var(--distance-xs);
+  accent-color: var(--color-tertiary);
+}
+
+.plans-mark:focus-visible {
+  outline: var(--focus);
+  outline-offset: 2px;
+}
+
+/* Marked row: edge in addition to the checkbox (not only color). */
+.plans-entry.marked {
+  box-shadow: inset 4px 0 0 var(--color-tertiary);
+  background: var(--color-surface-container-high);
+}
+
+.plans-entry.changed-by-session {
+  background: var(--color-secondary-container);
+}
+
+.plans-changed {
+  flex: none;
+  font-size: var(--text-xs);
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+}
+
+.plans-row-menu-space {
+  position: relative;
+  flex: none;
+}
+
+.plans-row-menu-button {
+  opacity: 0;
+}
+
+.plans-entry:hover .plans-row-menu-button,
+.plans-entry:focus-within .plans-row-menu-button,
+.plans-row-menu-button[aria-expanded='true'] {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .plans-row-menu-button {
+    opacity: 1;
+  }
+}
+
+.plans-row-menu {
+  position: absolute;
+  z-index: 20;
+  right: 0;
+  top: calc(100% + 2px);
+  min-width: 220px;
+  padding: var(--distance-xs);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-container);
+  color: var(--color-on-surface);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.18); /* M3 shadow: black in both modes, like the selection bar */
+}
+
+.plans-menu-title {
+  margin: var(--distance-xs) var(--distance-sm) 2px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-on-surface-variant);
+}
+
+.plans-menu-point {
+  display: block;
+  width: 100%;
+  min-height: 32px;
+  padding: 0 var(--distance-sm);
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.plans-menu-point:hover,
+.plans-menu-point:focus-visible {
+  background: var(--color-surface-container-high);
+}
+
+.plans-menu-point:focus-visible {
+  outline: var(--focus);
+  outline-offset: -2px;
+}
+
+.plans-menu-point.is-selected {
+  font-weight: 600;
+}
+
+.plans-option-line {
+  max-height: 60vh;
+  overflow: auto;
+}
+
+.plans-option-field {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--text-xs);
+}
+
+.plans-option-field select,
+.plans-option-field input {
+  min-height: 32px;
+  border: 1px solid var(--color-outline);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-on-surface);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+
+.plans-option-label {
+  color: var(--color-on-surface-variant);
+}
+
+.plans-option-last {
+  flex-base: 100%;
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.plans-option-preview {
+  flex-base: 100%;
+}
+
+/* Space below the list, so the action bar never covers the last row. */
+.plans-room:has(.plans-option-line) .plans-middle {
+  padding-bottom: 160px;
+}
+
+/* ---- The command palette (Ctrl+K) ---- */
+
+.plans-palette {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 12vh;
+  background: rgb(0 0 0 / 0.32); /* M3 scrim: black in both modes */
+}
+
+.plans-palette[hidden] {
+  display: none;
+}
+
+.plans-palette-box {
+  width: min(680px, calc(100vw - 32px));
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface-container);
+  color: var(--color-on-surface);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.18); /* M3 shadow: black in both modes */
+}
+
+.plans-palette-search {
+  margin: var(--distance-sm);
+  min-height: 40px;
+  padding: 0 var(--distance-sm);
+  border: 1px solid var(--color-outline);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-on-surface);
+  font: inherit;
+  font-size: var(--text-md);
+}
+
+.plans-palette-search:focus-visible {
+  outline: var(--focus);
+}
+
+.plans-palette-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 0 var(--distance-sm);
+  list-style: none;
+}
+
+.plans-palette-match {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px var(--distance-sm);
+  padding: var(--distance-xs) var(--distance-sm);
+  border-left: 4px solid transparent;
+  border-radius: var(--radius);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+/* The active match: surface and edge (not only color). */
+.plans-palette-match.active {
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+  border-left-color: var(--color-tertiary);
+}
+
+.plans-palette-text {
+  font-weight: 600;
+}
+
+.plans-palette-path,
+.plans-palette-recent,
+.plans-palette-help {
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.plans-palette-match.active .plans-palette-path,
+.plans-palette-match.active .plans-palette-recent {
+  color: inherit;
+}
+
+.plans-palette-help {
+  margin: var(--distance-xs) var(--distance-md) var(--distance-sm);
+}
+
+/* =============================================================
+   Tree map and dependencies (plans/structure.js). Only the tokens from theme.css and the scale in
+   board.css; the priority is always also shown with symbol and text, so the color is never the only carrier.
+   ============================================================= */
+.structure-middle {
+  overflow: auto;
+}
+
+.structure-explanation {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--distance-xs) var(--distance-md);
+  margin: 0 0 var(--distance-sm);
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.structure-explanation li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--distance-xs);
+}
+
+.structure-prove {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--color-outline);
+}
+
+/* The priority colors, shared by the tree map, the legend and the nodes. */
+.structure-explanation-pri.pri-now .structure-prove,
+.tree-map-field.pri-now {
+  --pri-surface: var(--color-error-container);
+  --pri-text: var(--color-on-error-container);
+  --pri-edge: var(--color-error);
+}
+
+.structure-explanation-pri.pri-owner .structure-prove,
+.tree-map-field.pri-owner {
+  --pri-surface: var(--color-tertiary-container);
+  --pri-text: var(--color-on-tertiary-container);
+  --pri-edge: var(--color-tertiary);
+}
+
+.structure-explanation-pri.pri-later .structure-prove,
+.tree-map-field.pri-later {
+  --pri-surface: var(--color-surface-container-high);
+  --pri-text: var(--color-on-surface);
+  --pri-edge: var(--color-outline);
+}
+
+.structure-explanation-pri.pri-drop .structure-prove,
+.tree-map-field.pri-drop {
+  --pri-surface: var(--color-surface-container-lowest);
+  --pri-text: var(--color-on-surface-variant);
+  --pri-edge: var(--color-outline-variant);
+}
+
+.structure-prove {
+  background: var(--pri-surface);
+  border-color: var(--pri-edge);
+}
+
+/* Tree map: the surface has a fixed aspect ratio (queuePlanView.TREE_MAP_SURFACE is 1000 × 600). */
+.treeMap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1000 / 600;
+  min-height: 320px;
+  background: var(--color-surface-container-lowest);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.tree-map-field {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  width: var(--b);
+  height: var(--h);
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  text-align: left;
+  font: inherit;
+  color: var(--pri-text);
+  background: var(--pri-surface);
+  border: 1px solid var(--color-surface);
+  border-left: 4px solid var(--pri-edge);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.tree-map-field.pri-drop {
+  border-style: dashed;
+}
+
+/* The fill from below: how much is built (also given as text in the field and in the label). */
+.tree-map-fill {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--fill);
+  background: color-mix(in srgb, var(--color-primary) 22%, transparent);
+  border-top: 2px solid var(--color-primary);
+  pointer-events: none;
+}
+
+.tree-map-field.unbuilt .tree-map-fill {
+  display: none;
+}
+
+.tree-map-content {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--distance-xs) var(--distance-sm);
+  font-size: var(--text-xs);
+}
+
+.tree-map-name {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-map-line {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-map-title {
+  white-space: normal;
+}
+
+.tree-map-field.small .tree-map-content {
+  padding: 2px var(--distance-xs);
+}
+
+.tree-map-field.small .tree-map-name {
+  font-size: var(--text-xs);
+}
+
+.tree-map-field:hover {
+  border-color: var(--color-on-surface);
+  border-left-color: var(--pri-edge);
+}
+
+.tree-map-field:focus-visible {
+  outline: var(--focus);
+  outline-offset: -3px;
+  z-index: 1;
+}
+
+.tree-map-field.selected {
+  outline: 3px solid var(--color-primary);
+  outline-offset: -3px;
+  z-index: 1;
+}
+
+/* Dependencies */
+.dep-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--distance-sm) var(--distance-md);
+  margin-bottom: var(--distance-xs);
+}
+
+.dep-mode .toggles-button {
+  min-height: 32px;
+  font-size: var(--text-sm);
+}
+
+.dep-summary {
+  margin: var(--distance-xs) 0;
+  font-size: var(--text-sm);
+}
+
+.dep-critical-text {
+  margin: 0 0 var(--distance-sm);
+  padding-left: var(--distance-sm);
+  border-left: 4px solid var(--color-primary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.dep-surface {
+  overflow: auto;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-container-lowest);
+}
+
+.dep-svg {
+  display: block;
+}
+
+.dep-svg text {
+  fill: var(--color-on-surface);
+  font-size: var(--text-xs);
+  text-anchor: middle;
+}
+
+.dep-edge {
+  fill: none;
+  stroke: var(--color-outline);
+  stroke-width: 1.5;
+}
+
+.dep-edge.muted {
+  stroke: var(--color-outline-variant);
+}
+
+.dep-edge.cycle {
+  stroke-dasharray: 4 3;
+}
+
+/* The critical path: thick stroke in the accent color (and as text above the graph). */
+.dep-edge.critical {
+  stroke: var(--color-primary);
+  stroke-width: 4;
+}
+
+.dep-arrow {
+  fill: var(--color-outline);
+}
+
+.dep-arrow.critical {
+  fill: var(--color-primary);
+}
+
+.dep-node {
+  cursor: pointer;
+}
+
+.dep-fill {
+  fill: var(--color-surface-container-high);
+  stroke: var(--color-outline);
+  stroke-width: 1.5;
+}
+
+.dep-node.pri-now .dep-fill {
+  fill: var(--color-error-container);
+  stroke: var(--color-error);
+}
+
+.dep-node.pri-owner .dep-fill {
+  fill: var(--color-tertiary-container);
+  stroke: var(--color-tertiary);
+}
+
+.dep-node.pri-drop .dep-fill {
+  fill: var(--color-surface-container-lowest);
+  stroke-dasharray: 3 2;
+}
+
+.dep-node.role-neighbor .dep-fill,
+.dep-node.done .dep-fill {
+  fill: var(--color-surface-container);
+  stroke: var(--color-outline-variant);
+}
+
+.dep-node.critical .dep-fill {
+  stroke: var(--color-primary);
+  stroke-width: 3;
+}
+
+/* Blocked: dashed ring outside. */
+.dep-ring {
+  fill: none;
+  stroke: var(--color-error);
+  stroke-width: 2;
+  stroke-dasharray: 4 3;
+}
+
+.dep-svg text.dep-symbol {
+  font-size: var(--text-sm);
+  pointer-events: none;
+}
+
+.dep-node.pri-now text.dep-symbol {
+  fill: var(--color-on-error-container);
+}
+
+.dep-node.pri-owner text.dep-symbol {
+  fill: var(--color-on-tertiary-container);
+}
+
+.dep-node.role-neighbor text.dep-label,
+.dep-node.done text.dep-label {
+  fill: var(--color-on-surface-variant);
+}
+
+.dep-node.selected text.dep-label {
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.dep-node.selected .dep-fill {
+  stroke: var(--color-on-surface);
+  stroke-width: 3;
+}
+
+.dep-node:focus {
+  outline: none;
+}
+
+.dep-node:focus-visible .dep-fill {
+  stroke: var(--color-primary);
+  stroke-width: 4;
+}

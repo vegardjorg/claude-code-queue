@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "author": "Vegard Cowie Jørgensen",
-  "license": "SEE LICENSE IN LICENSE",
+  "license": "MIT",
   "description": "Work queue, plan register and board for running Claude Code as an orchestrator with parallel worktree agents.",
   "type": "commonjs",
   "engines": {

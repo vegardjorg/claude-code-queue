@@ -1,30 +1,21 @@
-Leisure Suit Larry Me Image-Ware. Ken sent me.
+MIT License
 
 Copyright (c) 2026 Vegard Cowie Jørgensen
 
-This is an informal license written by the author. It is not an OSI-approved open source license.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-1. Free use
-   You may use, copy, modify and develop this software further, free of charge, for:
-   a) private, non-commercial use, and
-   b) single-person coding teams: one developer working alone, including in their own paid work.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-2. Commercial license for teams
-   Coding teams of two or more developers need a commercial license.
-   Contact the author for a commercial license: contact Vegard Cowie Jørgensen via GitHub, https://github.com/vegardjorg.
-
-3. Conditions that apply to everyone (free and licensed use)
-   a) Attribution: keep the credit to Vegard Cowie Jørgensen as the original author, in the README and in copies or
-      substantial portions of the software.
-   b) The picture: the image shown in the upper-left corner of the board (assets/logo.webp and
-      scripts/orkestrator/ko-tavle/logo.webp) must stay there. You may decorate it (hats, frames, colours, effects),
-      but the person in it must still be recognisable.
-
-4. No warranty
-   The software is provided "as is", without warranty of any kind, express or implied, including but not limited to
-   the warranties of merchantability, fitness for a particular purpose and noninfringement. In no event shall the
-   author be liable for any claim, damages or other liability arising from, out of or in connection with the software
-   or its use.
-
-Short version: Free for private use and for single-person coding teams. Teams of two or more developers need a
-commercial license. Keep the credit, keep the picture.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

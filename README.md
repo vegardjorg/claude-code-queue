@@ -11,24 +11,21 @@ By Vegard Cowie Jørgensen.
 
 ## What you get
 
-- **Work queue** (`scripts/orkestrator/ko.mjs`): tasks with class, estimate, value, dependencies, owner questions
+- **Work queue** (`scripts/orchestrator/queue.mjs`): tasks with class, estimate, value, dependencies, owner questions
   and exclusive file ownership. Limits for parallel tracks, per domain and per day. Survives compaction and restarts
   because it lives on disk, not in the chat.
-- **Plan register** (`ko.mjs plan …`): ideas, plans and investigations with priority and maturity, pointing to your
+- **Plan register** (`queue.mjs plan …`): ideas, plans and investigations with priority and maturity, pointing to your
   documents. Plans become queue tasks when they are ready.
-- **Board** (`scripts/orkestrator/ko-tavle.mjs`): a local web board for the queue, projects, plans, dependencies
+- **Board** (`scripts/orchestrator/queue-board.mjs`): a local web board for the queue, projects, plans, dependencies
   and measured cost.
-- **Track tooling**: worktree setup (`klargjor-spor.mjs`), mission generation from a template (`lag-oppdrag.mjs`),
-  review packages (`ko.mjs motta`), merging (`flett-spor.mjs`), safe worktree cleanup (`rydd-worktree.mjs`) and a
-  pre-push check (`push-sjekk.mjs`).
+- **Track tooling**: worktree setup (`prepare-track.mjs`), mission generation from a template (`make-mission.mjs`),
+  review packages (`queue.mjs receive`), merging (`merge-track.mjs`), safe worktree cleanup (`cleanup-worktree.mjs`) and a
+  pre-push check (`push-check.mjs`).
 - **Hooks** for Claude Code: context guards for the orchestrator and for tracks, a reading guard, a push guard,
   re-injection of queue state after compaction, and a time and cost log for subagents.
-- **Skills**: `/ko`, `/parallell-bolge`, `/legg-til-ko`, `/planer`, `/plukk`, `/start`.
-- **Agents**: `spor` (code and investigation tracks), `spor-d` (database and security tracks), `reviewer` and
-  `reviewer-sikkerhet`.
-
-The code comments, command names and most CLI output are in Norwegian (it was built in a Norwegian project). The
-docs, skills and agents are in English. `docs/queue.md` translates the command names that matter.
+- **Skills**: `/queue`, `/parallel-wave`, `/add-to-queue`, `/plans`, `/pick`, `/start`.
+- **Agents**: `track` (code and investigation tracks), `track-d` (database and security tracks), `reviewer` and
+  `reviewer-security`.
 
 ## Install
 
@@ -37,8 +34,8 @@ Clone or download this repository, open Claude Code in YOUR project and say:
 > Install claude-cowie-qeue from `<path-to-this-repo>`; follow its INSTALL.md.
 
 Claude Code then runs `node scripts/install.mjs <your-project>`, merges the hooks and settings into your
-`.claude/settings.json` without overwriting anything, configures `ko.config.json` with you, runs
-`ko.mjs init` and a smoke test, and asks whether it should turn your own notes, TODOs and issues into plan entries
+`.claude/settings.json` without overwriting anything, configures `queue.config.json` with you, runs
+`queue.mjs init` and a smoke test, and asks whether it should turn your own notes, TODOs and issues into plan entries
 and queue tasks. See [INSTALL.md](INSTALL.md).
 
 Requirements: Node.js 20 or newer, git, Claude Code. No runtime npm dependencies.
@@ -46,19 +43,19 @@ Requirements: Node.js 20 or newer, git, Claude Code. No runtime npm dependencies
 ## How it works
 
 ```
- owner ──> orchestrator chat (/ko) ──> ko.mjs fyll ──> track agents in worktrees (ko/<ID> branches)
+ owner ──> orchestrator chat (/queue) ──> queue.mjs fill ──> track agents in worktrees (queue/<ID> branches)
                  ^                                            │
-                 │                                   RESULTAT line + rapport.md
+                 │                                   RESULT line + report.md
                  │                                            v
-        owner questions <── review (reviewer agents) <── ko.mjs motta
+        owner questions <── review (reviewer agents) <── queue.mjs receive
                  │
-                 └──> ko.mjs flett ──> base branch ──> batch push when the owner says "push"
+                 └──> queue.mjs merge ──> base branch ──> batch push when the owner says "push"
 ```
 
 1. Plans go into the plan register. Ready work goes into the queue as tasks with a class: **K** (code),
    **D** (database), **D+** (high-risk database or security) or **U** (investigation).
 2. The orchestrator fills the queue up to the limits. Each task gets a mission file: the shared protocol from
-   `docs/ko/mission-template.md`, filtered for its class, plus the task's own block.
+   `docs/queue/mission-template.md`, filtered for its class, plus the task's own block.
 3. Each track works in its own worktree, commits only on its own branch, and answers with one machine-readable
    result line. The long report goes to a file, not into the orchestrator's context.
 4. The orchestrator builds a review package, runs the reviewer agents for the class, starts a fresh fix-round agent
@@ -72,15 +69,15 @@ Details: [docs/orchestration.md](docs/orchestration.md), [docs/queue.md](docs/qu
 ## Key commands
 
 ```
-node scripts/orkestrator/ko.mjs init                     # once per project
-node scripts/orkestrator/ko.mjs vis                      # short queue view
-node scripts/orkestrator/ko.mjs add --fil task.json      # add tasks
-node scripts/orkestrator/ko.mjs fyll --scratchpad <dir>  # start what the limits allow
-node scripts/orkestrator/ko.mjs motta <ID>               # receive a finished track
-node scripts/orkestrator/ko.mjs flett <ID>               # merge it
-node scripts/orkestrator/ko.mjs kost                     # measured cost per class
-node scripts/orkestrator/ko.mjs plan vis                 # plan register
-node scripts/orkestrator/ko-tavle.mjs                    # board on http://localhost:2000
+node scripts/orchestrator/queue.mjs init                     # once per project
+node scripts/orchestrator/queue.mjs show                      # short queue view
+node scripts/orchestrator/queue.mjs add --file task.json      # add tasks
+node scripts/orchestrator/queue.mjs fill --scratchpad <dir>  # start what the limits allow
+node scripts/orchestrator/queue.mjs receive <ID>               # receive a finished track
+node scripts/orchestrator/queue.mjs merge <ID>               # merge it
+node scripts/orchestrator/queue.mjs cost                     # measured cost per class
+node scripts/orchestrator/queue.mjs plan show                 # plan register
+node scripts/orchestrator/queue-board.mjs                    # board on http://localhost:2000
 ```
 
 ## What it costs in tokens
@@ -128,35 +125,37 @@ What the measurements taught, and what the hooks and rules now enforce:
   and about 40% of a D+ track. Hence tracks are sized by class (K 90 to 120 min, D about 40, D+ 25 to 30, U about
   60) and similar small tasks can be bundled.
 
-The exact numbers will differ in your project. `ko.mjs kost` measures your own sessions so you can see where the
+The exact numbers will differ in your project. `queue.mjs cost` measures your own sessions so you can see where the
 tokens go.
 
 ## Not included
 
 This repository is the queue system only. It deliberately leaves out:
 - **CI/CD**: no GitHub workflows, no CI gates and no CI scripts. The gates the tracks run are whatever you put in
-  `ko.config.json` (`gater.rask`, `gater.full`). The unit tests in this repository run locally (`npm test`).
-- **Screenshot and visual check tooling**: tasks can carry the label `visuell` and land on a manual QA list
-  (`ko.mjs qa`), but there is no screenshot capture.
+  `queue.config.json` (`gates.quick`, `gates.full`). The unit tests in this repository run locally (`npm test`).
+- **Screenshot and visual check tooling**: tasks can carry the label `visual` and land on a manual QA list
+  (`queue.mjs qa`), but there is no screenshot capture.
 - **Project-specific database tooling** (local database pools, probe runners, migration dry runs). Migration block
-  numbering is optional and configured in `ko.config.json`.
+  numbering is optional and configured in `queue.config.json`.
 
 ## Development
 
 ```
 npm install
-npm test        # vitest, runs the unit tests under mal/scripts/orkestrator
+npm test        # vitest, runs the unit tests under template/scripts/orchestrator
 ```
 
 ## License
 
-**Leisure Suit Larry Me Image-Ware. Ken sent me.** An informal license written by the author, not an OSI license.
-Provided as is, with no warranty.
+MIT. See [LICENSE](LICENSE).
 
-- Free for private use and for single-person coding teams (also in their own paid work).
-- Teams of two or more developers need a commercial license. Contact the author for a commercial license: contact
-  Vegard Cowie Jørgensen via GitHub, https://github.com/vegardjorg.
-- Use, copy, modify and develop further, with attribution to Vegard Cowie Jørgensen, as long as the picture in the
-  upper-left corner of the board stays. You may decorate it, but the person must still be recognisable.
+## About the logo
 
-Full text: [LICENSE](LICENSE).
+The logo is a self-roast of the author in the style of Leisure Suit Larry, one of his first computer games (played
+in the same era as Commander Keen and Chuck Yeager's flight trainer). It is an original drawing and is not affiliated
+with or endorsed by the owners of those games.
+
+Keeping the logo in the top-left corner of the board is a friendly request, not a license condition. You are welcome
+to restyle it.
+
+Ken sent me.

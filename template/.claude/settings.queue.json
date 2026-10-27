@@ -1,0 +1,35 @@
+{
+  "_comment": "Merged into the target project's .claude/settings.json by scripts/install.mjs (adds, never overwrites). Hooks point to scripts/orchestrator/hook-*.mjs.",
+  "worktree": {
+    "baseRef": "head"
+  },
+  "subagentPromptCacheTtl": "1h",
+  "autoCompactWindow": 300000,
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": "Bash|PowerShell", "hooks": [{ "type": "command", "command": "node scripts/orchestrator/hook-push-guard.mjs", "timeout": 10 }] },
+      { "matcher": "Read", "hooks": [{ "type": "command", "command": "node scripts/orchestrator/hook-read-guard.mjs", "timeout": 10 }] }
+    ],
+    "PostToolUse": [
+      { "matcher": "*", "hooks": [{ "type": "command", "command": "node scripts/orchestrator/hook-track-context.mjs", "timeout": 10 }] }
+    ],
+    "SessionStart": [
+      { "matcher": "compact", "hooks": [{ "type": "command", "command": "node scripts/orchestrator/hook-after-compact.mjs", "timeout": 30 }] }
+    ],
+    "SubagentStart": [
+      { "matcher": "*", "hooks": [{ "type": "command", "command": "node scripts/orchestrator/hook-time.mjs", "timeout": 30 }] }
+    ],
+    "SubagentStop": [
+      { "matcher": "*", "hooks": [{ "type": "command", "command": "node scripts/orchestrator/hook-time.mjs", "timeout": 30 }] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [
+        { "type": "command", "command": "node scripts/orchestrator/hook-effort.mjs", "timeout": 10 },
+        { "type": "command", "command": "node scripts/orchestrator/hook-context.mjs", "timeout": 10 }
+      ] }
+    ],
+    "PreCompact": [
+      { "matcher": "", "hooks": [{ "type": "command", "command": "node scripts/orchestrator/hook-after-compact.mjs", "timeout": 30 }] }
+    ]
+  }
+}

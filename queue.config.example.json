@@ -1,0 +1,45 @@
+{
+  "_comment": "Settings for the work queue. Installed as queue.config.json in the project root. Missing fields get the defaults in scripts/orchestrator/lib/queueConfig.js. Keys starting with _ are comments.",
+  "projectName": "example",
+  "baseBranch": "main",
+  "remote": "origin",
+  "dataFolder": "scripts/.queue",
+  "timeLog": "scripts/.queue/times.jsonl",
+  "branchPrefix": "queue/",
+  "sharedLinks": ["node_modules"],
+  "_gates": "Shell commands the tracks run before delivery (gates.mjs --quick / --full). Empty lists = no gates.",
+  "gates": {
+    "quick": ["npm test"],
+    "full": ["npm run lint", "npm test"]
+  },
+  "_migrations": "Optional numbered migrations. folder = null turns the whole migration flow off.",
+  "migrations": {
+    "folder": null,
+    "filePattern": "^(\\d+)_.*\\.sql$",
+    "blockSize": 10,
+    "pushCommand": null,
+    "environmentFile": null,
+    "allowedEnvironment": []
+  },
+  "architectureRules": [
+    "Example rule: the UI layer never calls the database directly."
+  ],
+  "_modules": "Areas of the product for the plan register (queue.mjs plan modules).",
+  "modules": [
+    { "oid": "example", "title": "Example", "description": "Example module, rename or delete it" },
+    { "oid": "without-module", "title": "No module yet", "description": "Projects that do not belong to a module yet" }
+  ],
+  "projectModuleSuggestion": { "example": "example" },
+  "reviewers": { "K": [], "U": [], "D": ["reviewer"], "D+": ["reviewer", "reviewer-security"] },
+  "planBackup": null,
+  "documentFolders": ["docs"],
+  "indexFile": null,
+  "priorityRules": null,
+  "documents": { "vendors": [], "secretsManifest": null, "vendorSwitches": [] },
+  "readGuard": { "agentTypes": [], "autoLoaded": [], "largeFiles": [], "maxLines": 300, "blockLines": 2000 },
+  "excludeBranches": ["main", "master"],
+  "cloudHidden": [],
+  "_capacity": "Weekly quota reset used by queue.mjs capacity. null = default (Tuesday 19:00 Europe/Oslo). resetDay 0-6, 0 = Sunday.",
+  "capacity": { "resetDay": null, "resetClock": null, "timeZone": null, "planName": null },
+  "board": { "port": 2000, "title": "Queue board" }
+}
