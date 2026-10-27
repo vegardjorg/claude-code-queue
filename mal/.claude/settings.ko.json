@@ -1,0 +1,35 @@
+{
+  "_kommentar": "Flettes inn i målprosjektets .claude/settings.json av scripts/install.mjs (legger til, overskriver aldri). Hooks peker på scripts/orkestrator/hook-*.mjs.",
+  "worktree": {
+    "baseRef": "head"
+  },
+  "subagentPromptCacheTtl": "1h",
+  "autoCompactWindow": 300000,
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": "Bash|PowerShell", "hooks": [{ "type": "command", "command": "node scripts/orkestrator/hook-push-vakt.mjs", "timeout": 10 }] },
+      { "matcher": "Read", "hooks": [{ "type": "command", "command": "node scripts/orkestrator/hook-lesevakt.mjs", "timeout": 10 }] }
+    ],
+    "PostToolUse": [
+      { "matcher": "*", "hooks": [{ "type": "command", "command": "node scripts/orkestrator/hook-spor-kontekst.mjs", "timeout": 10 }] }
+    ],
+    "SessionStart": [
+      { "matcher": "compact", "hooks": [{ "type": "command", "command": "node scripts/orkestrator/hook-etter-kompakt.mjs", "timeout": 30 }] }
+    ],
+    "SubagentStart": [
+      { "matcher": "*", "hooks": [{ "type": "command", "command": "node scripts/orkestrator/hook-tid.mjs", "timeout": 30 }] }
+    ],
+    "SubagentStop": [
+      { "matcher": "*", "hooks": [{ "type": "command", "command": "node scripts/orkestrator/hook-tid.mjs", "timeout": 30 }] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [
+        { "type": "command", "command": "node scripts/orkestrator/hook-effort.mjs", "timeout": 10 },
+        { "type": "command", "command": "node scripts/orkestrator/hook-kontekst.mjs", "timeout": 10 }
+      ] }
+    ],
+    "PreCompact": [
+      { "matcher": "", "hooks": [{ "type": "command", "command": "node scripts/orkestrator/hook-etter-kompakt.mjs", "timeout": 30 }] }
+    ]
+  }
+}

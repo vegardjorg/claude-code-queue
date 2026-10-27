@@ -1,0 +1,20 @@
+{
+  "name": "claude-cowie-qeue",
+  "version": "0.1.0",
+  "private": true,
+  "author": "Vegard Cowie Jørgensen",
+  "license": "SEE LICENSE IN LICENSE",
+  "description": "Work queue, plan register and board for running Claude Code as an orchestrator with parallel worktree agents.",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "installer": "node scripts/install.mjs"
+  },
+  "devDependencies": {
+    "jsdom": "^26.1.0",
+    "vitest": "3.2.4"
+  }
+}

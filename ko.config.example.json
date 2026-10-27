@@ -1,0 +1,45 @@
+{
+  "_comment": "Settings for the work queue. Installed as ko.config.json in the project root. Missing fields get the defaults in scripts/orkestrator/lib/koKonfig.js. Keys starting with _ are comments.",
+  "prosjektNavn": "example",
+  "baseGren": "main",
+  "remote": "origin",
+  "dataMappe": "scripts/.ko",
+  "tidslogg": "scripts/.ko/tider.jsonl",
+  "grenPrefiks": "ko/",
+  "delteLenker": ["node_modules"],
+  "_gater": "Shell commands the tracks run before delivery (gater.mjs --rask / --full). Empty lists = no gates.",
+  "gater": {
+    "rask": ["npm test"],
+    "full": ["npm run lint", "npm test"]
+  },
+  "_migrasjoner": "Optional numbered migrations. mappe = null turns the whole migration flow off.",
+  "migrasjoner": {
+    "mappe": null,
+    "filmonster": "^(\\d+)_.*\\.sql$",
+    "blokkStorrelse": 10,
+    "pushKommando": null,
+    "miljoFil": null,
+    "tillatteMiljo": []
+  },
+  "arkitekturRegler": [
+    "Example rule: the UI layer never calls the database directly."
+  ],
+  "_moduler": "Areas of the product for the plan register (ko.mjs plan moduler).",
+  "moduler": [
+    { "oid": "example", "tittel": "Example", "beskrivelse": "Example module, rename or delete it" },
+    { "oid": "uten-modul", "tittel": "No module yet", "beskrivelse": "Projects that do not belong to a module yet" }
+  ],
+  "prosjektModulForslag": { "eksempel": "example" },
+  "reviewere": { "K": [], "U": [], "D": ["reviewer"], "D+": ["reviewer", "reviewer-sikkerhet"] },
+  "planBackup": null,
+  "dokumentMapper": ["docs"],
+  "indeksFil": null,
+  "prioritetsregler": null,
+  "dokumenter": { "leverandorer": [], "secretsManifest": null, "leverandorBytter": [] },
+  "lesevakt": { "agentTyper": [], "autoLastet": [], "storeFiler": [], "maksLinjer": 300, "blokkLinjer": 2000 },
+  "utelatGrener": ["main", "master"],
+  "skyUsynlig": [],
+  "_kapasitet": "Weekly quota reset used by ko.mjs kapasitet. null = default (Tuesday 19:00 Europe/Oslo). nullstillDag 0-6, 0 = Sunday.",
+  "kapasitet": { "nullstillDag": null, "nullstillKlokke": null, "tidssone": null, "plannavn": null },
+  "tavle": { "port": 2000, "tittel": "Køtavla" }
+}

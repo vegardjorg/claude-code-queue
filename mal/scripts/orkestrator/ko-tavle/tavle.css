@@ -1,0 +1,3416 @@
+/*
+  Kanban-tavla for arbeidskøen (se docs/board.md). Alle farger er tokenene fra den nøytrale paletten
+  (PALETT i lib/koTavle.js), servert som --color-<token> i /tema.css (lys, mørk etter systemet, mørk med
+  bryteren). Aldri hex her. Radius 4/8/12 px, avstand 4/8/16/24 px, systemfonten.
+  Rollene: app-rot = surface-container-low, kort = surface-container-lowest, ark/panel = surface.
+*/
+
+:root {
+  --radius: 4px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  /* Skrift- og avstandsskalaen. Bruk tokenene, ikke rå px: koTavleSkala.test.ts teller de
+     rå verdiene og stopper en glidning tilbake. Gulvet for skrift er 12 px, og vekten er 400 eller 600 (bare de
+     to vektene brukes). Halve verdier (6, 10, 12 px …) er rundet til nærmeste trinn, likt opp. */
+  --tekst-xs: 12px;
+  --tekst-sm: 14px;
+  --tekst-md: 16px;
+  --tekst-lg: 20px;
+  --tekst-xl: 28px;
+  --avstand-xs: 4px;
+  --avstand-sm: 8px;
+  --avstand-md: 16px;
+  --avstand-lg: 24px;
+  --fokus: 2px solid var(--color-primary);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface-container-low);
+  color: var(--color-on-surface);
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  font-size: var(--tekst-sm);
+  line-height: 20px;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: var(--fokus);
+  outline-offset: 2px;
+}
+
+/* ---- Toppen: tittel, status, søk, visning, tema, filtre ---- */
+
+/* Et grid i to rader (6 + 48 + 4 + 48 + 6 = 112 px) med maskoten over begge radene.
+   Maskoten står i VENSTRE hjørne. Skal den til høyre, endres bare `grid-template` under til
+   "rad1 maskot" auto "rad2 maskot" auto / minmax(0, 1fr) auto (boblen følger ikke automatisk med; se .boble). */
+.topp {
+  flex: none;
+  position: relative; /* ankeret for snakkeboblen */
+  display: grid;
+  grid-template:
+    'maskot rad1' auto
+    'maskot rad2' auto / auto minmax(0, 1fr);
+  column-gap: var(--avstand-md);
+  row-gap: 4px;
+  background: var(--color-surface-container-lowest);
+  border-bottom: 1px solid var(--color-outline-variant);
+  padding: 6px var(--avstand-lg);
+}
+
+.topp-rad {
+  display: flex;
+  align-items: center;
+  gap: var(--avstand-md);
+  flex-wrap: wrap;
+  min-height: 48px;
+  min-width: 0;
+}
+
+.topp-rad1 {
+  grid-area: rad1;
+}
+
+.topp-rad2 {
+  grid-area: rad2;
+  gap: var(--avstand-sm);
+}
+
+/* Fyllet skyver resten av raden til høyre (tannhjulet i rad 1, søket og grupperingen i rad 2). */
+.topp-fyll {
+  flex: 1 1 0;
+}
+
+/* Maskot-sonen: fast plass (52 × 104) også uten logo, så toppen ikke hopper. Føttene stikker 8 px ned over
+   kantlinja (6 px luft + 1 px kant + 8 px), og står over fokuslinja og stripa (under menyene og panelet). */
+.maskot {
+  grid-area: maskot;
+  position: relative;
+  z-index: 3;
+  align-self: end;
+  width: 52px;
+  height: 104px;
+  margin-bottom: -15px;
+}
+
+.maskot .logo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: bottom center;
+}
+
+/* Snakkeboblen (maskoten fyller den): til høyre for hodet, over tittelraden, med en pil mot munnen.
+   z-index 9 holder den under panel-bakteppet (10) og panelet (11). */
+.boble {
+  position: absolute;
+  z-index: 9;
+  top: 10px;
+  left: calc(var(--avstand-lg) + 52px + 12px);
+  max-width: 340px;
+  margin: 0;
+  padding: 10px 14px;
+  background: var(--color-surface-container-high);
+  color: var(--color-on-surface);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.16); /* skygge: svart i begge skjema */
+  font-size: 14px;
+  line-height: 20px;
+  animation: boble-inn 200ms ease-out;
+}
+
+.boble[hidden] {
+  display: none;
+}
+
+/* Pila: et rotert kvadrat med boblens bakgrunn og to av kantene, som peker mot munnen til venstre. */
+.boble::before {
+  content: '';
+  position: absolute;
+  top: 18px;
+  left: -7px;
+  width: 12px;
+  height: 12px;
+  background: inherit;
+  border-left: 1px solid var(--color-outline-variant);
+  border-bottom: 1px solid var(--color-outline-variant);
+  transform: rotate(45deg);
+}
+
+@keyframes boble-inn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boble {
+    animation: none;
+  }
+}
+
+.tittel {
+  margin: 0;
+  font-size: var(--tekst-lg);
+  line-height: 28px;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.status {
+  margin: 0;
+  color: var(--color-on-surface-variant);
+  font-size: var(--tekst-xs);
+}
+
+.status.feil {
+  color: var(--color-error);
+  font-weight: 600;
+}
+
+.sok {
+  min-height: 40px;
+  width: 260px;
+  max-width: 60vw;
+  padding: 0 var(--avstand-md);
+  border: 1px solid var(--color-outline);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-container-lowest);
+}
+
+.sok::placeholder {
+  color: var(--color-placeholder);
+}
+
+.veksler {
+  display: inline-flex;
+  border: 1px solid var(--color-outline);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.veksler-knapp {
+  min-height: 40px;
+  padding: 0 var(--avstand-md);
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.veksler-knapp + .veksler-knapp {
+  border-left: 1px solid var(--color-outline);
+}
+
+.veksler-knapp[aria-pressed='true'],
+.veksler-knapp[aria-selected='true'] {
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+  font-weight: 600;
+}
+
+/* ---- Søk og Filter-menyen (logoen står i maskot-sonen over) ---- */
+
+.sok-filter {
+  display: flex;
+  align-items: center;
+  gap: var(--avstand-sm);
+}
+
+.sok-filter[hidden] {
+  display: none;
+}
+
+.filter {
+  position: relative;
+}
+
+.filter-knapp {
+  padding: 0 var(--avstand-md);
+}
+
+.filter-knapp.aktiv {
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+  border-color: transparent;
+}
+
+.filter-meny {
+  position: absolute;
+  z-index: 12;
+  top: calc(100% + 6px);
+  left: 0;
+  width: min(360px, calc(100vw - 32px));
+  max-height: min(70vh, 560px);
+  overflow-y: auto;
+  padding: var(--avstand-sm) 0;
+  background: var(--color-surface-container-lowest);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.16); /* skygge: svart i begge skjema */
+}
+
+.filter-seksjon + .filter-seksjon {
+  border-top: 1px solid var(--color-outline-variant);
+  margin-top: var(--avstand-sm);
+  padding-top: var(--avstand-sm);
+}
+
+.filter-seksjon-hode {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--avstand-md);
+}
+
+.filter-seksjon-hode h3 {
+  margin: 0;
+  font-size: var(--tekst-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-on-surface-variant);
+}
+
+.filter-seksjon-hode .lenke-knapp {
+  margin: 0;
+  border-color: transparent;
+}
+
+.filter-liste {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.filter-rad {
+  display: flex;
+  align-items: center;
+  gap: var(--avstand-sm);
+  min-height: 44px;
+  padding: 0 var(--avstand-md);
+}
+
+.filter-rad:hover {
+  background: var(--color-surface-container-high);
+}
+
+.filter-rad input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--color-primary);
+}
+
+.filter-rad label {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--avstand-sm);
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.filter-navn {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filter-antall {
+  margin-left: auto;
+  color: var(--color-on-surface-variant);
+  font-size: var(--tekst-xs);
+}
+
+.pauset {
+  font-size: var(--tekst-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-on-surface-variant);
+}
+
+.pause-knapp {
+  flex: none;
+  min-height: 32px;
+  padding: 0 var(--avstand-sm);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--color-primary);
+  cursor: pointer;
+  font-size: var(--tekst-xs);
+}
+
+.pause-knapp:hover {
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+}
+
+.filter-fot {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--avstand-sm) var(--avstand-md) 0;
+  margin-top: var(--avstand-sm);
+  border-top: 1px solid var(--color-outline-variant);
+}
+
+.prikk {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  background: var(--p, var(--color-outline));
+}
+
+/* ---- Tavla ---- */
+
+.tavle {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.tavle.flat {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(280px, 1fr));
+  gap: var(--avstand-md);
+  padding: var(--avstand-md) var(--avstand-lg);
+  overflow: auto hidden;
+}
+
+.kolonne {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.kol-hode {
+  display: flex;
+  align-items: baseline;
+  gap: var(--avstand-sm);
+  padding: 0 var(--avstand-xs) var(--avstand-sm);
+}
+
+.kol-hode h2 {
+  margin: 0;
+  font-size: var(--tekst-md);
+  line-height: 24px;
+  font-weight: 600;
+}
+
+.teller {
+  color: var(--color-on-surface-variant);
+  font-size: var(--tekst-xs);
+}
+
+.wip {
+  margin-left: auto;
+  font-size: var(--tekst-xs);
+  font-weight: 600;
+  padding: 2px var(--avstand-sm);
+  border-radius: 9999px;
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+  white-space: nowrap;
+}
+
+.wip.full {
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+}
+
+.kol-kropp {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 2px var(--avstand-xs) var(--avstand-lg);
+}
+
+.seksjon-tittel,
+.seksjon > summary {
+  margin: var(--avstand-sm) 0;
+  font-size: var(--tekst-xs);
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-on-surface-variant);
+}
+
+.seksjon > summary {
+  cursor: pointer;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+}
+
+.kortliste {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--avstand-sm);
+  min-height: 8px;
+}
+
+.tom {
+  margin: var(--avstand-sm) 0;
+  color: var(--color-on-surface-variant);
+  font-size: var(--tekst-xs);
+}
+
+.vis-flere {
+  margin-top: var(--avstand-sm);
+}
+
+/* ---- Kortet ---- */
+
+.kort {
+  position: relative;
+  padding: var(--avstand-sm) var(--avstand-md) var(--avstand-sm) var(--avstand-md);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface-container-lowest);
+  cursor: pointer;
+  overflow: hidden;
+}
+
+/* Prosjektfargen som stripe til venstre. */
+.kort::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 5px;
+  background: var(--p, var(--color-outline));
+}
+
+.kort:hover {
+  border-color: var(--color-outline);
+}
+
+.kort.klar {
+  border-color: var(--color-primary);
+}
+
+/* Blokkert: dempet (stiplet kant, ingen kortflate), men teksten holder kontrasten. */
+.kort.blokkert {
+  background: transparent;
+  border-style: dashed;
+}
+
+.kort.blokkert .kort-tittel {
+  color: var(--color-on-surface-variant);
+}
+
+.kort.drar {
+  opacity: 0.5;
+}
+
+.kort.loftet,
+.bane.loftet > .bane-hode {
+  outline: var(--fokus);
+  outline-offset: 2px;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.18); /* M3-skygge: svart i begge skjema */
+}
+
+.kort-hode {
+  display: flex;
+  align-items: center;
+  gap: var(--avstand-sm);
+  flex-wrap: wrap;
+}
+
+.kort-id {
+  font-size: var(--tekst-xs);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--color-on-surface-variant);
+  margin-right: auto;
+}
+
+/* Prosjektets kortnavn i kortets hode (fargestripa alene er under 3:1). */
+.kort-prosjekt {
+  font-size: var(--tekst-xs);
+  color: var(--color-on-surface-variant);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 14ch;
+}
+
+.kort-tittel {
+  margin: var(--avstand-xs) 0 0;
+}
+
+/* Metadataene er én gruppe (aria-describedby peker hit), men står i hodets flex-rad som før. */
+.kort-meta {
+  display: contents;
+}
+
+/* Tittelen er knappen som åpner panelet (og tab-stoppet i kolonnen). Ser ut som tekst. */
+.kort-knapp {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* Fokus på knappen markerer hele kortet (knappen er bare tittelen). */
+.kort:has(.kort-knapp:focus-visible) {
+  outline: var(--fokus);
+  outline-offset: 2px;
+}
+.kort-knapp:focus-visible {
+  outline: none;
+}
+
+.kort-fot {
+  margin: var(--avstand-sm) 0 0;
+  display: flex;
+  align-items: center;
+  gap: var(--avstand-sm);
+  flex-wrap: wrap;
+  font-size: var(--tekst-xs);
+  line-height: 16px;
+  color: var(--color-on-surface-variant);
+}
+
+.hindring {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.merke {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--avstand-xs);
+  padding: 0 var(--avstand-sm);
+  min-height: 20px;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 9999px;
+  font-size: var(--tekst-xs);
+  line-height: 18px;
+  color: var(--color-on-surface-variant);
+  white-space: nowrap;
+}
+
+.merke.klasse-dpluss {
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.merke.visuell {
+  background: var(--color-modul-lilla-container);
+  color: var(--color-on-surface);
+  border-color: transparent;
+}
+
+.merke.klar-merke {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.merke.qa {
+  background: var(--color-modul-amber-container);
+  color: var(--color-on-surface);
+  border-color: transparent;
+  font-weight: 600;
+}
+
+/* Skymerket i Pågår, avkryssingen for en skybunt og linja over I kø. */
+.merke.sky-merke {
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.sky-velg {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--avstand-xs);
+  min-height: 44px;
+  min-width: 44px;
+  margin-left: auto;
+  padding: 0 var(--avstand-sm);
+  font-size: var(--tekst-xs);
+  color: var(--color-on-surface-variant);
+  cursor: pointer;
+}
+
+.sky-velg input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-primary);
+}
+
+.kol-hode:has(.sky-bunt) {
+  flex-wrap: wrap;
+}
+
+.sky-bunt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--avstand-sm);
+  flex-basis: 100%;
+  margin: var(--avstand-xs) 0 0;
+  font-size: var(--tekst-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.sky-pakke-felt {
+  display: flex;
+  flex-direction: column;
+  gap: var(--avstand-xs);
+  flex-basis: 100%;
+}
+
+.sky-pakke-felt textarea {
+  min-height: 120px;
+  padding: var(--avstand-sm) var(--avstand-sm);
+  border: 1px solid var(--color-outline);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-container-lowest);
+  color: var(--color-on-surface);
+  font-family: ui-monospace, monospace;
+  font-size: var(--tekst-xs);
+}
+
+.merke.gammel,
+.merke.avvik {
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.ikon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.laas {
+  color: var(--color-on-surface-variant);
+}
+
+/* ---- Prosjektbaner ---- */
+
+.tavle.baner {
+  padding: 0 var(--avstand-lg) var(--avstand-lg);
+}
+
+.bane-hoder,
+.bane-rad {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(240px, 1fr));
+  gap: var(--avstand-md);
+}
+
+.bane-hoder {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: var(--avstand-md) 0 var(--avstand-sm);
+  background: var(--color-surface-container-low);
+  border-bottom: 1px solid var(--color-outline-variant);
+}
+
+.bane-hoder .kol-hode {
+  padding-bottom: 0;
+}
+
+.baneliste {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.bane {
+  padding: var(--avstand-md) 0;
+  border-bottom: 1px solid var(--color-outline-variant);
+}
+
+.bane-hode {
+  display: flex;
+  align-items: center;
+  gap: var(--avstand-sm);
+  min-height: 40px;
+  margin-bottom: var(--avstand-sm);
+  padding: 0 var(--avstand-sm);
+  border-radius: var(--radius-lg);
+}
+
+.bane-hode[draggable='true'] {
+  cursor: grab;
+}
+
+.bane-hode h2 {
+  margin: 0;
+  font-size: var(--tekst-md);
+  line-height: 24px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bane-hode .pid,
+.bane-hode .tall {
+  font-size: var(--tekst-xs);
+  color: var(--color-on-surface-variant);
+  white-space: nowrap;
+}
+
+.bane-hode .tall {
+  margin-left: auto;
+}
+
+.handtak {
+  color: var(--color-on-surface-variant);
+}
+
+.bane.drar {
+  opacity: 0.5;
+}
+
+.bane-celle .seksjon-tittel:first-child {
+  margin-top: 0;
+}
+
+/* ---- Detaljpanelet ---- */
+
+.panel-bakgrunn {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  background: rgb(0 0 0 / 0.32); /* M3-scrim: svart i begge skjema */
+}
+
+.panel {
+  position: fixed;
+  z-index: 11;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(600px, 100vw);
+  overflow-y: auto;
+  background: var(--color-surface);
+  border-left: 1px solid var(--color-outline-variant);
+  padding: var(--avstand-lg);
+}
+
+.panel-hode {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--avstand-sm);
+}
+
+.panel-hode > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.panel-hode h2 {
+  margin: var(--avstand-xs) 0 0;
+  font-size: var(--tekst-lg);
+  line-height: 28px;
+  font-weight: 600;
+}
+
+.knapp-ikon {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.knapp-ikon:hover {
+  background: var(--color-surface-container-high);
+}
+
+.knapp-ikon .ikon {
+  width: 20px;
+  height: 20px;
+}
+
+.fakta {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: var(--avstand-sm) var(--avstand-md);
+  margin: var(--avstand-md) 0;
+}
+
+.fakta dt {
+  color: var(--color-on-surface-variant);
+  font-size: var(--tekst-xs);
+}
+
+.fakta dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.fakta ul {
+  margin: 0;
+  padding-left: var(--avstand-md);
+}
+
+code,
+pre {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: var(--tekst-xs);
+}
+
+code {
+  padding: 1px var(--avstand-xs);
+  border-radius: var(--radius);
+  background: var(--color-surface-container-high);
+}
+
+.lenke-knapp {
+  min-height: 32px;
+  padding: 0 var(--avstand-sm);
+  margin: 0 var(--avstand-sm) var(--avstand-sm) 0;
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--color-primary);
+  cursor: pointer;
+}
+
+.handlinger {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--avstand-sm);
+  padding: var(--avstand-md) 0;
+  border-top: 1px solid var(--color-outline-variant);
+  border-bottom: 1px solid var(--color-outline-variant);
+}
+
+.handlinger .felt {
+  display: flex;
+  flex-direction: column;
+  gap: var(--avstand-xs);
+  flex: 1 1 220px;
+}
+
+.handlinger label {
+  font-size: var(--tekst-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.handlinger input,
+.handlinger textarea {
+  min-height: 44px;
+  padding: var(--avstand-sm) var(--avstand-md);
+  border: 1px solid var(--color-outline);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-container-lowest);
+}
+
+.handlinger textarea {
+  min-height: 88px;
+  resize: vertical;
+}
+
+.handlinger .ingen {
+  margin: 0;
+  color: var(--color-on-surface-variant);
+  font-size: var(--tekst-xs);
+}
+
+.knapp {
+  min-height: 44px;
+  padding: 0 var(--avstand-lg);
+  border-radius: 9999px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.knapp:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Trykkfarge og hover, så et klikk synes med én gang. */
+.knapp:not(:disabled):hover {
+  filter: brightness(0.95);
+}
+
+.knapp:not(:disabled):active {
+  filter: brightness(0.85);
+  transform: scale(0.97);
+}
+
+.knapp {
+  transition:
+    filter 0.1s,
+    transform 0.1s;
+}
+
+/* Under lagring: knappen viser «Lagrer …» og venter-markør, raden dempes. */
+.knapp[aria-busy='true'] {
+  opacity: 0.7;
+  cursor: progress;
+}
+
+.lagrer {
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .knapp,
+  .lagrer {
+    transition: none;
+  }
+
+  .knapp:not(:disabled):active {
+    transform: none;
+  }
+}
+
+.knapp-fylt {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.knapp-tonet {
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+}
+
+.knapp-kontur {
+  min-height: 40px;
+  background: transparent;
+  border-color: var(--color-outline);
+  color: var(--color-primary);
+}
+
+.knapp-fare {
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+}
+
+.oppdrag {
+  margin-top: var(--avstand-md);
+  overflow-wrap: anywhere;
+}
+
+.oppdrag h3,
+.oppdrag h4 {
+  margin: var(--avstand-md) 0 var(--avstand-sm);
+  font-size: var(--tekst-md);
+  line-height: 22px;
+  font-weight: 600;
+}
+
+.oppdrag h3.oppdrag-tittel {
+  font-size: var(--tekst-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-on-surface-variant);
+}
+
+.oppdrag p,
+.oppdrag ul,
+.oppdrag ol {
+  margin: 0 0 var(--avstand-sm);
+}
+
+.oppdrag ul,
+.oppdrag ol {
+  padding-left: var(--avstand-lg);
+}
+
+.oppdrag pre {
+  margin: 0 0 var(--avstand-sm);
+  padding: var(--avstand-sm) var(--avstand-md);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-container-high);
+  overflow-x: auto;
+  white-space: pre;
+}
+
+/* ---- Statistikken ---- */
+
+.tavle.statistikk {
+  display: block;
+  padding: var(--avstand-lg);
+}
+
+.nokkeltall {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--avstand-md);
+  margin-bottom: var(--avstand-lg);
+}
+
+.flis {
+  padding: var(--avstand-md);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface-container-lowest);
+  border: 1px solid var(--color-outline-variant);
+}
+
+.flis p {
+  margin: 0;
+}
+
+.flis-navn {
+  font-size: var(--tekst-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.flis-verdi {
+  margin: var(--avstand-xs) 0 !important;
+  font-size: var(--tekst-xl);
+  line-height: 36px;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.flis-under {
+  font-size: var(--tekst-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.grafer {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: var(--avstand-md);
+}
+
+.graf {
+  margin: 0;
+  padding: var(--avstand-md);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface-container-lowest);
+  border: 1px solid var(--color-outline-variant);
+}
+
+.graf figcaption {
+  margin-bottom: var(--avstand-sm);
+  font-weight: 600;
+}
+
+.graf-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.graf-svg text {
+  fill: var(--color-on-surface-variant);
+  font-size: var(--tekst-xs);
+}
+
+.graf-svg text.etikett-sterk {
+  fill: var(--color-on-surface);
+  font-weight: 600;
+}
+
+.graf-svg .akse {
+  stroke: var(--color-outline-variant);
+  stroke-width: 1;
+}
+
+.graf-svg rect {
+  fill: var(--s, var(--color-primary));
+}
+
+.graf-svg rect.treff {
+  fill: transparent;
+}
+
+.strek-anslag {
+  --s: var(--color-on-surface);
+  stroke: var(--s);
+  stroke-width: 2;
+  stroke-dasharray: 4 3;
+}
+
+.strek-kvote {
+  --s: var(--color-error);
+  stroke: var(--s);
+  stroke-width: 2;
+  stroke-dasharray: 6 3;
+}
+
+/* Seriefargene: kategori-tokenene (laget for å skilles, også ved fargeblindhet) i begge skjema. */
+.s-K {
+  --s: var(--color-kategori-teal);
+}
+.s-D {
+  --s: var(--color-kategori-havbla);
+}
+.s-Dp {
+  --s: var(--color-kategori-plomme);
+}
+.s-U {
+  --s: var(--color-kategori-skifer);
+}
+.s-arbeid {
+  --s: var(--color-kategori-teal);
+}
+.s-review {
+  --s: var(--color-kategori-mose);
+}
+.s-dag {
+  --s: var(--color-kategori-havbla);
+}
+.s-natt {
+  --s: var(--color-kategori-fiolett);
+}
+.s-kontekst {
+  --s: var(--color-kategori-petrol);
+}
+.s-over {
+  --s: var(--color-error);
+}
+
+.forklaring {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--avstand-xs) var(--avstand-md);
+  margin: var(--avstand-sm) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--tekst-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.forklaring li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--avstand-sm);
+}
+
+.tegn-prikk {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--s);
+}
+
+.tegn-strek {
+  width: 16px;
+  border-top: 2px dashed var(--s);
+}
+
+.graf-merknad {
+  margin: var(--avstand-sm) 0 0;
+  font-size: var(--tekst-xs);
+  color: var(--color-on-surface-variant);
+}
+
+/* ---- Innstillingene (tannhjulet, i sidepanelet) ---- */
+
+.innst {
+  padding: var(--avstand-md) 0;
+  border-top: 1px solid var(--color-outline-variant);
+}
+
+.innst:first-of-type {
+  margin-top: var(--avstand-md);
+}
+
+.innst-tittel {
+  margin: 0 0 var(--avstand-sm);
+  font-size: var(--tekst-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-on-surface-variant);
+}
+
+.innst-felt {
+  padding: var(--avstand-sm) 0 var(--avstand-md);
+}
+
+.innst-felt + .innst-felt {
+  border-top: 1px dashed var(--color-outline-variant);
+}
+
+.innst-felt label {
+  font-weight: 600;
+}
+
+.innst-forklaring,
+.innst-meta,
+.innst-kilde {
+  margin: 2px 0 0;
+  font-size: var(--tekst-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.innst-kontroll {
+  display: flex;
+  gap: var(--avstand-sm);
+  margin-top: var(--avstand-sm);
+}
+
+.innst-kontroll input,
+.innst-kontroll select {
+  width: 140px;
+  min-height: 44px;
+  padding: 0 var(--avstand-md);
+  border: 1px solid var(--color-outline);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-container-lowest);
+  font: inherit;
+  color: inherit;
+}
+
+.innst-feil {
+  margin: var(--avstand-sm) 0 0;
+  color: var(--color-error);
+  font-weight: 600;
+  font-size: var(--tekst-xs);
+}
+
+.innst ul {
+  margin: 0;
+  padding-left: var(--avstand-md);
+}
+
+.fare {
+  color: var(--color-error);
+}
+
+/* ---- Bekreftelsen ved en advarsel fra vaktreglene ---- */
+
+.vakt-bakgrunn {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--avstand-md);
+  background: rgb(0 0 0 / 0.32); /* M3-scrim: svart i begge skjema */
+}
+
+.vakt-bakgrunn[hidden] {
+  display: none;
+}
+
+.vakt {
+  width: min(480px, 100%);
+  padding: var(--avstand-lg);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+  border: 1px solid var(--color-outline-variant);
+}
+
+.vakt h2 {
+  margin: 0 0 var(--avstand-sm);
+  font-size: var(--tekst-lg);
+  line-height: 26px;
+  font-weight: 600;
+}
+
+.vakt-liste {
+  margin: 0 0 var(--avstand-md);
+  padding-left: var(--avstand-md);
+}
+
+.vakt-liste li + li {
+  margin-top: var(--avstand-sm);
+}
+
+.vakt-info {
+  color: var(--color-on-surface-variant);
+}
+
+.vakt-knapper {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--avstand-sm);
+}
+
+/* ---- Melding (nederst) ---- */
+
+/* Én stabel for meldingen og «Angre». Stabelen er fast nederst; boksene står under hverandre
+   (rekkefølgen settes av toast-køen via `order`), så de aldri dekker hverandre. */
+.toaster {
+  position: fixed;
+  z-index: 21;
+  left: 50%;
+  bottom: var(--avstand-lg);
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--avstand-sm);
+  width: max-content;
+  max-width: min(640px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+.toaster > * {
+  pointer-events: auto;
+}
+
+body.med-valglinje .toaster {
+  bottom: 96px;
+}
+
+.melding {
+  max-width: 100%;
+  padding: var(--avstand-md) var(--avstand-md);
+  border-radius: var(--radius-lg);
+  background: var(--color-inverse-surface);
+  color: var(--color-inverse-on-surface);
+  white-space: pre-line;
+}
+
+.melding.feil {
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+  font-weight: 600;
+}
+
+/* Levende: kortNode() i tavle.js setter den på teksten for skjermleseren. */
+.skjult-for-oyet {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ---- «Venter på deg»-knappen ---- */
+
+.innboks-knapp {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--avstand-sm);
+  padding: 0 var(--avstand-md);
+}
+
+.innboks-knapp.aktiv {
+  border-color: var(--color-primary);
+}
+
+.innboks-antall {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 var(--avstand-sm);
+  border-radius: 9999px;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: var(--tekst-xs);
+  line-height: 22px;
+  text-align: center;
+}
+
+/* ---- Stripa: «Neste opp» og kjeden ---- */
+
+.stripe {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--avstand-xs) var(--avstand-lg);
+  background: var(--color-surface-container-lowest);
+  border-bottom: 1px solid var(--color-outline-variant);
+  font-size: var(--tekst-xs);
+  line-height: 16px;
+}
+
+.stripe[hidden] {
+  display: none;
+}
+
+.stripe-rad {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--avstand-sm) var(--avstand-sm);
+  min-height: 36px;
+}
+
+.stripe-navn {
+  font-weight: 600;
+  color: var(--color-on-surface-variant);
+}
+
+.stripe-tom {
+  color: var(--color-on-surface-variant);
+}
+
+.stripe .lenke-knapp {
+  margin: 0;
+}
+
+.neste-kort {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--avstand-sm);
+  max-width: 300px;
+  min-height: 32px;
+  padding: 0 var(--avstand-sm);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 9999px;
+  background: var(--color-surface-container-low);
+  font-size: var(--tekst-xs);
+  cursor: pointer;
+}
+
+.neste-kort:hover {
+  border-color: var(--color-outline);
+}
+
+.neste-id {
+  flex: none;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.neste-tittel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Forklaringen i kjedelinja: samme ring som på kortene. */
+.tegn-kjede {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--color-outline-variant);
+}
+
+.kjede-for-tegn {
+  box-shadow: 0 0 0 2px var(--color-secondary);
+}
+
+.kjede-etter-tegn {
+  box-shadow: 0 0 0 2px var(--color-tertiary);
+}
+
+.kjede-forklaring {
+  color: var(--color-on-surface-variant);
+}
+
+/* ---- «Låser opp N», aldrende arbeid og kjeden på kortene ---- */
+
+.merke.laaser {
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+  border-color: transparent;
+}
+
+/* Over p85 for klassen: en diskret varm tone på kortet; forklaringen står i verktøytipset. */
+.kort.aldrende {
+  background: color-mix(
+    in srgb,
+    var(--color-modul-amber-container) 55%,
+    var(--color-surface-container-lowest)
+  );
+}
+
+.alder-over {
+  font-weight: 600;
+  color: var(--color-on-surface);
+}
+
+/* Kjeden: det valgte kortet, forgjengerne og etterfølgerne får en ring og et ord; resten dempes. Ringen er en
+   skygge (ikke outline), så fokusringen fortsatt synes. */
+.kort.kjede-valgt {
+  box-shadow: 0 0 0 3px var(--color-primary);
+}
+
+.kort.kjede-for {
+  box-shadow: 0 0 0 2px var(--color-secondary);
+}
+
+.kort.kjede-etter {
+  box-shadow: 0 0 0 2px var(--color-tertiary);
+}
+
+.kort.kjede-valgt .kort-id::after {
+  content: ' · valgt';
+}
+
+.kort.kjede-for .kort-id::after {
+  content: ' · før';
+}
+
+.kort.kjede-etter .kort-id::after {
+  content: ' · etter';
+}
+
+/* Resten dempes med flaten, ikke med opacity, så teksten holder kontrasten. Kortet får
+   app-rotens flate og en stiplet kant, prosjektstripa blekes, og teksten går over i on-surface-variant. */
+.tavle.kjede-aktiv .kort:not(.kjede-valgt):not(.kjede-for):not(.kjede-etter) {
+  background: var(--color-surface-container-high);
+  border-style: dashed;
+  color: var(--color-on-surface-variant);
+}
+
+.tavle.kjede-aktiv .kort:not(.kjede-valgt):not(.kjede-for):not(.kjede-etter)::before {
+  background: var(--color-outline-variant);
+}
+
+.fakta-merknad {
+  display: inline-block;
+  color: var(--color-on-surface-variant);
+  font-size: var(--tekst-xs);
+}
+
+.panel-hode .tilbake {
+  margin: 0 0 var(--avstand-sm);
+}
+
+/* ---- Innboksen «Venter på deg» (sidepanelet) ---- */
+
+.innboks-del {
+  padding: var(--avstand-md) 0;
+  border-top: 1px solid var(--color-outline-variant);
+}
+
+.innboks-del:first-of-type {
+  margin-top: var(--avstand-md);
+}
+
+.innboks-liste {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--avstand-sm);
+}
+
+.innboks-rad {
+  padding: var(--avstand-md);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface-container-lowest);
+}
+
+.innboks-rad > p {
+  margin: var(--avstand-sm) 0 0;
+}
+
+.innboks-rad > .knapp {
+  margin-top: var(--avstand-sm);
+}
+
+.rad-hode {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--avstand-sm) var(--avstand-sm);
+}
+
+.sp-id {
+  font-size: var(--tekst-xs);
+  font-weight: 600;
+  color: var(--color-on-surface-variant);
+  overflow-wrap: anywhere;
+}
+
+.sp-laaser {
+  margin-left: auto;
+  font-size: var(--tekst-xs);
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.merke.sp-type {
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+  border-color: transparent;
+  font-weight: 600;
+}
+
+/* Levende: klassen bygges som `sp-${type}` (tavle.js og graf.js), så grep på hele navnet
+   finner den ikke. Typene er betingelse, jurist og eier-oppgave. */
+.merke.sp-jurist,
+.merke.sp-betingelse {
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+}
+
+.sp-tekst.mangler {
+  color: var(--color-on-surface-variant);
+  font-style: italic;
+}
+
+.sp-meta {
+  font-size: var(--tekst-xs);
+  color: var(--color-on-surface-variant);
+  overflow-wrap: anywhere;
+}
+
+.sp-meta .lenke-knapp {
+  margin: var(--avstand-xs) var(--avstand-sm) 0 0;
+}
+
+.svar-skjema {
+  border: 0;
+  padding: var(--avstand-sm) 0 0;
+}
+
+/* QA, forslag og henger: avhuking (eller id) og tittel til venstre, én knapp til høyre. */
+.rad-kort {
+  display: flex;
+  align-items: center;
+  gap: var(--avstand-sm);
+  padding: var(--avstand-sm) var(--avstand-md);
+}
+
+.rad-valg {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 2px var(--avstand-sm);
+  cursor: pointer;
+}
+
+div.rad-valg {
+  grid-template-columns: 1fr;
+  cursor: default;
+}
+
+.rad-valg input {
+  grid-row: span 3;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--color-primary);
+}
+
+.rad-tittel {
+  overflow-wrap: anywhere;
+}
+
+.qa-prosjekt + .qa-prosjekt {
+  margin-top: var(--avstand-md);
+}
+
+.qa-navn {
+  margin: var(--avstand-sm) 0 var(--avstand-xs);
+  font-size: var(--tekst-sm);
+  font-weight: 600;
+}
+
+.qa-funksjon-navn {
+  margin: var(--avstand-sm) 0 var(--avstand-xs);
+  font-size: var(--tekst-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.innboks-fot {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: var(--avstand-sm);
+}
+
+.innboks-tom {
+  display: flex;
+  align-items: center;
+  gap: var(--avstand-sm);
+  margin: var(--avstand-lg) 0;
+  font-size: var(--tekst-md);
+  font-weight: 600;
+}
+
+.innboks-tom .ikon {
+  width: 24px;
+  height: 24px;
+  color: var(--color-primary);
+}
+
+.innboks-info {
+  margin: var(--avstand-md) 0 0;
+  font-size: var(--tekst-xs);
+  color: var(--color-on-surface-variant);
+}
+
+/* ---- Inn mot ut: linjegrafen ---- */
+
+.graf-svg polyline.linje {
+  fill: none;
+  stroke: var(--s);
+  stroke-width: 2;
+}
+
+.graf-svg polyline.s-ut {
+  stroke-dasharray: 5 3;
+}
+
+.graf-svg circle.punkt {
+  fill: var(--s);
+}
+
+.s-inn {
+  --s: var(--color-kategori-plomme);
+}
+
+.s-ut {
+  --s: var(--color-kategori-teal);
+}
+
+.tegn-linje {
+  width: 16px;
+  border-top: 2px solid var(--s);
+}
+
+@media (max-width: 720px) {
+  .topp {
+    padding: var(--avstand-sm) var(--avstand-md);
+  }
+  .tavle.flat,
+  .tavle.baner,
+  .tavle.statistikk {
+    padding-left: var(--avstand-md);
+    padding-right: var(--avstand-md);
+  }
+  .fakta {
+    grid-template-columns: 1fr;
+  }
+  .grafer {
+    grid-template-columns: 1fr;
+  }
+  .stripe {
+    padding-left: var(--avstand-md);
+    padding-right: var(--avstand-md);
+  }
+}
+
+/* Toppen på telefon (under 720 px): maskoten blir 56 px høy og står øverst, radene brytes, fanene ligger i en
+   egen rad som ruller sidelengs (overflow-x på raden, aldri på siden), og boblen blir en toast under toppen.
+   Ingen del av toppen er bredere enn viewport ved 375 px (sjekket i lib/__tests__/koTavleTopp.test.ts). */
+@media (max-width: 720px) {
+  .topp {
+    column-gap: var(--avstand-sm);
+  }
+  .maskot {
+    align-self: start;
+    width: 28px;
+    height: 56px;
+    margin-bottom: 0;
+  }
+  .topp-rad {
+    gap: var(--avstand-sm);
+  }
+  .topp .veksler {
+    flex: 1 1 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+  .topp .veksler-knapp {
+    flex: none;
+    padding: 0 var(--avstand-sm);
+  }
+  .topp-rad2 .topp-fyll {
+    display: none;
+  }
+  .topp .sok-filter {
+    flex-wrap: wrap;
+    min-width: 0;
+    max-width: 100%;
+  }
+  .topp .sok {
+    width: 100%;
+    max-width: 100%;
+    flex: 1 1 160px;
+  }
+  /* Filter- og Utvalg-menyen festes til toppen i full bredde, så de aldri stikker ut til høyre for skjermen. */
+  .topp .filter {
+    position: static;
+  }
+  .topp .filter-meny {
+    top: 100%;
+    left: var(--avstand-md);
+    width: calc(100% - 2 * var(--avstand-md));
+  }
+  .boble {
+    top: calc(100% + var(--avstand-sm));
+    left: var(--avstand-md);
+    right: var(--avstand-md);
+    max-width: none;
+  }
+  .boble::before {
+    display: none;
+  }
+}
+
+/* ---- Avhengigheter: sirkler og streker. Fargene er tokenene; fyllet er prosjektfargen (--p). ---- */
+
+.tavle.graf {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.graf-topp {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--avstand-sm) var(--avstand-md);
+  padding: var(--avstand-sm) var(--avstand-lg);
+  border-bottom: 1px solid var(--color-outline-variant);
+}
+
+.graf-tall {
+  margin: 0;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: var(--avstand-sm);
+}
+
+.graf-tegn {
+  display: flex;
+  gap: var(--avstand-md);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--tekst-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.graf-tegn li {
+  display: flex;
+  align-items: center;
+  gap: var(--avstand-sm);
+}
+
+.graf-tegn .tegn {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: var(--color-surface-container-high);
+  border: 1.5px solid var(--color-on-surface);
+}
+
+.graf-tegn .t-blokkert {
+  border-style: dashed;
+}
+
+.graf-tegn .t-aktiv {
+  border: 3px solid var(--color-primary);
+}
+
+.graf-tegn .t-sp {
+  border-radius: var(--radius);
+  border-color: transparent;
+  background: var(--color-secondary-container);
+}
+
+.graf-valg {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--avstand-sm) var(--avstand-md);
+  margin-left: auto;
+}
+
+.graf-bryter {
+  display: flex;
+  align-items: center;
+  gap: var(--avstand-sm);
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.graf-flate {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+}
+
+.graf-flate.drar {
+  cursor: grabbing;
+}
+
+.graf-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+}
+
+.graf-bane rect {
+  fill: color-mix(in srgb, var(--p, var(--color-outline)) 8%, transparent);
+  stroke: color-mix(in srgb, var(--p, var(--color-outline)) 35%, transparent);
+}
+
+/* Én kjede (komponent) i pakkingen: diskret bakgrunn og kant. */
+.graf-svg rect.graf-komp {
+  fill: color-mix(in srgb, var(--color-on-surface) 3%, transparent);
+  stroke: var(--color-outline-variant);
+  stroke-width: 1;
+}
+
+.graf-bane text,
+.graf-fri-tittel {
+  font-size: var(--tekst-sm);
+  font-weight: 600;
+  fill: var(--color-on-surface-variant);
+}
+
+.kant {
+  fill: none;
+  stroke: var(--color-outline);
+  stroke-width: 1.4;
+  marker-end: url(#graf-pil);
+}
+
+.kant.sp {
+  stroke: var(--color-secondary);
+  stroke-dasharray: 5 4;
+}
+
+.kant.dempet {
+  opacity: 0.35;
+}
+
+.kant.sykel {
+  stroke: var(--color-error);
+}
+
+.pil {
+  fill: var(--color-outline);
+}
+
+.node {
+  cursor: pointer;
+}
+
+.node:focus {
+  outline: none;
+}
+
+.node:focus-visible .ring,
+.node:focus-visible .sp-boks,
+.node:focus-visible .fyll {
+  stroke: var(--color-primary);
+  stroke-width: 3;
+}
+
+.oppgave .fyll {
+  fill: var(--p, var(--color-surface-container-high));
+  stroke: var(--color-surface-container-lowest);
+  stroke-width: 1;
+}
+
+.oppgave .ring {
+  fill: none;
+  stroke: var(--color-on-surface);
+  stroke-width: 1.5;
+}
+
+.oppgave.t-blokkert .ring {
+  stroke-dasharray: 3 3;
+  stroke: var(--color-on-surface-variant);
+}
+
+.oppgave.t-aktiv .ring {
+  stroke: var(--color-primary);
+  stroke-width: 3.5;
+}
+
+.oppgave.rolle-nabo .fyll {
+  fill: var(--color-outline-variant);
+}
+
+.oppgave.rolle-ferdig {
+  opacity: 0.45;
+}
+
+.qa-prikk {
+  fill: var(--color-primary);
+}
+
+.sp-boks {
+  fill: var(--color-secondary-container);
+  stroke: var(--color-secondary);
+  stroke-width: 1;
+}
+
+.sp-merke {
+  text-anchor: middle;
+  font-size: var(--tekst-md);
+  font-weight: 600;
+  fill: var(--color-on-secondary-container);
+}
+
+/* Levende: `node sp sp-${n.type}` i graf.js (se også .merke.sp-jurist). */
+.sp-betingelse .sp-boks {
+  fill: var(--color-tertiary-container);
+  stroke: var(--color-tertiary);
+}
+
+.sp-betingelse .sp-merke {
+  fill: var(--color-on-tertiary-container);
+}
+
+.sp-jurist .sp-boks {
+  fill: var(--color-modul-amber-container);
+  stroke: var(--color-outline);
+}
+
+.sp-jurist .sp-merke {
+  fill: var(--color-on-surface);
+}
+
+.sp-eier-oppgave .sp-boks {
+  fill: var(--color-primary-container);
+  stroke: var(--color-primary);
+}
+
+.sp-eier-oppgave .sp-merke {
+  fill: var(--color-on-primary-container);
+}
+
+.graf-laaser {
+  text-anchor: middle;
+  font-size: var(--tekst-xs);
+  font-weight: 600;
+  fill: var(--color-primary);
+}
+
+/* Id-en: når det er plass (store sirkler ved middels zoom, alle nær), og alltid ved hover og fokus. */
+.etikett {
+  display: none;
+  text-anchor: middle;
+  font-size: var(--tekst-xs);
+  fill: var(--color-on-surface);
+  paint-order: stroke;
+  stroke: var(--color-surface-container-low);
+  stroke-width: 3px;
+}
+
+.zoom-middels .stor .etikett,
+.zoom-middels .sp .etikett,
+.zoom-naer .etikett,
+.node:hover .etikett,
+.node:focus-visible .etikett {
+  display: inline;
+}
+
+/* Kjeden (kjedevisningen): valgt, før og etter utheves, resten dempes. */
+.graf-svg.kjede-aktiv .node:not(.valgt):not(.for):not(.etter):not(.i-kjede),
+.graf-svg.kjede-aktiv .kant:not(.i-kjede) {
+  opacity: 0.15;
+}
+
+.graf-svg.kjede-aktiv .kant.i-kjede {
+  stroke-width: 2.4;
+}
+
+.node.valgt .ring,
+.node.valgt .fyll {
+  stroke: var(--color-primary);
+  stroke-width: 4;
+}
+
+.node.for .ring {
+  stroke: var(--color-secondary);
+  stroke-width: 3;
+}
+
+.node.etter .ring {
+  stroke: var(--color-tertiary);
+  stroke-width: 3;
+}
+
+.graf-svg.kjede-aktiv .etikett {
+  display: none;
+}
+
+.graf-svg.kjede-aktiv .valgt .etikett,
+.graf-svg.kjede-aktiv .for .etikett,
+.graf-svg.kjede-aktiv .etter .etikett,
+.graf-svg.kjede-aktiv .i-kjede .etikett {
+  display: inline;
+}
+
+/* ---- Visningen «Sky»: bunter med ferdig sky-start-kommando ---- */
+.sky-visning {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: var(--avstand-md);
+  display: grid;
+  gap: var(--avstand-md);
+}
+.sky-hjelp {
+  margin: 0;
+  color: var(--color-on-surface-variant);
+}
+.sky-tittel {
+  font-size: 1rem;
+  margin: 0 0 var(--avstand-sm);
+}
+.sky-bunter {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--avstand-md);
+}
+.sky-bunt-kort {
+  padding: var(--avstand-md);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface-container-lowest);
+  border: 1px solid var(--color-outline-variant);
+  display: grid;
+  gap: var(--avstand-sm);
+}
+.sky-bunt-hode {
+  margin: 0;
+  font-weight: 600;
+}
+.sky-liste {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--avstand-xs);
+}
+.sky-rad {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--avstand-sm);
+}
+.sky-id {
+  font-weight: 600;
+  min-width: 7rem;
+}
+.sky-navn {
+  flex: 1 1 16rem;
+  color: var(--color-on-surface-variant);
+}
+.sky-kommando {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--avstand-sm);
+}
+.sky-kommando code {
+  flex: 1 1 20rem;
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  padding: var(--avstand-sm) var(--avstand-sm);
+  border-radius: var(--radius-md, 8px);
+  background: var(--color-surface-container);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+/* ---- Samlekøen i I kø (grupper med sum mot målet, kortene startes ikke alene) ---- */
+
+.samle-grupper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--avstand-md);
+}
+
+.samle-gruppe {
+  padding: var(--avstand-sm) var(--avstand-sm) var(--avstand-sm);
+  border: 1px dashed var(--color-outline-variant);
+  border-left: 5px solid var(--p, var(--color-outline));
+  border-radius: var(--radius-xl);
+}
+
+.samle-gruppe.klar {
+  border-style: solid;
+  border-color: var(--color-primary);
+  border-left-color: var(--p, var(--color-outline));
+}
+
+.samle-hode {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--avstand-sm);
+  margin-bottom: var(--avstand-sm);
+}
+
+.samle-navn {
+  font-weight: 600;
+  color: var(--color-on-surface);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.samle-mangler {
+  font-size: var(--tekst-xs);
+  color: var(--color-on-surface-variant);
+}
+
+/* Fremdriftsstolpen: fylt opp til summen (andel av øvre mål), med en strek ved nedre mål. */
+.samle-stolpe {
+  position: relative;
+  height: 8px;
+  border-radius: 9999px;
+  background: var(--color-surface-container-high);
+  overflow: hidden;
+}
+
+.samle-fyll {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc(var(--andel, 0) * 100%);
+  background: var(--color-outline);
+  border-radius: 9999px;
+}
+
+.samle-gruppe.klar .samle-fyll {
+  background: var(--color-primary);
+}
+
+.samle-nedre {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--nedre, 0) * 100%);
+  width: 2px;
+  background: var(--color-on-surface);
+}
+
+.samle-sum {
+  margin: var(--avstand-xs) 0 var(--avstand-sm);
+  font-size: var(--tekst-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.kort.samlekort {
+  background: transparent;
+}
+
+/* ---- Flervalg, valglinja, dialogen for massehandlinger og «Angre» ---- */
+
+/* Avkryssingsboksen på kortet: synlig ved hover og fokus, og alltid når noe er merket. 44 px trykkflate. */
+.merk-boks {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  margin: -12px 0 -12px -10px;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.merk-boks input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
+.kort:hover .merk-boks,
+.kort:focus-within .merk-boks,
+.kort:focus .merk-boks,
+.tavle.har-valg .merk-boks,
+.kort.merket .merk-boks {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .merk-boks {
+    opacity: 1;
+  }
+}
+
+/* On-primary-container gjelder HELE det merkede kortet (id, prosjekt, fot og de nøytrale merkene),
+   ikke bare tittelen. Kontrasten mot primary-container er regnet ut fra paletten i koTavleUu.test.ts (minst 4,5:1 i
+   begge modi). Merker med egen flate (Klar nå, D+, QA …) beholder sine egne par. */
+.kort.merket {
+  border-color: var(--color-primary);
+  background: var(--color-primary-container);
+  box-shadow: inset 0 0 0 1px var(--color-primary);
+  color: var(--color-on-primary-container);
+}
+
+.kort.merket .kort-tittel,
+.kort.merket .kort-id,
+.kort.merket .kort-prosjekt,
+.kort.merket .kort-fot,
+.kort.merket .alder-over,
+.kort.merket .merke[class='merke'] {
+  color: var(--color-on-primary-container);
+}
+
+.kort.merket .merke[class='merke'] {
+  border-color: var(--color-on-primary-container);
+}
+
+.merke.vent-merke {
+  background: var(--color-modul-amber-container);
+  color: var(--color-on-surface);
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.merk-treff {
+  min-height: 40px;
+}
+
+.merk-treff[hidden] {
+  display: none;
+}
+
+/* Valglinja: klebrig nederst, bare når noe er merket. */
+.valglinje {
+  position: fixed;
+  z-index: 15;
+  left: 50%;
+  bottom: var(--avstand-md);
+  transform: translateX(-50%);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--avstand-sm) var(--avstand-md);
+  max-width: min(1100px, calc(100vw - 32px));
+  padding: var(--avstand-sm) var(--avstand-md) var(--avstand-sm) var(--avstand-md);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface-container);
+  color: var(--color-on-surface);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.18); /* M3-skygge: svart i begge skjema */
+}
+
+.valglinje[hidden] {
+  display: none;
+}
+
+/* Plass under siste kort, så valglinja aldri dekker det. */
+body.med-valglinje .tavle {
+  padding-bottom: 96px;
+}
+
+.valg-tall {
+  margin: 0;
+  font-weight: 600;
+}
+
+.valg-knapper {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--avstand-sm);
+}
+
+.knapp-liten {
+  padding: 0 var(--avstand-md);
+  font-size: var(--tekst-sm);
+}
+
+/* Knappene i en samlegruppe og «Merk» i gruppa. */
+.samle-knapper {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--avstand-sm);
+  margin: 0 0 var(--avstand-sm);
+}
+
+.merk-gruppe {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--avstand-sm);
+  min-height: 44px;
+  padding: 0 var(--avstand-sm) 0 0;
+  font-size: var(--tekst-xs);
+  color: var(--color-on-surface-variant);
+  cursor: pointer;
+}
+
+.merk-gruppe input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-primary);
+}
+
+.merk-handlinger {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--avstand-sm);
+  width: 100%;
+  padding-top: var(--avstand-sm);
+  border-top: 1px dashed var(--color-outline-variant);
+}
+
+/* Dialogen for en massehandling (bygger på .vakt). */
+.vakt.masse {
+  width: min(640px, 100%);
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+}
+
+.masse-forklaring,
+.masse-antall {
+  margin: 0 0 var(--avstand-sm);
+  color: var(--color-on-surface-variant);
+}
+
+.masse-antall {
+  font-size: var(--tekst-xs);
+  overflow-wrap: anywhere;
+}
+
+.masse .felt {
+  display: flex;
+  flex-direction: column;
+  gap: var(--avstand-xs);
+  margin-bottom: var(--avstand-sm);
+}
+
+.masse .felt[hidden] {
+  display: none;
+}
+
+.masse label {
+  font-size: var(--tekst-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.masse input,
+.masse select {
+  min-height: 44px;
+  padding: var(--avstand-sm) var(--avstand-md);
+  border: 1px solid var(--color-outline);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-container-lowest);
+  color: var(--color-on-surface);
+}
+
+.felt-hjelp {
+  margin: 0;
+  font-size: var(--tekst-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.masse-vis {
+  margin-bottom: var(--avstand-md);
+}
+
+.masse-forhand {
+  margin-bottom: var(--avstand-md);
+}
+
+.masse-oppsummering {
+  margin: 0 0 var(--avstand-sm);
+  font-weight: 600;
+}
+
+.masse-stopp li,
+.masse-feil {
+  color: var(--color-error);
+  white-space: pre-line;
+}
+
+.masse-feil {
+  margin: 0 0 var(--avstand-sm);
+  font-weight: 600;
+}
+
+.masse-advarsel li {
+  white-space: pre-line;
+}
+
+.masse-info li {
+  color: var(--color-on-surface-variant);
+}
+
+.masse-merknad {
+  margin: 0 0 var(--avstand-sm);
+  padding: var(--avstand-sm) var(--avstand-md);
+  border-radius: var(--radius-lg);
+  background: var(--color-modul-amber-container);
+  color: var(--color-on-surface);
+}
+
+.masse-linjer summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  color: var(--color-primary);
+}
+
+.masse-linjer ul {
+  max-height: 240px;
+  overflow: auto;
+  margin: 0;
+  padding-left: var(--avstand-md);
+  font-size: var(--tekst-xs);
+}
+
+.masse-pakke {
+  margin: var(--avstand-sm) 0;
+  padding: var(--avstand-sm) var(--avstand-md);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-xl);
+}
+
+.masse-pakke-tittel {
+  margin: 0 0 var(--avstand-sm);
+  font-size: var(--tekst-md);
+}
+
+/* «Angre» i 30 sekunder etter en massehandling. */
+.angre-melding {
+  display: flex;
+  align-items: center;
+  gap: var(--avstand-sm);
+  max-width: 100%;
+  padding: var(--avstand-sm) var(--avstand-sm) var(--avstand-sm) var(--avstand-md);
+  border-radius: var(--radius-lg);
+  background: var(--color-inverse-surface);
+  color: var(--color-inverse-on-surface);
+}
+
+.angre-melding[hidden] {
+  display: none;
+}
+
+.angre-tekst {
+  white-space: pre-line;
+}
+
+.angre-melding .knapp-ikon {
+  color: var(--color-inverse-on-surface);
+}
+
+/* Avhengighetsgrafen: samlekøen med prikket ring og «S». */
+.graf-tegn .t-samle {
+  border-style: dotted;
+  border-width: 2px;
+}
+
+.oppgave.t-samle .ring {
+  stroke-dasharray: 1 3;
+  stroke-linecap: round;
+  stroke: var(--color-on-surface);
+  stroke-width: 2;
+}
+
+.samle-merke circle {
+  fill: var(--color-secondary-container);
+  stroke: var(--color-secondary);
+  stroke-width: 1;
+}
+
+.samle-merke text {
+  fill: var(--color-on-secondary-container);
+  font-size: var(--tekst-xs);
+  font-weight: 600;
+  text-anchor: middle;
+}
+
+/* ---- Fokuslinja, gruppering, visninger, hjelp, planvisningen og «Sorter» ---- */
+
+/* Fokuslinja under toppen: samme flate som «Neste opp»-stripa, med varselfarge når fokus ikke har noe klart. */
+.fokuslinje {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--avstand-xs) var(--avstand-lg);
+  background: var(--color-surface-container-lowest);
+  border-bottom: 1px solid var(--color-outline-variant);
+  font-size: var(--tekst-xs);
+  line-height: 16px;
+}
+
+.fokuslinje[hidden] {
+  display: none;
+}
+
+.fokuslinje.varsel {
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+}
+
+.fokus-rad {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--avstand-sm) var(--avstand-sm);
+  min-height: 36px;
+}
+
+.fokus-tekst {
+  color: var(--color-on-surface-variant);
+}
+
+.fokus-trinnliste {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--avstand-xs);
+}
+
+.fokus-trinn {
+  padding: 2px var(--avstand-sm);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: 9999px;
+  white-space: nowrap;
+}
+
+.fokus-trinn.naa {
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.fokus-pil {
+  color: var(--color-on-surface-variant);
+}
+
+.fokus-tall {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--avstand-xs) var(--avstand-sm);
+  color: var(--color-on-surface-variant);
+}
+
+/* Varsel: all tekst i linja i on-error-container, så kontrasten holder. */
+.fokuslinje.varsel .stripe-navn,
+.fokuslinje.varsel .fokus-tall,
+.fokuslinje.varsel .fokus-tekst,
+.fokuslinje.varsel .fokus-pil {
+  color: var(--color-on-error-container);
+}
+
+.fokus-varsel {
+  margin: 0 0 var(--avstand-xs);
+  font-weight: 600;
+}
+
+/* Grupperingsvalget i verktøylinja. */
+.gruppering {
+  min-height: 36px;
+  padding: 0 var(--avstand-sm);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-container-lowest);
+  color: var(--color-on-surface);
+  font: inherit;
+  font-size: var(--tekst-xs);
+}
+
+.gruppering[hidden] {
+  display: none;
+}
+
+/* Grupper i kolonnene (område → prosjekt, prosjekt → funksjon, fokustrinn). */
+.grupper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--avstand-sm);
+}
+
+.gruppe > .kortliste {
+  margin-top: var(--avstand-xs);
+}
+
+.gruppe-hode {
+  display: flex;
+  align-items: center;
+  gap: var(--avstand-sm);
+  min-height: 36px;
+  padding: 0 var(--avstand-xs);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  font-size: var(--tekst-xs);
+  font-weight: 600;
+  color: var(--color-on-surface-variant);
+}
+
+.gruppe-hode:hover {
+  background: var(--color-surface-container-high);
+}
+
+.gruppe-navn {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gruppe-hode .teller {
+  margin-left: auto;
+  font-weight: 400;
+}
+
+.merk-gruppe-boks,
+.sorter-rad .rad-hode input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--color-primary);
+}
+
+/* Områdeoverskrift mellom prosjektbanene (gruppering «Område → prosjekt»). */
+.omrade-overskrift {
+  padding: var(--avstand-md) var(--avstand-sm) 0;
+}
+
+.omrade-overskrift h2 {
+  margin: 0;
+  font-size: var(--tekst-xs);
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-on-surface-variant);
+}
+
+/* Visninger-menyen. */
+.visning-valg {
+  flex: 1;
+  min-height: 44px;
+  text-align: left;
+}
+
+.visning-valg[aria-current='true'] {
+  font-weight: 600;
+}
+
+.visning-lagre {
+  gap: var(--avstand-sm);
+  align-items: center;
+}
+
+.visning-lagre input,
+.plan-felt input[type='text'],
+.plan-felt input[type='date'],
+.plan-felt select,
+.plan-omrade-rad select {
+  min-height: 36px;
+  padding: 0 var(--avstand-sm);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  color: var(--color-on-surface);
+  font: inherit;
+}
+
+.visning-lagre input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Hjelpen i sidepanelet og ?-knappen. */
+.hjelp-del {
+  margin-bottom: var(--avstand-md);
+}
+
+.hjelp-tekst {
+  margin: var(--avstand-xs) 0 0;
+  color: var(--color-on-surface-variant);
+}
+
+/* «Venter på deg»: hva svaret låser opp i fokus. */
+.sp-fokus {
+  background: var(--color-secondary-container);
+  color: var(--color-on-secondary-container);
+}
+
+.sp-fokus.tom-fokus {
+  background: transparent;
+  color: var(--color-on-surface-variant);
+}
+
+/* Planvisningen: verktøylinje og fire kolonner (Nå, Neste, Senere, Venter). */
+.tavle.plan {
+  padding: var(--avstand-md) var(--avstand-lg);
+}
+
+.plan-visning {
+  display: flex;
+  flex-direction: column;
+  gap: var(--avstand-md);
+}
+
+.plan-verktoy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--avstand-sm) var(--avstand-md);
+  padding: var(--avstand-sm) var(--avstand-md);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface-container-lowest);
+}
+
+.plan-felt {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--avstand-sm);
+  min-height: 44px;
+  font-size: var(--tekst-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.plan-felt input[type='text'] {
+  width: 200px;
+}
+
+.plan-avkrysning input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--color-primary);
+}
+
+.plan-utkast {
+  font-size: var(--tekst-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.plan-utkast.aktiv {
+  padding: 2px var(--avstand-sm);
+  border-radius: 9999px;
+  background: var(--color-tertiary-container);
+  color: var(--color-on-tertiary-container);
+  font-weight: 600;
+}
+
+.plan-merknad {
+  margin: var(--avstand-xs) 0 0;
+  font-size: var(--tekst-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.plan-kolonner {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(240px, 1fr));
+  gap: var(--avstand-md);
+  align-items: start;
+  overflow-x: auto;
+}
+
+.plan-kolonne {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: var(--avstand-sm);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface-container);
+}
+
+/* Levende: plan.js bygger `plan-${k.nokkel}`, og nøkkelen til Nå er 'naa'. */
+.plan-kolonne.plan-naa {
+  background: var(--color-secondary-container);
+}
+
+.plan-kolonne.plan-naa > .kol-hode h2,
+.plan-kolonne.plan-naa > .kol-hode .teller,
+.plan-kolonne.plan-naa > .plan-kol-hjelp {
+  color: var(--color-on-secondary-container);
+}
+
+.plan-kol-hjelp {
+  margin: 0 var(--avstand-xs) var(--avstand-sm);
+  font-size: var(--tekst-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.plan-liste {
+  list-style: none;
+  margin: 0;
+  padding: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--avstand-sm);
+  min-height: 88px;
+  border: 2px dashed transparent;
+  border-radius: var(--radius-lg);
+}
+
+.plan-liste.slipp-her {
+  border-color: var(--color-primary);
+  background: var(--color-surface-container-high);
+}
+
+.plan-tom {
+  padding: var(--avstand-md) var(--avstand-sm);
+  text-align: center;
+  font-size: var(--tekst-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.plan-element {
+  padding: var(--avstand-sm) var(--avstand-sm);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface-container-lowest);
+  color: var(--color-on-surface);
+  cursor: grab;
+}
+
+.plan-element:hover {
+  border-color: var(--color-outline);
+}
+
+.plan-element.dras {
+  opacity: 0.5;
+}
+
+.plan-element.loftet {
+  border-color: var(--color-primary);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.16); /* skygge: svart i begge skjema */
+}
+
+.plan-underelement,
+.plan-funksjon-rad {
+  padding: var(--avstand-sm) var(--avstand-sm);
+  border-radius: var(--radius-lg);
+}
+
+.plan-hode {
+  display: flex;
+  align-items: center;
+  gap: var(--avstand-sm);
+  min-height: 32px;
+}
+
+.plan-hode svg {
+  flex: none;
+  color: var(--color-on-surface-variant);
+}
+
+.plan-trinn {
+  flex: none;
+  padding: 0 var(--avstand-sm);
+  border-radius: var(--radius);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-size: var(--tekst-xs);
+  font-weight: 600;
+}
+
+.plan-type {
+  flex: none;
+}
+
+.plan-navn {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.plan-hode .pid {
+  font-size: var(--tekst-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.plan-tall {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--avstand-sm);
+  margin-top: 2px;
+  font-size: var(--tekst-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.plan-sp {
+  color: var(--color-error);
+  font-weight: 600;
+}
+
+.plan-dratt {
+  color: var(--color-tertiary);
+}
+
+.plan-under {
+  list-style: none;
+  margin: var(--avstand-sm) 0 0;
+  padding: 0 0 0 var(--avstand-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--avstand-xs);
+  border-left: 2px solid var(--color-outline-variant);
+}
+
+.plan-utvid {
+  min-height: 32px;
+  font-size: var(--tekst-xs);
+}
+
+/* Dialogene i planen (forhåndsvisning av fokus og «Områder …»). */
+.plan-linjer {
+  margin: 0 0 var(--avstand-sm);
+  padding-left: var(--avstand-lg);
+}
+
+.plan-linjer li + li {
+  margin-top: var(--avstand-xs);
+}
+
+.plan-omrade-liste {
+  list-style: none;
+  margin: 0 0 var(--avstand-md);
+  padding: 0;
+}
+
+.plan-omrade-rad {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--avstand-sm);
+  min-height: 44px;
+  border-bottom: 1px solid var(--color-outline-variant);
+}
+
+.plan-omrade-rad .plan-navn {
+  flex: 1;
+}
+
+.plan-omrade-ny {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--avstand-sm);
+  margin-bottom: var(--avstand-md);
+}
+
+@media (max-width: 720px) {
+  .tavle.plan {
+    padding: var(--avstand-sm);
+  }
+
+  .plan-kolonner {
+    grid-template-columns: 1fr;
+  }
+
+  .fokuslinje {
+    padding: var(--avstand-xs) var(--avstand-md);
+  }
+}
+
+/* ---- Banneret etter omstart, temavalget, tegnforklaringen og «Vis alle» i Utvalg ---- */
+
+/* Serveren er startet på nytt (401). Tydelig banner under toppen, med feltet for lenken. */
+.nokkel-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--avstand-sm) var(--avstand-md);
+  padding: var(--avstand-md) var(--avstand-md);
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+}
+
+.nokkel-banner[hidden] {
+  display: none;
+}
+
+.nokkel-banner-tekst {
+  margin: 0;
+  font-weight: 600;
+}
+
+.nokkel-skjema {
+  display: flex;
+  flex: 1 1 360px;
+  gap: var(--avstand-sm);
+  min-width: 0;
+}
+
+.nokkel-skjema input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+}
+
+.nokkel-skjema .knapp {
+  min-height: 44px;
+}
+
+.nokkel-feil {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.nokkel-feil[hidden] {
+  display: none;
+}
+
+/* Temavalget i innstillingene. */
+fieldset.innst {
+  margin: 0;
+  border-width: 1px 0 0;
+  border-style: solid;
+  border-color: var(--color-outline-variant);
+  padding: var(--avstand-md) 0;
+}
+
+fieldset.innst legend {
+  float: left;
+  width: 100%;
+  padding: 0;
+}
+
+.tema-rad {
+  display: flex;
+  align-items: center;
+  gap: var(--avstand-sm);
+  min-height: 44px;
+  cursor: pointer;
+  clear: left;
+}
+
+.tema-rad input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--color-primary);
+}
+
+/* Tegnforklaringen (hjelpen og statistikkfanen). */
+.tegnforklaring {
+  margin: var(--avstand-md) 0;
+  padding-top: var(--avstand-md);
+  border-top: 1px solid var(--color-outline-variant);
+}
+
+.forklaring-tittel {
+  margin: var(--avstand-sm) 0 var(--avstand-xs);
+  font-size: var(--tekst-sm);
+  font-weight: 600;
+}
+
+.forklaring {
+  display: grid;
+  gap: var(--avstand-sm);
+  margin: 0;
+}
+
+.forklaring-rad {
+  display: grid;
+  grid-template-columns: minmax(96px, max-content) 1fr;
+  align-items: start;
+  gap: var(--avstand-sm);
+}
+
+.forklaring dt,
+.forklaring dd {
+  margin: 0;
+}
+
+.forklaring dd {
+  color: var(--color-on-surface-variant);
+}
+
+.forklaring .wip {
+  display: inline-block;
+  margin-left: 0;
+  white-space: normal;
+}
+
+.forklaring-kant {
+  display: inline-block;
+  padding: 0 var(--avstand-sm);
+  border: 1px dashed var(--color-outline);
+  border-radius: var(--radius-lg);
+  font-size: var(--tekst-xs);
+  color: var(--color-on-surface-variant);
+}
+
+/* «Vis alle» øverst i Utvalg-menyen. */
+.vis-alle {
+  margin-top: 0;
+  padding-bottom: var(--avstand-sm);
+  border-top: 0;
+  border-bottom: 1px solid var(--color-outline-variant);
+}
+
+/* ---- Tomtilstanden, foreldet status, redusert bevegelse, tvungne farger og trykkflater ---- */
+
+/* Én felles tomtilstand (tomTilstand() i tavle.js): hvorfor lista er tom, og handlingen som viser kortene. */
+.tom-tilstand {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--avstand-xs) var(--avstand-sm);
+}
+
+.tom-tilstand[hidden] {
+  display: none;
+}
+
+.tom-tilstand p {
+  margin: 0;
+}
+
+.tom-tilstand .lenke-knapp {
+  margin: 0;
+}
+
+.bane-tom > .tom-tilstand {
+  margin: 0;
+}
+
+/* Siste henting er over ett minutt gammel. Varselflaten (amber) og egen tekst, ikke bare fargen. */
+.status.foreldet {
+  padding: 0 var(--avstand-sm);
+  border-radius: 9999px;
+  background: var(--color-modul-amber-container);
+  color: var(--color-on-surface);
+  font-weight: 600;
+}
+
+/* Redusert bevegelse slår av glidende rulling (også scrollIntoView, som følger scroll-behavior), overganger
+   og animasjoner overalt, også de som kommer senere. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* Tvungne farger (Windows kontrastmodus) fjerner flater og skygger, så markeringene får kant eller omriss. */
+@media (forced-colors: active) {
+  .veksler-knapp[aria-pressed='true'],
+  .veksler-knapp[aria-selected='true'],
+  .visning-valg[aria-current='true'] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+
+  .filter-knapp.aktiv,
+  .innboks-knapp.aktiv,
+  .plan-utkast.aktiv {
+    outline: 2px solid Highlight;
+  }
+
+  .kort.merket,
+  .kort.loftet,
+  .kort.kjede-valgt {
+    outline: 3px solid Highlight;
+    outline-offset: 1px;
+  }
+
+  .kort.kjede-for,
+  .kort.kjede-etter {
+    outline: 2px dashed Highlight;
+    outline-offset: 1px;
+  }
+
+  .kort.klar {
+    border-width: 2px;
+  }
+
+  .merke,
+  .status.foreldet {
+    border: 1px solid CanvasText;
+  }
+
+  :focus-visible {
+    outline: 2px solid Highlight;
+  }
+}
+
+/* Trykkflater på minst 44 px på berøringsskjerm (seksjonshoder, veksleren, søket, menyknappene og de
+   klikkbare merkene). Mus og styreflate beholder den tette tavla. */
+@media (pointer: coarse) {
+  .seksjon > summary,
+  .bane-hode,
+  .gruppe-hode,
+  .plan-hode,
+  .veksler-knapp,
+  .sok,
+  .gruppering,
+  .knapp-kontur,
+  .merk-treff,
+  .lenke-knapp,
+  .pause-knapp,
+  .plan-utvid,
+  .neste-kort,
+  .stripe-rad,
+  .fokus-rad,
+  button.merke,
+  a.merke,
+  .merke[role='button'] {
+    min-height: 44px;
+  }
+}

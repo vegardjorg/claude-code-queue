@@ -1,0 +1,5 @@
+node_modules/
+# Data fra en testinstallasjon skal aldri inn i repoet
+scripts/.ko/
+mal/scripts/.ko/
+*.log
