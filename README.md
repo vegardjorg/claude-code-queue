@@ -1,4 +1,5 @@
-<p align="center"><img src="assets/logo.webp" alt="claude-cowie-queue logo" width="160"></p>
+<p align="center"><img src="assets/screenshot1.jpg" alt="claude-cowie-queue logo" width="800"></p>
+Screenshot of queue in Norwegian, to show with a project. The repo version is in English. 
 
 # claude-cowie-queue
 
@@ -25,6 +26,8 @@ By Vegard Cowie Jørgensen.
   documents. Plans become queue tasks when they are ready.
 - **Board** (`scripts/orchestrator/queue-board.mjs`): a local web board for the queue, projects, plans, dependencies
   and measured cost.
+  <p align="center"><img src="assets/dependencies.jpg" alt="claude-cowie-queue logo" width="800"></p>
+  
 - **Track tooling**: worktree setup (`prepare-track.mjs`), mission generation from a template (`make-mission.mjs`),
   review packages (`queue.mjs receive`), merging (`merge-track.mjs`), safe worktree cleanup (`cleanup-worktree.mjs`) and a
   pre-push check (`push-check.mjs`).
