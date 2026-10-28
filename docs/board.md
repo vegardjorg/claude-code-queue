@@ -24,3 +24,54 @@ It listens on localhost only. There is no login; do not expose the port.
 The picture in the upper-left corner is loaded from `<dataFolder>/logo.webp` if it exists, otherwise from
 `scripts/orchestrator/queue-board/logo.webp`. Keeping the picture there is a friendly request, not a license
 condition (see "About the logo" in the README).
+
+## The mascot
+
+The mascot in the upper-left corner now and then says something in a speech bubble: a night line when you work
+between 00:00 and 05:00, encouragement, a statistic from the queue (the priciest task today, the oldest card in
+Review, proposals waiting, and so on), and events between two polls (merged, queue empty, new owner question, high
+finding, weekly quota over 90 %). Click the mascot for a line; five clicks within ten seconds gives another one.
+
+Timing rules: a night line at most every 30 minutes, random chat at most every 10 minutes, events at most one per
+minute. A line is never repeated within the last 8. The bubble stays 10 seconds (longer while the mouse is over it)
+and closes on click. The text is always set as plain text.
+
+**Modes.** The gear menu has a **Mascot** choice: **Chatty** (everything), **Events only** (only events and clicks)
+or **Off** (no bubbles at all). The choice is remembered in this browser, like the theme. The default for every
+browser comes from `queue.config.json`:
+
+```json
+"board": { "port": 2000, "title": "Queue board", "mascot": "chatty" }
+```
+
+`node scripts/orchestrator/queue-board.mjs --mascot off` overrides it for one run. With `"off"` from the config or
+the flag, the mascot is off for every viewer: no bubbles, no click, nothing is computed on the server, and the choice
+in the gear is locked.
+
+**Your own phrases.** The board ships a small built-in phrase set in `lib/queueMascot.js`. To use your own, put
+`mascot-phrases.json` in the queue's data folder (`<dataFolder>`, default `scripts/.queue/`, which the installer adds
+to `.gitignore`, so your phrases never end up in git). Categories you leave out keep the built-in phrases; an
+invalid file falls back to the built-in set and prints one line in the board's terminal.
+
+```json
+{
+  "version": 1,
+  "night": [{ "text": "It is {time}. Go to bed." }],
+  "encouragement": [{ "text": "{done_today} done today.", "weight": 2 }],
+  "statistics": [{ "text": "{id} cost ${cost} today.", "source": "priciest" }],
+  "events": [{ "text": "Merged {id}!", "event": "merged" }],
+  "vibe": [{ "text": "Another round. Onward." }]
+}
+```
+
+- `weight` (optional, up to 10) makes a phrase more likely within its category.
+- Placeholders that every phrase can use: `{time}`, `{done_today}`, `{done_week}`, `{days}` (days without a high
+  finding), `{night_cost}`, `{n}` (answers after midnight) and `{p}` (weekly quota in percent, only with a calibrated
+  quota). A phrase whose placeholder has no value right now is skipped.
+- Statistics phrases take their values from a `source`: `priciest` ({id}, {cost}), `fixRounds` ({id}, {n}), `inbox`
+  ({hours}), `review` ({id}, {hours}), `nightShare` ({share}), `proposed` ({n}), `qa` ({n}), `record` ({n}),
+  `responseTime` ({min}), `remaining` ({n}, {date}) and `dPlus` ({min}). Without `source` it is guessed from the words
+  in the text.
+- Events: `merged` ({id}), `queue-empty`, `new-question`, `high-finding` ({id}), `quota-90` ({p}), `click` and
+  `click-5`.
+- Vibe phrases get a higher chance for 15 minutes after a D/D+ review is merged or a fix round starts.

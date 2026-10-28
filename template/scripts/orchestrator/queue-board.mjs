@@ -25,6 +25,10 @@
 //     (migrations when they are turned on, orchestrator, model, hooks and skills) is read only.
 //   - GUARD RULES: every write call runs queueBoard.assess first. stop → 422, warning → 409 until the call sends
 //     `confirm: true`, info → the action is done and the texts are sent with the response. queue.mjs still refuses on its own.
+//   - MASCOT: GET /mascot sends the phrases from the optional <dataFolder>/mascot-phrases.json (or the neutral default
+//     set), and the state has `mascot` ({ mode, file }) and `mascotNumbers` (lib/queueMascot.js). The mode is
+//     board.mascot in queue.config.json ("chatty", "events" or "off"); --mascot <mode> overrides it. "off" turns the
+//     speech bubble off for every viewer.
 //   - DEPENDENCIES: the graph with circles and strokes is computed in the browser by lib/queueGraph.js (served as /queueGraph.js) from
 //     the same state, once per version and filter, so the search and the filter menu work the same.
 //   - WAITING ON YOU: the state has `inbox` (owner question, QA, proposed, what is stuck) and `next` ("Next up").
@@ -87,6 +91,9 @@ const TK = require('./lib/timeCost.js');
 const P = require('./lib/queuePlan.js');
 const PRIVACY = require('./lib/queuePlanView.js');
 const KK = require('./lib/queueConfig.js');
+// The mascot's rules (the same file the browser gets at /queueMascot.js) and the weekly quota (the forecast).
+const M = require('./lib/queueMascot.js');
+const KAP = require('./lib/queueCapacity.js');
 
 const CONFIG = KK.config();
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -117,8 +124,10 @@ const val = (name) => {
 };
 if (a.includes('--help') || a.includes('-h')) {
   console.log(
-    'Kanban board for the work queue.\n\n  node scripts/orchestrator/queue-board.mjs [--port <nr>]\n\n' +
+    'Kanban board for the work queue.\n\n  node scripts/orchestrator/queue-board.mjs [--port <nr>] [--mascot chatty|events|off]\n\n' +
       `The default port is board.port in queue.config.json (now ${CONFIG.board?.port ?? 2000}).\n` +
+      `The mascot's speech bubble is board.mascot in queue.config.json (now ${CONFIG.board?.mascot ?? 'chatty'}); ` +
+      '--mascot off turns it off for every viewer.\n' +
       'Open the link it prints (the key is new for every run). Ctrl+C stops the board.',
   );
   process.exit(0);
@@ -126,6 +135,13 @@ if (a.includes('--help') || a.includes('-h')) {
 const PORT = Number(val('--port') ?? CONFIG.board?.port ?? 2000);
 if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
   console.error('--port must be an integer between 1 and 65535');
+  process.exit(1);
+}
+// The mascot mode: --mascot overrides board.mascot. "off" = no speech bubble at all, for every viewer.
+const MASCOT_INPUT = val('--mascot') ?? CONFIG.board?.mascot ?? M.DEFAULT_MODE;
+const MASCOT_MODE = M.normalizeMode(MASCOT_INPUT);
+if (!MASCOT_MODE) {
+  console.error(`--mascot / board.mascot must be one of ${M.MODES.join(', ')} (got "${MASCOT_INPUT}")`);
   process.exit(1);
 }
 const HOST = '127.0.0.1';
@@ -207,6 +223,61 @@ function findLogo() {
   return null;
 }
 
+// ---- The mascot's phrases (optional, in the gitignored queue folder next to the logo, never in the repo) -------------
+const MASCOT_FILE = path.join(FOLDER, 'mascot-phrases.json');
+const isFile = (p) => {
+  try {
+    return fs.statSync(p).isFile();
+  } catch {
+    return false;
+  }
+};
+let mascotLogged = null; // mtime of the file the last time it was invalid (one line in the log per version of the file)
+/** The phrases for /mascot: the file validated with queueMascot.readPhrases; missing or invalid gives the default set. */
+function mascotPhrases() {
+  let text = null;
+  let mtime = null;
+  try {
+    text = fs.readFileSync(MASCOT_FILE, 'utf8');
+    mtime = fs.statSync(MASCOT_FILE).mtimeMs;
+  } catch {
+    return M.DEFAULT; // no file: the default set
+  }
+  const r = M.readPhrases(text);
+  if (r.error && mascotLogged !== mtime) {
+    mascotLogged = mtime;
+    console.log(
+      `${new Date().toLocaleTimeString('en-GB')} mascot-phrases.json: ${r.error}, using the default set`,
+    );
+  }
+  return r.phrases;
+}
+// The usage from the time log (night cost and the weekly quota), computed again only when the time log has changed.
+let usageCache = { key: null, list: [] };
+function usage() {
+  const log = timeLogRows();
+  if (usageCache.key !== log.key) usageCache = { key: log.key, list: TK.usageEvents(log.rows) };
+  return usageCache.list;
+}
+/** The summary the mascot fills its placeholders from (queueMascot.numbers). null on error (the mascot skips numbers). */
+function mascotNumbers(queue) {
+  try {
+    const events = usage();
+    let quotaPct = null;
+    // Only with a calibrated weekly quota (queue.mjs capacity); otherwise {p} and "quota-90" are skipped.
+    if (queue.capacity?.usd_per_100 != null || queue.capacity?.calibrations?.length) {
+      try {
+        quotaPct = KAP.forecast({ queue, events }).pct;
+      } catch {
+        quotaPct = null;
+      }
+    }
+    return M.numbers(queue, { events, quotaPct });
+  } catch {
+    return null;
+  }
+}
+
 // ---- The state (cheap: rebuilt only when queue.json, git status or the logo has changed) -----------------------------
 // git status is read again every minute, so the state (age, night pause, "Next up") is recomputed at least that often.
 let quick = null;
@@ -214,6 +285,7 @@ function state() {
   const mtime = fs.statSync(FILE).mtimeMs;
   const g = uncommitted();
   const logo = findLogo() != null;
+  const mascotFile = MASCOT_MODE !== 'off' && isFile(MASCOT_FILE);
   // With a daily quota, "Next up" needs today's usage (the time log, via the cached statistics).
   const stat = quick?.budget ? statistics().version : null;
   if (
@@ -221,6 +293,7 @@ function state() {
     quick.mtime === mtime &&
     quick.gitTime === g.time &&
     quick.logo === logo &&
+    quick.mascotFile === mascotFile &&
     quick.stat === stat
   )
     return quick;
@@ -250,11 +323,24 @@ function state() {
     }),
     gitError: g.error,
     logo,
+    // The mascot: the mode, whether the phrase file exists (the board fetches /mascot again when it appears), and the
+    // numbers for the placeholders. With mode off nothing is computed.
+    mascot: { mode: MASCOT_MODE, file: mascotFile },
+    mascotNumbers: MASCOT_MODE === 'off' ? null : mascotNumbers(queue),
     title: TITLE,
     baseBranch: BASE,
   };
   const version = crypto.createHash('sha1').update(JSON.stringify(data)).digest('hex').slice(0, 16);
-  quick = { mtime, gitTime: g.time, logo, budget, stat: s?.version ?? null, version, data };
+  quick = {
+    mtime,
+    gitTime: g.time,
+    logo,
+    mascotFile,
+    budget,
+    stat: s?.version ?? null,
+    version,
+    data,
+  };
   return quick;
 }
 
@@ -1520,6 +1606,9 @@ const STATIC = {
   // served unchanged to the browser; graph.js draws.
   '/graph.js': ['graph.js', 'text/javascript; charset=utf-8'],
   '/queueGraph.js': [path.join('..', 'lib', 'queueGraph.js'), 'text/javascript; charset=utf-8'],
+  // The speech bubble (mascot.js) and the pure rules in lib/queueMascot.js (the same file the tests use).
+  '/mascot.js': ['mascot.js', 'text/javascript; charset=utf-8'],
+  '/queueMascot.js': [path.join('..', 'lib', 'queueMascot.js'), 'text/javascript; charset=utf-8'],
   // The plan view (Now, Next, Later, Waiting) with a draft and "Save focus", and the help.
   '/plan.js': ['plan.js', 'text/javascript; charset=utf-8'],
   // Shared focus trap, toast queue, tabs and legend (the same file the tests use).
@@ -1609,6 +1698,20 @@ const server = http.createServer(async (req, res) => {
             : {}),
         });
       }
+      // The mascot's phrases: like /logo without a key, but only on a valid Host (checked above). Only text, no numbers
+      // from the queue (they are in /api/state behind the key). An invalid file gives the default set and a log line.
+      // With mode off there is nothing to say.
+      if (filePath === '/mascot')
+        return send(
+          res,
+          200,
+          'application/json; charset=utf-8',
+          JSON.stringify({
+            mode: MASCOT_MODE,
+            phrases: MASCOT_MODE === 'off' ? null : mascotPhrases(),
+          }),
+          { 'Cache-Control': 'no-store' },
+        );
       return send(res, 404, 'text/plain; charset=utf-8', 'Does not exist.');
     }
 

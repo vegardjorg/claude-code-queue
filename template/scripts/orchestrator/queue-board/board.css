@@ -171,9 +171,22 @@ textarea {
   }
 }
 
+/* The bubble fades out (200 ms, as OUT_MS in mascot.js), and the mascot is a button (a click gives a line). */
+.bubble {
+  transition: opacity 200ms ease-in;
+}
+.bubble.out {
+  opacity: 0;
+}
+/* The focus ring is the shared :focus-visible at the top. */
+.mascot.clickable {
+  cursor: pointer;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .bubble {
     animation: none;
+    transition: none;
   }
 }
 

@@ -135,6 +135,15 @@ What the measurements taught, and what the hooks and rules now enforce:
 The exact numbers will differ in your project. `queue.mjs cost` measures your own sessions so you can see where the
 tokens go.
 
+## The talking mascot
+
+The mascot in the board's top-left corner comments in a speech bubble on the night, the queue's numbers and events
+(merged, queue empty, new owner question). To turn it off:
+- per browser: the gear menu, **Mascot**: Chatty, Events only or Off;
+- for everyone: `"board": { "mascot": "off" }` in `queue.config.json`, or `queue-board.mjs --mascot off`.
+
+Your own phrases go in the gitignored `<dataFolder>/mascot-phrases.json`. See [docs/board.md](docs/board.md#the-mascot).
+
 ## Not included
 
 This repository is the queue system only. It deliberately leaves out:

@@ -23,6 +23,9 @@
     <script src="/plan.js" defer></script>
     <!-- The card buffer (the diff) and the keyboard between the columns; same file the tests use. -->
     <script src="/performance.js" defer></script>
+    <!-- The mascot's rules (lib/queueMascot.js) and the speech bubble, before board.js, which reports to them. -->
+    <script src="/queueMascot.js" defer></script>
+    <script src="/mascot.js" defer></script>
     <script src="/board.js" defer></script>
     <!-- The Plans room. The rules (queuePlanView.js) are the same file the tests use; plans.js draws. After
          board.js, so the key from the link is saved before Plans fetches the register. -->
@@ -51,7 +54,7 @@
     <header class="top">
       <!-- The logo is inserted by drawLogo() in board.js when /logo exists; otherwise the zone stays empty as a placeholder. -->
       <div id="mascot" class="mascot empty"></div>
-      <!-- The speech bubble by the mascot. The text is always set with textContent. -->
+      <!-- The speech bubble by the mascot (mascot.js). The text is always set with textContent. -->
       <p id="bubble" class="bubble" role="note" hidden></p>
       <div class="top-row top-row1">
         <!-- The workspaces Plans and Queue. The choice is kept in the URL (?room=plans), and each room

@@ -346,6 +346,9 @@
     if (t.view === 'cloud') getCloudQueue();
   });
 
+  // The write calls that are the owner's actions (approve, resolve, mark, bulk, move, focus). After a successful call the
+  // mascot may say something (the night line on an owner action); a dry run or a preview does not count.
+  const OWNER_ACTIONS = new Set(['/api/action', '/api/bulk', '/api/move', '/api/focus']);
   async function api(filePath, body) {
     const init = { headers: { 'X-Queue-Key': t.key ?? '' } };
     if (body) {
@@ -370,6 +373,8 @@
       e.answer = answer;
       throw e;
     }
+    if (body && OWNER_ACTIONS.has(filePath) && !body.dry && !body.show)
+      window.QueueMascotView?.ownerAction();
     return answer;
   }
 
@@ -483,6 +488,8 @@
         t.version = answer.version;
         indexes();
         drawLogo();
+        // The mascot sees the change (events between two polls) and may say something.
+        window.QueueMascotView?.newState(t.data);
         if (drag || boosted || t.busy || window.QueuePlan?.busy()) t.pending = true;
         else if (t.view === 'cloud')
           getCloudQueue(); // the bundles depend on the queue: fetch again
@@ -3200,6 +3207,7 @@
         header,
         helpSection(),
         themeSection(),
+        mascotSection(),
         el('p', {
           class: 'empty',
           text: d?.error ? `Could not read the settings: ${d.error}` : 'Fetching the settings …',
@@ -3212,6 +3220,7 @@
       header,
       helpSection(),
       themeSection(),
+      mascotSection(),
       el(
         'section',
         { class: 'setting', 'aria-labelledby': 'setting-queue' },
@@ -5901,6 +5910,43 @@
     );
   }
 
+  /**
+   * How much the mascot says: Chatty, Events only or Off (stored in localStorage by mascot.js). When the server has
+   * turned the mascot off (board.mascot "off" in queue.config.json, or --mascot off), the choice is locked.
+   */
+  function mascotSection() {
+    const m = window.QueueMascotView;
+    if (!m) return el('div', { hidden: true });
+    const now = m.mode();
+    const locked = m.locked();
+    return el(
+      'fieldset',
+      { class: 'setting theme-option' },
+      el('legend', { class: 'setting-title', text: 'Mascot' }),
+      m.MODE_OPTIONS.map(({ val, text }) =>
+        el(
+          'label',
+          { class: 'theme-row' },
+          el('input', {
+            type: 'radio',
+            name: 'mascot-option',
+            value: val,
+            checked: val === now,
+            disabled: locked,
+            onchange: () => m.setMode(val),
+          }),
+          text,
+        ),
+      ),
+      locked
+        ? el('p', {
+            class: 'empty',
+            text: 'Turned off for this board (board.mascot in queue.config.json or --mascot off).',
+          })
+        : null,
+    );
+  }
+
   function setView(v) {
     t.view = v;
     localStorage.setItem('queue-board-view', v);
@@ -6115,13 +6161,8 @@
     zone.classList.toggle('empty', !t.data?.logo);
   }
 
-  // The speech bubble by the mascot: only markup and style here; the logic and phrases come from the mascot.
-  // The flag shows a static test text to see the placement, and must be off in the code that is checked in.
-  const BUBBLE_TEST_TEXT = false;
-  if (BUBBLE_TEST_TEXT) {
-    $('bubble').textContent = 'Hello! Here comes what I have to say about the queue.';
-    $('bubble').hidden = false;
-  }
+  // The speech bubble by the mascot: the logic lives in mascot.js and lib/queueMascot.js. The board reports new
+  // states (update) and owner actions (api) there, and has the choice Chatty / Events only / Off in the gear.
 
   let searchTime = null;
   $('search').addEventListener('input', () => {

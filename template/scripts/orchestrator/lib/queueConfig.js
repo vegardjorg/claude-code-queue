@@ -95,6 +95,9 @@ const STANDARD = Object.freeze({
   board: {
     port: 2000,
     title: 'Queue board',
+    // The mascot's speech bubble: "chatty" (everything), "events" (only events and clicks) or "off" (no bubbles at
+    // all, for every viewer; the choice in the gear is then locked). `queue-board.mjs --mascot <mode>` overrides it.
+    mascot: 'chatty',
   },
 });
 

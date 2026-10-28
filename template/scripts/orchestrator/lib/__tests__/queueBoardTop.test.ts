@@ -192,9 +192,26 @@ describe('the top: the markup in the top', () => {
     expect(js).toMatch(/helpSection\(\),\s*themeSection\(\)/);
   });
 
-  it('the speech bubble is an empty, hidden note, and the test text is off', () => {
+  it('the speech bubble is an empty, hidden note, and no test text is left', () => {
     expect(top).toMatch(/<p id="bubble" class="bubble" role="note" hidden><\/p>/);
-    expect(js).toMatch(/const BUBBLE_TEST_TEXT = false;/);
+    // The bubble is driven by mascot.js (text via textContent); the static test text is gone.
+    expect(js).not.toMatch(/BUBBLE_TEST_TEXT/);
+  });
+
+  it('the mascot is wired in: scripts before board.js, a Mascot choice in the gear, text only via textContent', () => {
+    const order = ['/queueMascot.js', '/mascot.js', '/board.js'].map((s) =>
+      html.indexOf(`<script src="${s}" defer></script>`),
+    );
+    expect(order.every((i) => i >= 0)).toBe(true);
+    expect(order[0]).toBeLessThan(order[1]);
+    expect(order[1]).toBeLessThan(order[2]);
+    expect(js).toMatch(/helpSection\(\),\s*themeSection\(\),\s*mascotSection\(\)/);
+    expect(js).toMatch(/QueueMascotView\?\.newState\(t\.data\)/);
+    const mascot = readFileSync(join(folder, 'mascot.js'), 'utf8');
+    expect(mascot).not.toMatch(/\.innerHTML\s*=/);
+    expect(mascot).toMatch(/bubble\.textContent = text/);
+    // Off on the server locks the mode for every viewer.
+    expect(mascot).toMatch(/if \(locked\(\)\) return 'off';/);
   });
 });
 
