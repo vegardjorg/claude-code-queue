@@ -61,10 +61,10 @@ describe('the phrase file', () => {
     expect(none.phrases).toBe(M.DEFAULT);
   });
 
-  it('the default set is small and neutral, and every phrase in it is valid', () => {
+  it('the default set is the full repertoire, and every phrase in it is valid', () => {
     const count = M.CATEGORIES.reduce((n: number, k: string) => n + M.DEFAULT[k].length, 0);
-    expect(count).toBeGreaterThanOrEqual(5);
-    expect(count).toBeLessThanOrEqual(25);
+    expect(count).toBeGreaterThanOrEqual(40);
+    expect(count).toBeLessThanOrEqual(200);
     // Read through readPhrases as if it were a file: nothing is dropped.
     const again = M.readPhrases(JSON.parse(JSON.stringify(M.DEFAULT))).phrases;
     for (const k of M.CATEGORIES) expect(again[k].length).toBe(M.DEFAULT[k].length);

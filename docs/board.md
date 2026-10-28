@@ -48,7 +48,7 @@ browser comes from `queue.config.json`:
 the flag, the mascot is off for every viewer: no bubbles, no click, nothing is computed on the server, and the choice
 in the gear is locked.
 
-**Your own phrases.** The board ships a small built-in phrase set in `lib/queueMascot.js`. To use your own, put
+**Your own phrases.** The board ships the mascot's full built-in repertoire (night owl jabs, encouragement, stats roasts, events and vibe-coding jokes) in `lib/queueMascot.js`. To use your own, put
 `mascot-phrases.json` in the queue's data folder (`<dataFolder>`, default `scripts/.queue/`, which the installer adds
 to `.gitignore`, so your phrases never end up in git). Categories you leave out keep the built-in phrases; an
 invalid file falls back to the built-in set and prints one line in the board's terminal.

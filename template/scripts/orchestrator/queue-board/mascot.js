@@ -3,7 +3,7 @@
 //
 // The rules (what, when and how often) live in lib/queueMascot.js (window.QueueMascot, tested with vitest). Only the
 // view lives here:
-//   - the phrases are fetched from /mascot (your own <dataFolder>/mascot-phrases.json, otherwise the neutral default
+//   - the phrases are fetched from /mascot (your own <dataFolder>/mascot-phrases.json, otherwise the built-in default
 //     set), and again when the state's `mascot.file` changes;
 //   - board.js reports every new state (newState) and every owner action (ownerAction); a pulse of its own every 15 s
 //     gives the random chat (encouragement, statistics, vibe) once 10 min have passed;

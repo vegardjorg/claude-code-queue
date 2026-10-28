@@ -78,34 +78,146 @@
   }
 
   /**
-   * The built-in default set: small and neutral, so the board works without a phrase file. Your own phrases go in
-   * the gitignored <dataFolder>/mascot-phrases.json (the format is in docs/board.md, "The mascot").
+   * The built-in default set: the mascot's full repertoire (a wine-glass-holding mascot with opinions), so the board
+   * has a personality out of the box. Your own phrases go in the gitignored <dataFolder>/mascot-phrases.json (the
+   * format is in docs/board.md, "The mascot"); a category you leave out there keeps these.
    */
   const DEFAULT = Object.freeze({
     version: 1,
     origin: 'built-in',
-    night: [{ text: 'It is {time}. The queue will still be here in the morning.' }],
+    night: [
+      { text: "It is {time}. The agents don't need sleep. You do. Spot the difference?" },
+      { text: "Midnight, and you're approving proposals. Even my wine glass has gone to bed." },
+      { text: 'The queue runs fine without you at night. That was kind of the whole point.' },
+      { text: 'Night runs are for agents, not for founders with bags under their eyes.' },
+      { text: "{time}? I'm calling your mother." },
+      {
+        text: 'Congratulations, you are officially the only person in your time zone reading diffs at {time}.',
+      },
+      {
+        text: 'Every time you work past midnight, an agent leaves a TODO in the code. Just so you know.',
+      },
+      { text: 'Cost tonight: ${night_cost}. Sleep tonight: 0 hours. Bad trade.' },
+      { text: "{n} answers after midnight. Someone should report this to HR. Oh, wait. That's you." },
+      { text: 'Nobody ever got acquired for being awake at three. Go to bed.' },
+      { text: '{time} is the perfect time for bad architecture decisions. Sleep on it.' },
+      { text: "Turn off the screen. The agents will manage. I'll keep an eye on them. With a glass." },
+    ],
     encouragement: [
-      { text: 'The queue is rolling.' },
-      { text: 'Small steps, green gates.' },
-      { text: '{done_today} done today. Nice pace.' },
+      { text: "Cheers! {done_today} done today. Plenty of teams don't manage that in a week." },
+      {
+        text: 'The queue rolls, the agents work, and you sit here looking fresh. All according to plan.',
+      },
+      { text: 'Every merged branch is one less thing to think about. Keep it up.' },
+      { text: 'You are commanding an entire army of agents from the sofa. Have a glass. One.' },
+      { text: 'No HIGH findings in {days} days. The auditors are bored to tears.' },
+      { text: "Good job. I mean it. I'm a mascot, I have no reason to lie." },
+      { text: "Rome wasn't built in a day. But then, they didn't have queue.mjs." },
+      { text: "Breathe. What's in Waiting on you is actually waiting. That's fine." },
+      {
+        text: "{done_week} tasks delivered this week. I'd raise a toast, but my glass is already up.",
+      },
+      { text: "Small steps and green gates. That's how you win." },
     ],
     statistics: [
-      { text: '{n} proposals are waiting for approval.', source: 'proposed' },
-      { text: '{n} tasks are waiting in the QA list.', source: 'qa' },
-      { text: '{id} has been in Review for {hours} hours.', source: 'review' },
-      { text: '{n} tasks left in the queue, done around {date} at this pace.', source: 'remaining' },
+      {
+        text: '{id} cost ${cost}. That could have bought a whole case of white wine.',
+        source: 'priciest',
+      },
+      {
+        text: '{n} fix rounds on {id}. The agent is starting to wonder if you even like it.',
+        source: 'fixRounds',
+      },
+      {
+        text: 'The oldest question in the inbox is {hours} hours old. The agents have started a fundraiser.',
+        source: 'inbox',
+      },
+      {
+        text: '{id} has been in Review for {hours} hours. It has had time to write its memoirs.',
+        source: 'review',
+      },
+      {
+        text: "{share} % of yesterday's cost was spent at night. The agents thank you for the night shift bonus.",
+        source: 'nightShare',
+      },
+      {
+        text: '{n} proposals are waiting for approval. Some of them have started saving for retirement.',
+        source: 'proposed',
+      },
+      {
+        text: '{n} tasks in the QA list. They are watching you. Silently. All of them.',
+        source: 'qa',
+      },
+      { text: 'Record! {n} merges today. You beat yourself. Again. Typical.', source: 'record' },
+      {
+        text: "You answer questions in {min} minutes on average. Faster than every bank's customer service combined.",
+        source: 'responseTime',
+      },
+      {
+        text: "{n} tasks left in the queue. At this pace you'll be done around {date}. Don't book a holiday.",
+        source: 'remaining',
+      },
+      {
+        text: 'D+ takes {min} minutes on average. The reviewers have more patience than you have in rush hour traffic.',
+        source: 'dPlus',
+      },
     ],
     events: [
-      { text: 'Merged: {id}.', event: 'merged' },
-      { text: 'The queue is empty.', event: 'queue-empty' },
-      { text: 'A new owner question is waiting.', event: 'new-question' },
-      { text: 'High finding in {id}.', event: 'high-finding' },
-      { text: 'The weekly quota is at {p} %.', event: 'quota-90' },
-      { text: 'Hi.', event: 'click' },
-      { text: 'Okay, okay. I am awake.', event: 'click-5' },
+      { text: 'Merged! Cheers to {id}.', event: 'merged' },
+      { text: "The queue is empty. I don't know what to do with my hands.", event: 'queue-empty' },
+      { text: 'The weekly quota is at {p} %. Save some for the weekend.', event: 'quota-90' },
+      { text: "Yes? I'm trying to enjoy a glass in peace here.", event: 'click' },
+      { text: 'Stop clicking. People are watching.', event: 'click-5' },
+      {
+        text: "A new question for you. No, I can't answer it for you. I've tried.",
+        event: 'new-question',
+      },
+      { text: "HIGH finding. I'm putting my glass down. This is serious.", event: 'high-finding' },
     ],
-    vibe: [{ text: 'Another round done. Onward.' }],
+    vibe: [
+      { text: 'RLS? I thought that was a new energy drink.' },
+      {
+        text: "I've shipped something from every item on the OWASP Top 10. Now I'm collecting the holographic ones.",
+      },
+      {
+        text: 'I asked the AI for row-level security. It gave me row-level suggestions. Tenants can see each other’s data, but only if they ask nicely.',
+      },
+      { text: "OWASP Top 10, Pokémon edition: I've caught all ten. Next goal: all ten in prod." },
+      {
+        text: "We have several tenants in the same database, and everyone sees everyone's data. It's not a vulnerability, it's a community.",
+      },
+      {
+        text: 'I asked the AI to look for vulnerabilities. It said “Looks good!” I asked about the policies. It said “What policies?”',
+      },
+      {
+        text: 'I run zero trust: not in the users, not in the input, and least of all in the AI that wrote the login.',
+      },
+      {
+        text: "Why hire a penetration tester? I've breached every security boundary myself, using only natural language.",
+      },
+      { text: 'Postgres has row-level security. I have row-level exhibitionism.' },
+      {
+        text: '“Secure by design,” said the AI. The design was a public repo, a leaked API key and an admin endpoint without login.',
+      },
+      {
+        text: "Full GDPR compliance: everyone can view, correct and delete their own data. And thanks to my policies, everyone else's too.",
+      },
+      {
+        text: 'I asked for production-ready code. Got SQL injection, SSRF and a loading spinner. Called it enterprise.',
+      },
+      { text: 'Before: move fast and break things. Now: prompt fast and expose everything.' },
+      { text: 'Security by obscurity: the code is so messy no hacker can be bothered to read it.' },
+      { text: "The service role key is in the client. It's not a leak, it's transparency." },
+      { text: 'The AI said the tests were green. It had written expect(true).toBe(true).' },
+      { text: "I didn't hardcode the password. I softcoded it. In a comment." },
+      {
+        text: 'Code review is when one agent asks another agent whether the code is nice. They agree. They always agree.',
+      },
+      { text: 'Commit message: “fix”. Diff: 4,000 lines. Confidence: total.' },
+      {
+        text: 'The context window filled up, so the AI forgot that login was a requirement. A bit like me after the third glass.',
+      },
+    ],
   });
 
   // ---- The phrase file ------------------------------------------------------------------------------------------
