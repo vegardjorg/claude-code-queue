@@ -1,4 +1,5 @@
-<p align="center"><img src="assets/logo.webp" alt="claude-cowie-queue logo" width="160"></p>
+<p align="center"><img src="assets/screenshot1.jpg" alt="The board with a real project queue" width="800"></p>
+<p align="center"><sub>The board running a real project (in Norwegian). The version in this repo is in English.</sub></p>
 
 # claude-cowie-queue
 
@@ -37,6 +38,8 @@ running for about five days of a week before the weekly limit runs out. That is 
   not into the orchestrator's context.
 - **Board:** a local web page (kanban, plans, dependencies, cost, and "Waiting for you").
 
+<p align="center"><img src="assets/dependencies.jpg" alt="The dependency view on the board" width="800"></p>
+
 Task classes decide size and review:
 
 | Class | Meaning | Size of one task | Review |
@@ -51,7 +54,7 @@ Task classes decide size and review:
 As a Claude Code plugin (recommended). In Claude Code:
 
 ```
-/plugin marketplace add vegardjorg/claude-cowie-queue
+/plugin marketplace add vegardjorg/claude-code-queue
 /plugin install cq@claude-cowie-queue
 ```
 

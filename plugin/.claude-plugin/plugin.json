@@ -3,8 +3,8 @@
   "version": "0.2.0",
   "description": "Work queue, plan register and local board for running Claude Code as an orchestrator with parallel worktree agents. Run /cq:setup in a project to start.",
   "author": { "name": "Vegard Cowie Jørgensen" },
-  "homepage": "https://github.com/vegardjorg/claude-cowie-queue",
-  "repository": "https://github.com/vegardjorg/claude-cowie-queue",
+  "homepage": "https://github.com/vegardjorg/claude-code-queue",
+  "repository": "https://github.com/vegardjorg/claude-code-queue",
   "license": "MIT",
   "keywords": ["orchestration", "queue", "worktrees", "subagents", "kanban"]
 }
