@@ -4,3 +4,6 @@ scripts/.queue/
 plugin/scripts/.queue/
 *.log
 demo/
+
+# Planning notes for the queue itself (local only, never committed)
+plans/
