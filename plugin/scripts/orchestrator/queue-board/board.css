@@ -2109,13 +2109,14 @@ div.row-option {
   fill: var(--color-primary);
 }
 
-.sp-box {
+/* .sp in front: .graph-svg rect and .graph-svg text (the statistics charts) would otherwise win. */
+.sp .sp-box {
   fill: var(--color-secondary-container);
   stroke: var(--color-secondary);
   stroke-width: 1;
 }
 
-.sp-badge {
+.sp .sp-badge {
   text-anchor: middle;
   font-size: var(--text-md);
   font-weight: 600;
@@ -3238,6 +3239,11 @@ fieldset.setting legend {
   float: left;
   width: 100%;
   padding: 0;
+}
+
+/* The mascot hidden with the password in the gear (mascot.js): the zone keeps its space, only the picture goes. */
+.mascot.gone > * {
+  visibility: hidden;
 }
 
 .theme-row {

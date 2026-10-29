@@ -78,6 +78,25 @@
   }
 
   /**
+   * The password that hides the whole mascot in the gear (an easter egg for the author's self-roast): what you say at the
+   * back room of Lefty's Bar in Leisure Suit Larry in the Land of the Lounge Lizards.
+   */
+  const HIDE_PASSWORD = 'ken sent me';
+
+  /**
+   * True when the text is the password. Kept simple on purpose: case does not matter, everything except letters, digits
+   * and spaces is stripped, and repeated spaces count as one ("Ken sent me.", "KEN SENT ME!" and " ken  sent me " all work).
+   */
+  function isPassword(text) {
+    const s = String(text ?? '')
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}\s]/gu, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return s === HIDE_PASSWORD;
+  }
+
+  /**
    * The built-in default set: the mascot's full repertoire (a wine-glass-holding mascot with opinions), so the board
    * has a personality out of the box. Your own phrases go in the gitignored <dataFolder>/mascot-phrases.json (the
    * format is in docs/board.md, "The mascot"); a category you leave out there keeps these.
@@ -112,7 +131,7 @@
       { text: 'You are commanding an entire army of agents from the sofa. Have a glass. One.' },
       { text: 'No HIGH findings in {days} days. The auditors are bored to tears.' },
       { text: "Good job. I mean it. I'm a mascot, I have no reason to lie." },
-      { text: "Rome wasn't built in a day. But then, they didn't have queue.mjs." },
+      { text: "Rome wasn't built in a day. But then, they didn't have cq." },
       { text: "Breathe. What's in Waiting on you is actually waiting. That's fine." },
       {
         text: "{done_week} tasks delivered this week. I'd raise a toast, but my glass is already up.",
@@ -767,6 +786,7 @@
     DEFAULT,
     SOURCES,
     normalizeMode,
+    isPassword,
     readPhrases,
     local,
     isNight,

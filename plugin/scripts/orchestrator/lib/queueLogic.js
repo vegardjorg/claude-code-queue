@@ -95,7 +95,7 @@ const CALIBRATED = {
 // nightRun / nightWindow: with nightRun off, no new tasks are started in the night window (local time, "23-06" =
 // from 23:00 to 06:00). Default is on.
 // autocompact: automatic compaction of the orchestrator session. Off (default): notice with a ready /compact line, so the owner
-// follows along. On: Claude Code compacts by itself (the owner sets /autocompact) and the queue resumes automatically. The hooks
+// follows along. On: Claude Code compacts by itself (autoCompactEnabled on, window 300k) and the queue resumes automatically. The hooks
 // read the value (contextGuard.compactMode); `queue.mjs compact auto|manual`.
 const DEFAULT_LIMITS = {
   maxConcurrent: 5,

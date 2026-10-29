@@ -1,9 +1,9 @@
-# The work queue (`queue.mjs`)
+# The work queue (`cq`)
 
 The queue is a JSON file (`scripts/.queue/queue.json`, gitignored) with tasks, owner questions, projects, limits and cost
 data. It survives when the orchestrator's chat is compacted or restarted, because nothing important lives only in
-the chat. Every command is `cq <command>`; the full usage list is the comment at the
-top of `queue.mjs`. The table below lists the important ones.
+the chat. Every command is `cq <command>`; `cq help` prints the full usage list (the comment at the
+top of `queue.mjs`). The table below lists the important ones.
 
 Writes happen under a file lock (atomic `mkdir`) and via temp file plus rename, so two writers (the orchestrator and
 a track adding a proposal) cannot corrupt the file. `cq undo` undoes the last change.

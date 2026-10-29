@@ -1,6 +1,6 @@
 ---
 name: setup
-description: Set up the current project for the work queue (claude-cowie-queue plugin): queue.config.json, docs, CLAUDE.queue.md, .gitignore, recommended settings, the empty queue, a smoke test, and optionally the user's own TODOs and plans as queue entries. Use when the user types "/cq:setup", "set up the queue", "install the queue in this project", or when a queue command says there is no queue.config.json.
+description: Set up the current project for the work queue (claude-code-queue plugin): queue.config.json, docs, CLAUDE.queue.md, .gitignore, recommended settings, the empty queue, a smoke test, and optionally the user's own TODOs and plans as queue entries. Use when the user types "/cq:setup", "set up the queue", "install the queue in this project", or when a queue command says there is no queue.config.json.
 disable-model-invocation: true
 ---
 
@@ -54,8 +54,8 @@ cq set EX-1 cancelled
 ```
 
 `init` creates the queue in `scripts/.queue/` (gitignored) with one example project `example` (prefix `EX-`); offer to
-rename it with `cq project`. Then tell the user they can open the board with `cq board` (it prints a URL with an access
-key; stop it with Ctrl+C in its terminal, never by killing node by name).
+rename it with `cq project`. Then tell the user they can open the board with `/cq:board` (Claude starts it in the background
+and gives a URL with an access key; never stop it by killing node by name).
 
 ## 4. Bring in the user's own work
 
@@ -78,7 +78,7 @@ parallel run, with a pathspec:
 
 ```
 git add queue.config.json docs/queue CLAUDE.queue.md .gitignore
-git commit -m "chore: set up the claude-cowie-queue work queue" -- queue.config.json docs/queue CLAUDE.queue.md .gitignore
+git commit -m "chore: set up the claude-code-queue work queue" -- queue.config.json docs/queue CLAUDE.queue.md .gitignore
 ```
 
 Add `CLAUDE.md` and `.claude/settings.json` to both lists when step 1 changed them. Do not push unless the user asks.
@@ -87,4 +87,4 @@ Add `CLAUDE.md` and `.claude/settings.json` to both lists when step 1 changed th
 
 - `/cq:queue` runs this chat as the orchestrator; `/cq:add-to-queue` turns a request into queue tasks; `/cq:plans`
   is plan work; `/cq:pick` does one task by hand.
-- `cq board` opens the board; `cq help` lists every command.
+- `/cq:board` starts the board and gives the link; `cq help` lists every command.

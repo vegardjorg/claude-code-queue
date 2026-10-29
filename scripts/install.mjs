@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // =============================================================
-// install.mjs: installs the queue system (claude-cowie-queue) into an existing project as plain files ("vendored"),
+// install.mjs: installs the queue system (claude-code-queue) into an existing project as plain files ("vendored"),
 // for when you do not want it as a Claude Code plugin. The plugin is the recommended way: see README.md.
 //
 // Usage:
@@ -44,7 +44,7 @@ if (!fs.existsSync(TARGET) || !fs.statSync(TARGET).isDirectory()) {
   process.exit(2);
 }
 if (TARGET === REPO) {
-  console.error('The target cannot be the claude-cowie-queue repo itself.');
+  console.error('The target cannot be the claude-code-queue repo itself.');
   process.exit(2);
 }
 
@@ -131,7 +131,7 @@ log.replaced.push(...project.replaced);
 log.skippedOver.push(...project.skipped);
 
 // ---- Summary ----
-console.log(`${DRY ? '[DRY] ' : ''}Installed claude-cowie-queue (vendored) in ${TARGET}`);
+console.log(`${DRY ? '[DRY] ' : ''}Installed claude-code-queue (vendored) in ${TARGET}`);
 console.log(`  copied: ${log.copied.length}, replaced: ${log.replaced.length}, skipped (already existed): ${log.skippedOver.length}`);
 if (log.skippedOver.length) console.log(`  skipped: ${log.skippedOver.slice(0, 15).join(', ')}${log.skippedOver.length > 15 ? ' ...' : ''}`);
 for (const n of project.notes) console.log(`  ${n}`);

@@ -1,7 +1,7 @@
-<p align="center"><img src="assets/screenshot1.jpg" alt="The board with a real project queue" width="800"></p>
-<p align="center"><sub>The board running a real project (in Norwegian). The version in this repo is in English.</sub></p>
+<p align="center"><img src="assets/screenshots/light-01-queue.jpg" alt="The board: the work queue as a kanban with In queue, In progress and Review" width="800"></p>
+<p align="center"><sub>The board with a made-up demo project ("Pebble", a habit tracker). More screenshots in <a href="#a-tour-of-the-board">A tour of the board</a>.</sub></p>
 
-# claude-cowie-queue
+# claude-code-queue
 
 A Claude Code plugin that does two things:
 
@@ -36,9 +36,7 @@ running for about five days of a week before the weekly limit runs out. That is 
 - **Tracks:** each task runs as a subagent in its own git worktree, on its own branch. It gets a short mission file,
   does the work, runs your checks, commits on its branch and answers with one line. The long report goes to a file,
   not into the orchestrator's context.
-- **Board:** a local web page (kanban, plans, dependencies, cost, and "Waiting for you").
-
-<p align="center"><img src="assets/dependencies.jpg" alt="The dependency view on the board" width="800"></p>
+- **Board:** a local web page (kanban, plans, dependencies, cost, and "Waiting on you").
 
 Task classes decide size and review:
 
@@ -49,13 +47,89 @@ Task classes decide size and review:
 | D | Database or contract change | about 40 min | one reviewer agent |
 | D+ | High-risk database or security | 25 to 30 min | two reviewer agents |
 
+## A tour of the board
+
+**Start it:** in Claude Code, run `/cq:board` (or say "start the board"). Claude starts it in the background and
+gives you a link like `http://127.0.0.1:2000/#key=…`. It runs while that Claude Code session runs. To keep it
+running on its own, start it from your own terminal in the project folder:
+`node "<plugin folder>/scripts/orchestrator/cq.mjs" board` (`/cq:board` tells you the exact path). The plain `cq`
+command only exists inside Claude Code.
+
+The board only listens on 127.0.0.1, and the key in the link changes on every start. It follows your system's light or dark mode; the gear lets you pick one. The screenshots use a made-up demo project.
+
+### The queue
+
+The main view (top of this page) is a kanban: **In queue** (ready now, blocked, proposed by agents, and the batch
+queue where small tasks wait to be packed into one track), **In progress** and **Review**. Each card shows the id,
+domain, class (K, D, D+ or U), estimate and how many tasks it unlocks. **Next up** shows what the orchestrator starts
+in the next free slot. Other views: **Project lanes** (one row per project), **Focus** (only what you have chosen to
+push), **Cloud** and **Statistics**.
+
+### Task detail
+
+<p align="center"><img src="assets/screenshots/light-05-task-detail.jpg" alt="A task opened in the side panel" width="800"></p>
+
+Click a card to open it: the mission, the files it owns, what it waits on, cost and time so far, and the actions
+(approve, pause, cancel, change priority). The chain of tasks before and after it is highlighted on the board.
+
+### Waiting on you
+
+<p align="center"><img src="assets/screenshots/light-06-waiting-on-you.jpg" alt="Owner questions with recommendations and an Answer button" width="800"></p>
+
+Everything only you can decide lands here: questions from agents (with their recommendation), owner tasks and
+conditions. Each shows which tasks it blocks. Answer on the board, and the orchestrator picks up the answer and
+unblocks the tasks.
+
+### Dependencies
+
+<p align="center"><img src="assets/screenshots/light-03-dependencies.jpg" alt="Dependency chains as a graph" width="800"></p>
+
+The chains as a graph: circles are tasks (solid ring = in progress, dashed = blocked), squares are open questions.
+It shows at a glance which single answer unlocks the most work.
+
+### Statistics and cost
+
+<p align="center"><img src="assets/screenshots/light-04-statistics.jpg" alt="Statistics: throughput, cycle time, estimate accuracy and cost" width="800"></p>
+
+Done per day, cycle time, how good the estimates are, cost per day (API-equivalent), time per class, and how large
+the agents' contexts got. This is where you see whether the queue earns its keep.
+
+### Plans
+
+<p align="center"><img src="assets/screenshots/light-07-plans-overview.jpg" alt="The plan register overview per module" width="800"></p>
+
+The **Plans** room is the plan register: one card per module with priority (now, owner, later) and maturity (from
+idea to built and verified), open questions, legal points and stale plans, plus what is being worked on right now.
+
+<p align="center"><img src="assets/screenshots/light-09-priority-map.jpg" alt="The priority map: plan entries per module and priority column" width="800"></p>
+
+The **priority map** puts every plan entry in a grid of module by priority. Drag an entry to another column (or use
+the keyboard); changes are collected in a draft you review before anything is saved. **Tree map** and
+**Dependencies** show the same entries by size and by order.
+
+### Dark mode
+
+<p align="center">
+  <img src="assets/screenshots/dark-01-queue.jpg" alt="The queue in dark mode" width="400">
+  <img src="assets/screenshots/dark-03-dependencies.jpg" alt="The dependency graph in dark mode" width="400">
+</p>
+<p align="center"><img src="assets/screenshots/dark-10-plan-tree-map.jpg" alt="The plan tree map in dark mode" width="400"></p>
+
+### Settings
+
+<p align="center"><img src="assets/screenshots/light-11-settings.jpg" alt="The settings panel with theme, mascot and queue limits" width="800"></p>
+
+The gear holds the help, the theme, the mascot and the queue's limits (how many tracks run at once, how many heavy
+D+ tracks, tracks per domain, daily budget, night pause, automatic compaction). Each setting shows its current
+value, the default and the value in saver mode.
+
 ## Install
 
 As a Claude Code plugin (recommended). In Claude Code:
 
 ```
 /plugin marketplace add vegardjorg/claude-code-queue
-/plugin install cq@claude-cowie-queue
+/plugin install cq@claude-code-queue
 ```
 
 Then open your own project and run `/cq:setup`. It:
@@ -70,7 +144,7 @@ The plugin's hooks do nothing in projects without a `queue.config.json`, so it i
 Update with `/plugin update`. To try it without installing: `claude --plugin-dir <path-to-this-repo>/plugin`.
 
 Without the plugin system you can copy everything into the project instead ("vendored" install): open Claude Code in
-your project and say *Install claude-cowie-queue from `<path-to-this-repo>`; follow its INSTALL.md*. See
+your project and say *Install claude-code-queue from `<path-to-this-repo>`; follow its INSTALL.md*. See
 [INSTALL.md](INSTALL.md).
 
 Requirements: Node.js 20 or newer, git and Claude Code. No npm packages are needed at run time.
@@ -82,8 +156,8 @@ Requirements: Node.js 20 or newer, git and Claude Code. No npm packages are need
 2. **Start the loop.** Open a chat and run `/cq:queue`. It reports the state and asks before it starts. Then it fills
    the free slots with track agents, reviews and merges what they deliver, and starts the next tasks, until the queue
    is empty, the daily budget is used, or everything left waits on you.
-3. **Check the board.** `cq board` prints a local link. Answer open questions there; the orchestrator picks the
-   answers up.
+3. **Check the board.** Run `/cq:board` (or ask Claude to "start the board"). It starts the board in the
+   background and gives you a local link. Answer open questions there; the orchestrator picks the answers up.
 4. **Push when you are ready.** Merges stay local. Nothing is pushed until you say "push", and then in one batch.
 
 Other skills: `/cq:pick` to take one task and do it yourself in the current chat, `/cq:parallel-wave` for the full
@@ -132,7 +206,7 @@ cq receive <ID>              # receive a finished track
 cq merge <ID>                # merge it
 cq cost                      # measured cost per class
 cq plan show                 # plan register
-cq board                     # the board on http://localhost:2000
+cq board                     # the board: prints a local link with a key
 cq help                      # all commands
 ```
 
@@ -184,20 +258,27 @@ Run `cq cost` in your own project to see where your tokens go.
 ## The talking mascot
 
 The mascot in the board's top-left corner comments in a speech bubble on the queue's numbers and events (a merge,
-an empty queue, a new question for you). To turn it off:
-- per browser: the gear menu, **Mascot**: Chatty, Events only or Off;
-- for everyone: `"board": { "mascot": "off" }` in `queue.config.json`, or `cq board --mascot off`.
+an empty queue, a new question for you). To quiet it:
+- per browser: the gear menu, **Mascot**: Chatty, Events only or Off (Off keeps the picture, without bubbles);
+- for everyone: `"board": { "mascot": "off" }` in `queue.config.json`, or `cq board --mascot off`;
+- to remove the picture too, the gear has a password field. The hint is in the gear. **Show the mascot again**
+  brings it back.
 
 Your own phrases go in the gitignored `<dataFolder>/mascot-phrases.json`. See
 [docs/board.md](plugin/docs/board.md#the-mascot).
 
 ## Not included
 
-This is the queue system only. It leaves out:
-- **CI/CD:** no GitHub workflows. The checks the tracks run are whatever you put in `queue.config.json`
-  (`gates.quick`, `gates.full`).
-- **Screenshots and visual checks:** tasks can carry the label `visual` and land on a manual QA list (`cq qa`), but
-  nothing takes screenshots.
+This is the queue system only. My own project has more around it, which was too project-specific to include. You
+will want your own versions of these:
+- **CI/CD.** No GitHub workflows are included, and the checks the tracks run are only what you put in
+  `queue.config.json` (`gates.quick`, `gates.full`). Build your own pipeline, so code is tested behind gates before
+  it reaches staging or production: at a minimum type check, lint and tests on every push, and a separate, deliberate
+  step to promote staging to production. Agents write a lot of code quickly, so this matters more, not less.
+- **Screenshots and visual checks.** Tasks can carry the label `visual` and land on a manual QA list (`cq qa`), but
+  nothing takes screenshots. Either write a small script of your own that opens the app in a headless browser and
+  saves screenshots, or use an end-to-end test tool such as Playwright, which can click through flows and take
+  screenshots at the same time.
 - **Project-specific database tooling** (local database pools, probe runners, migration dry runs). Migration
   numbering is optional and set in `queue.config.json`.
 

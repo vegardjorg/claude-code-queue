@@ -16,7 +16,7 @@
 //     a resume instruction again (afterCompactText) and lifts the wind-down for the session (withoutWindDown). A new session
 //     (/queue in a new window) is only a last resort (the session has hung or is broken).
 //   - Mode: `queue.mjs compact auto|manual` sets limits.autocompact in queue.json (compactMode). Manual: a notice
-//     with a ready /compact line. Auto: Claude Code compacts by itself (the owner has set /autocompact), and the queue
+//     with a ready /compact line. Auto: Claude Code compacts by itself (autoCompactEnabled on, window 300k), and the queue
 //     resumes automatically; the line is only a fallback. The mode is shown in the hook messages and on the board.
 //   - The handover note is ongoing (HANDOVER_NOTE): the orchestrator keeps it updated after each merge and
 //     each decision from the owner, so both compaction and any emergency rotation are cheap.
@@ -173,9 +173,15 @@ const COMPACT_COMMAND =
   `/compact keep: everything in ${HANDOVER_NOTE}, active tracks (id, status, branch, HEAD at start), open owner questions, ` +
   'unpushed commits, scratchpad path, next command';
 
-/** The commands the owner uses to turn automatic compaction in Claude Code on and off. */
-const AUTOCOMPACT_ON = '/autocompact 300k';
-const AUTOCOMPACT_BY = '/autocompact auto';
+/**
+ * How the owner turns Claude Code's own compaction on and off. Two separate settings: autoCompactEnabled (on/off,
+ * default on) and the window (autoCompactWindow, which cq setup --settings sets to 300000; /autocompact 300k sets the same
+ * window for the current model). "/autocompact auto" only resets the window to the model's own; it does not turn
+ * compaction off. /config does not open in the desktop app, so the settings file line is given too.
+ */
+const AUTOCOMPACT_ON = '/config autoCompactEnabled=true, then /autocompact 300k';
+const AUTOCOMPACT_OFF = '/config autoCompactEnabled=false';
+const AUTOCOMPACT_FILE = '"autoCompactEnabled": false in .claude/settings.local.json';
 
 /** Compaction mode from the queue file: limits.autocompact = true gives 'auto', everything else 'manual' (default). */
 function compactMode(queue) {
@@ -429,7 +435,8 @@ module.exports = {
   COMPACT_COMMAND,
   HANDOVER_NOTE,
   AUTOCOMPACT_ON,
-  AUTOCOMPACT_BY,
+  AUTOCOMPACT_OFF,
+  AUTOCOMPACT_FILE,
   compactMode,
   modeText,
   forCompactInstruction,

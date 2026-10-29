@@ -4,7 +4,7 @@ These instructions are written TO Claude Code. The user has downloaded this repo
 into their project. Follow the steps in order, and ask the user where a step says ASK. Do not push anything.
 
 This is the vendored install: everything is copied into the project. The recommended way is the Claude Code plugin
-(`/plugin marketplace add vegardjorg/claude-code-queue`, `/plugin install cq@claude-cowie-queue`, then `/cq:setup`).
+(`/plugin marketplace add vegardjorg/claude-code-queue`, `/plugin install cq@claude-code-queue`, then `/cq:setup`).
 If the user has not chosen, ASK which they want before you copy anything.
 
 ## 0. Check the prerequisites
@@ -83,7 +83,7 @@ node scripts/orchestrator/cq.mjs plan show
 ```
 
 `init` creates the queue in `scripts/.queue/` (gitignored) with one example project `example` (prefix `EX-`); rename it
-with `queue.mjs project`. The plan register file is created on the first `plan` write. Then run
+with `node scripts/orchestrator/cq.mjs project`. The plan register file is created on the first `plan` write. Then run
 `node scripts/orchestrator/cq.mjs plan modules` to create the modules from `queue.config.json`.
 
 ## 5. Smoke test
@@ -106,12 +106,12 @@ ASK the user: "Do you want me to look through your own notes, TODOs and plans (f
 queue tasks?"
 
 If yes:
-1. List what you found (file, short title) and propose for each: plan entry (`queue.mjs plan new`) for ideas and larger
-   plans, queue task (`queue.mjs add`) for concrete, ready work. Show the proposal before writing anything.
+1. List what you found (file, short title) and propose for each: plan entry (`node scripts/orchestrator/cq.mjs plan new`) for ideas and larger
+   plans, queue task (`node scripts/orchestrator/cq.mjs add`) for concrete, ready work. Show the proposal before writing anything.
 2. Plan entries you create without the user's priority get `"priority": "owner"`, `"maturity": "idea"`,
    `"priority_set_by": "agent"` and a one-sentence `priority_reason`. Each entry needs an existing `project`
    (create projects first, from the user's answer about areas) and `sources` as `[{ "path": "<path>" }]`.
-3. Queue tasks you add start as proposals; the user approves them with `queue.mjs approve <id>` or on the board.
+3. Queue tasks you add start as proposals; the user approves them with `node scripts/orchestrator/cq.mjs approve <id>` or on the board.
 4. Never copy document contents into the register; point to them with `sources`.
 
 If no: leave the queue empty. The user can run `/add-to-queue` later.
@@ -123,7 +123,7 @@ before the first parallel run. Commit with a pathspec, for example:
 
 ```
 git add scripts/orchestrator .claude/skills .claude/agents .claude/settings.json docs/queue CLAUDE.queue.md queue.config.json .gitignore CLAUDE.md
-git commit -m "chore: install claude-cowie-queue work queue" -- scripts/orchestrator .claude/skills .claude/agents .claude/settings.json docs/queue CLAUDE.queue.md queue.config.json .gitignore CLAUDE.md
+git commit -m "chore: install claude-code-queue work queue" -- scripts/orchestrator .claude/skills .claude/agents .claude/settings.json docs/queue CLAUDE.queue.md queue.config.json .gitignore CLAUDE.md
 ```
 
 Do not push unless the user asks.

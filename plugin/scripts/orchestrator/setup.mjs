@@ -73,7 +73,7 @@ export function setupProject(o) {
   if (missing.length) {
     const pre = gitignore && !gitignore.endsWith('\n') ? '\n' : '';
     if (!o.dry)
-      fs.appendFileSync(gitignorePath, `${pre}\n# claude-cowie-queue (the queue's data and the agents' worktrees)\n${missing.join('\n')}\n`);
+      fs.appendFileSync(gitignorePath, `${pre}\n# claude-code-queue (the queue's data and the agents' worktrees)\n${missing.join('\n')}\n`);
     log.notes.push(`.gitignore: added ${missing.join(' ')}`);
   } else log.notes.push('.gitignore: unchanged');
 

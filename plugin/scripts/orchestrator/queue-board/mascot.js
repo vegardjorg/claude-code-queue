@@ -12,7 +12,9 @@
 //   - a click on the mascot gives a new line, and 5 clicks within 10 s give "click-5";
 //   - the mode Chatty / Events only / Off is stored in localStorage (with try/catch). The server's default comes from
 //     board.mascot in queue.config.json or --mascot; when the server says "off", the mascot is off for every viewer
-//     (no bubbles, no click) and the choice in the gear is locked.
+//     (no bubbles, no click) and the choice in the gear is locked;
+//   - the whole mascot (picture and bubbles) can be hidden in this browser with the password in the gear
+//     (M.isPassword); the choice is stored in localStorage and "Show the mascot again" undoes it.
 // =============================================================
 (function () {
   'use strict';
@@ -47,11 +49,22 @@
   }
   let saved = readSaved();
 
+  // The whole mascot hidden in this browser (the password in the gear). The zone keeps its space, only the picture goes.
+  const STORAGE_HIDDEN = 'queue-board-mascot-hidden';
+  function readHidden() {
+    try {
+      return localStorage.getItem(STORAGE_HIDDEN) === '1';
+    } catch {
+      return false;
+    }
+  }
+  let gone = readHidden();
+
   /** The server has turned the mascot off for everyone. */
   const locked = () => serverMode === 'off';
-  /** The mode that applies now: off when the server says so, otherwise this browser's choice or the server's default. */
+  /** The mode that applies now: off when the server says so or the mascot is hidden, otherwise this browser's choice or the server's default. */
   function mode() {
-    if (locked()) return 'off';
+    if (locked() || gone) return 'off';
     return saved ?? serverMode ?? M.DEFAULT_MODE;
   }
 
@@ -215,12 +228,47 @@
     say(M.decide({ s, mode: mode(), now, reason: 'pulse' }), now);
   }, PULSE_MS);
 
+  /** Shows or hides the picture (CSS .mascot.gone) and turns bubbles and clicks off while it is hidden. */
+  function applyGone() {
+    zone.classList.toggle('gone', gone);
+    if (gone) hide(true);
+    clickable(mode() !== 'off');
+  }
+
+  /** Hides the whole mascot when the text is the password. Returns false (nothing changes) otherwise. */
+  function hideMascot(password) {
+    if (!M.isPassword(password)) return false;
+    gone = true;
+    try {
+      localStorage.setItem(STORAGE_HIDDEN, '1');
+    } catch {
+      /* storage is blocked: hidden until the page is reloaded */
+    }
+    applyGone();
+    return true;
+  }
+
+  function showMascot() {
+    gone = false;
+    try {
+      localStorage.removeItem(STORAGE_HIDDEN);
+    } catch {
+      /* storage is blocked: nothing was stored */
+    }
+    applyGone();
+  }
+
+  if (gone) applyGone();
+
   window.QueueMascotView = {
     newState,
     ownerAction,
     mode,
     setMode,
     locked,
+    isHidden: () => gone,
+    hideMascot,
+    showMascot,
     MODE_OPTIONS: M.MODE_OPTIONS,
   };
 })();

@@ -703,7 +703,7 @@ const edit = (fn) =>
   });
 
 // Who made the change (the changelog) and optimistic concurrency (--expect-changed).
-const byName = () => val('--by') ?? 'queue.mjs';
+const byName = () => val('--by') ?? 'cq';
 /** Refuses with exit 6 when the queue has changed after the time the caller previewed (called under the lock). */
 function checkExpect(queue) {
   const f = L.expectCheck(queue, val('--expect-changed') ?? null);
@@ -2058,7 +2058,12 @@ if (command === 'init') {
 } else if (command === 'add') {
   const source = val('--file') ? fs.readFileSync(val('--file'), 'utf8') : val('--json');
   if (!source) die("add requires --file <task.json> or --json '{...}'");
-  const content = JSON.parse(source);
+  let content;
+  try {
+    content = JSON.parse(source);
+  } catch (e) {
+    die(`add: the task is not valid JSON (${e.message}). On Windows, write it to a file and use --file.`);
+  }
   // { "tasks": [...], "question": {...} } adds tasks and the text of the questions they wait on in
   // the same write. An object without an id with one of these fields is that form; otherwise it is one task (as before).
   const combined =
@@ -2680,8 +2685,8 @@ if (command === 'init') {
   if (night.active) console.log(night.message);
 } else if (command === 'compact') {
   // ---- Compaction mode for the orchestrator session ----
-  // The same lock and validation as `limit autocompact`. The Claude Code side (whether the session compacts by itself) is controlled by
-  // the owner with /autocompact in the session; this command never changes settings files.
+  // The same lock and validation as `limit autocompact`. The Claude Code side (whether the session compacts by itself) is the
+  // owner's setting autoCompactEnabled (plus the 300k window); this command only prints the line and never changes settings files.
   const [, fresh] = a;
   if (fresh) {
     edit((queue) => {
@@ -2695,10 +2700,12 @@ if (command === 'init') {
   console.log(`Compaction mode: ${KV.modeText(mode)}.`);
   console.log(
     mode === 'auto'
-      ? `Claude Code must compact by itself: paste ${KV.AUTOCOMPACT_ON} into the orchestrator session (once). The hooks report ` +
-          'with a fallback line if it does not happen before the wind-down, and resume the queue after the compaction.'
-      : `The hooks give a ready /compact line at about 280k. If you set ${KV.AUTOCOMPACT_ON} earlier, set ` +
-          `Claude Code back with ${KV.AUTOCOMPACT_BY}.`,
+      ? `Claude Code must compact by itself at 300k: Auto-compact is on by default; if you turned it off, run ` +
+          `${KV.AUTOCOMPACT_ON} in the orchestrator session (once). The hooks report with a fallback line if it does ` +
+          'not happen before the wind-down, and resume the queue after the compaction.'
+      : `The hooks give a ready /compact line at about 280k. Claude Code's own compaction must then be off, or it ` +
+          `compacts at 300k without asking: run ${KV.AUTOCOMPACT_OFF} (terminal), or set ${KV.AUTOCOMPACT_FILE} ` +
+          '(desktop app). /compact keeps working.',
   );
 } else if (command === 'state') {
   const queue = read();

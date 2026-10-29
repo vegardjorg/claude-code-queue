@@ -126,15 +126,22 @@ function roots() {
   return buffer;
 }
 
+/** The variables that point the queue somewhere explicitly (tests and scripts). Other QUEUE_* names do not count. */
+const QUEUE_VARIABLES = [
+  'QUEUE_ROOT', 'QUEUE_FOLDER', 'QUEUE_FILE', 'QUEUE_CONFIG', 'QUEUE_TIME_LOG', 'QUEUE_GIT', 'QUEUE_SCRATCHPAD',
+  'QUEUE_TRANSCRIPTS', 'QUEUE_PLAN_BACKUP', 'QUEUE_PLAN_SOURCE_ROOT', 'QUEUE_INDEX_FILE', 'QUEUE_DOC_ROOT',
+  'QUEUE_SKILLS', 'QUEUE_HOOKS', 'QUEUE_SESSION',
+];
+
 /**
- * Does this project use the queue? True when queue.config.json lies in the main tree, or when any QUEUE_* variable is
+ * Does this project use the queue? True when queue.config.json lies in the main tree, or when one of QUEUE_VARIABLES is
  * set (tests and scripts that point the queue somewhere explicitly). The hooks ask this first and exit at once when it
  * is false: a plugin's hooks run in EVERY project the user opens, and must cost nothing where the queue is not set up.
  * @param {{ env?: NodeJS.ProcessEnv, main?: string, fs?: typeof fs }} [o]
  */
 function queueActive(o = {}) {
   const env = o.env ?? process.env;
-  if (Object.keys(env).some((k) => k.startsWith('QUEUE_'))) return true;
+  if (QUEUE_VARIABLES.some((k) => env[k])) return true;
   return exists(o.fs ?? fs, path.join(o.main ?? roots().main, 'queue.config.json'));
 }
 

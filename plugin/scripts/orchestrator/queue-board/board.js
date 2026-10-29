@@ -37,7 +37,32 @@
   // the plan view (Now, Next, Later, Waiting) in plan.js. The tab is called "Focus" (the id `plan` is kept), so
   // it is not confused with the Plans room (the plan register, plans/plans.js).
   const VIEWS = ['flat', 'lanes', 'plan', 'graph', 'cloud', 'statistics'];
-  const savedView = localStorage.getItem('queue-board-view');
+  // Browser storage throws when it is blocked (some private modes, strict settings). Every read and write goes through
+  // this wrapper, so the board still works then; the choices just are not remembered.
+  const store = {
+    getItem(k) {
+      try {
+        return localStorage.getItem(k);
+      } catch {
+        return null;
+      }
+    },
+    setItem(k, v) {
+      try {
+        localStorage.setItem(k, v);
+      } catch {
+        /* blocked storage: not remembered */
+      }
+    },
+    removeItem(k) {
+      try {
+        localStorage.removeItem(k);
+      } catch {
+        /* blocked storage: nothing stored */
+      }
+    },
+  };
+  const savedView = store.getItem('queue-board-view');
 
   const t = {
     key: null,
@@ -145,7 +170,7 @@
     const selected = {};
     let saved = null;
     try {
-      saved = JSON.parse(localStorage.getItem(FILTER_STORAGE) ?? 'null');
+      saved = JSON.parse(store.getItem(FILTER_STORAGE) ?? 'null');
     } catch {
       saved = null;
     }
@@ -159,7 +184,7 @@
     try {
       const out = {};
       for (const [k, set] of Object.entries(t.filter.selected)) out[k] = [...set];
-      localStorage.setItem(FILTER_STORAGE, JSON.stringify(out));
+      store.setItem(FILTER_STORAGE, JSON.stringify(out));
     } catch {
       /* private mode or full storage: the filters apply only to this session */
     }
@@ -702,15 +727,17 @@
           el('span', {
             'data-start': k.start,
             class: k.aging ? 'age-over' : null,
+            title: k.aging ? 'Running longer than 85 % of finished tasks of this class' : null,
             text: age(k.start),
           }),
         );
-      if (k.old) footer.push(el('span', { class: 'badge old', text: 'old' }));
+      if (k.old) footer.push(el('span', { class: 'badge old', text: 'old', title: 'Picked over 72 hours ago with no commits on its branch' }));
     } else if (col === 'review') {
       if (k.delivered)
         footer.push(
           el('span', {
             class: k.aging ? 'age-over' : null,
+            title: k.aging ? 'Waiting in review longer than 85 % of finished tasks of this class' : null,
             text: `delivered ${age(k.delivered)} ago`,
           }),
         );
@@ -824,8 +851,8 @@
                 'aria-label': window.QueueA11y.classLabel(k.class),
               })
             : null,
-          el('span', { class: 'badge', text: `${k.estimate} min`, title: 'Estimate' }),
-          k.visual ? el('span', { class: 'badge visual', text: 'visual' }) : null,
+          el('span', { class: 'badge', text: `${k.estimate} min`, title: 'Estimated work minutes for an agent, not wall-clock time' }),
+          k.visual ? el('span', { class: 'badge visual', text: 'visual', title: 'Needs a manual visual check after merge (the QA list)' }) : null,
           k.parked
             ? el('span', {
                 class: 'badge wait-badge',
@@ -1219,7 +1246,7 @@
             el('span', {
               class: `badge${g.class === 'D+' ? ' class-dplus' : ''}`,
               text: g.class,
-              title: 'Risk class',
+              title: window.QueueA11y.classLabel(g.class),
             }),
             g.ready && !g.invalid
               ? el('span', { class: 'badge ready-badge', text: status })
@@ -1815,14 +1842,14 @@
     feature: 'Project → feature',
     stage: 'Focus step',
   };
-  const savedGrouping = localStorage.getItem('queue-board-grouping');
+  const savedGrouping = store.getItem('queue-board-grouping');
   t.grouping = Object.hasOwn(GROUPINGS, savedGrouping ?? '') ? savedGrouping : 'none';
   t.closedGroups = new Set(readList('queue-board-closed-groups'));
 
   /** A list of short texts from localStorage (empty on error). */
   function readList(key) {
     try {
-      const x = JSON.parse(localStorage.getItem(key) ?? '[]');
+      const x = JSON.parse(store.getItem(key) ?? '[]');
       return Array.isArray(x) ? x.filter((v) => typeof v === 'string' && v.length <= 200) : [];
     } catch {
       return [];
@@ -1830,7 +1857,7 @@
   }
   function saveLocally(key, val) {
     try {
-      localStorage.setItem(key, JSON.stringify(val));
+      store.setItem(key, JSON.stringify(val));
     } catch {
       /* private mode or full storage: applies only to this session */
     }
@@ -1948,17 +1975,17 @@
   );
   groupingOption.addEventListener('change', () => {
     t.grouping = groupingOption.value;
-    localStorage.setItem('queue-board-grouping', t.grouping);
+    store.setItem('queue-board-grouping', t.grouping);
     draw();
   });
 
   // Saved and built-in views: in the browser (localStorage) for now.
   const VIEWS_STORAGE = 'queue-board-views';
   const LAST_VISIT = 'queue-board-last-visit';
-  t.lastVisit = Date.parse(localStorage.getItem(LAST_VISIT) ?? '') || null;
+  t.lastVisit = Date.parse(store.getItem(LAST_VISIT) ?? '') || null;
   const rememberVisit = () => {
     try {
-      localStorage.setItem(LAST_VISIT, new Date().toISOString());
+      store.setItem(LAST_VISIT, new Date().toISOString());
     } catch {
       /* no storage */
     }
@@ -2013,7 +2040,7 @@
 
   function ownViews() {
     try {
-      const x = JSON.parse(localStorage.getItem(VIEWS_STORAGE) ?? '[]');
+      const x = JSON.parse(store.getItem(VIEWS_STORAGE) ?? '[]');
       return Array.isArray(x)
         ? x.filter((v) => v && typeof v.name === 'string' && v.name.length <= 60).slice(0, 30)
         : [];
@@ -2038,7 +2065,7 @@
     if (v.grouping && Object.hasOwn(GROUPINGS, v.grouping)) {
       t.grouping = v.grouping;
       groupingOption.value = v.grouping;
-      localStorage.setItem('queue-board-grouping', v.grouping);
+      store.setItem('queue-board-grouping', v.grouping);
     }
     const show = VIEWS.includes(v.view) ? v.view : null;
     if (show && ['flat', 'lanes', 'graph'].includes(show)) setView(show);
@@ -4224,7 +4251,7 @@
       const name = el('input', {
         id: 'pick-name',
         type: 'text',
-        value: localStorage.getItem('queue-board-name') ?? '',
+        value: store.getItem('queue-board-name') ?? '',
         autocomplete: 'off',
       });
       box.append(
@@ -4247,7 +4274,7 @@
           onclick: () => {
             const by = name.value.trim();
             if (!by) return message('Write who is picking.', true);
-            localStorage.setItem('queue-board-name', by);
+            store.setItem('queue-board-name', by);
             action({ type: 'pick', id: k.id, by }, `${k.id} is picked by ${by}`);
           },
         }),
@@ -4344,6 +4371,7 @@
           type: 'button',
           class: 'button button-filled',
           text: 'QA ok',
+          title: 'Mark the visual check as passed; the task leaves the QA list',
           onclick: () => action({ type: 'qa-ok', id: k.id }, `${k.id}: QA ok`),
         }),
       );
@@ -5852,16 +5880,16 @@
   // the operating system. The theme is chosen only in the settings (the gear), as three radio buttons; the button
   // at the top is removed to give room to the two rows.
   function themeSelected() {
-    return window.QueueA11y.themeFromSaved(localStorage.getItem('queue-board-theme'));
+    return window.QueueA11y.themeFromSaved(store.getItem('queue-board-theme'));
   }
   function setTheme(option) {
     const html = document.documentElement;
     if (option === 'light' || option === 'dark') {
       html.dataset.theme = option;
-      localStorage.setItem('queue-board-theme', option);
+      store.setItem('queue-board-theme', option);
     } else if (option === 'system') {
       delete html.dataset.theme;
-      localStorage.removeItem('queue-board-theme');
+      store.removeItem('queue-board-theme');
     }
     const now = themeSelected();
     // The radio buttons in the settings follow along when the panel is open.
@@ -5918,11 +5946,16 @@
     const m = window.QueueMascotView;
     if (!m) return el('div', { hidden: true });
     const now = m.mode();
-    const locked = m.locked();
+    // Hidden with the password: the speech choice has no effect until the mascot is shown again.
+    const locked = m.locked() || m.isHidden();
     return el(
       'fieldset',
       { class: 'setting theme-option' },
       el('legend', { class: 'setting-title', text: 'Mascot' }),
+      el('p', {
+        class: 'setting-explanation',
+        text: 'How often the speech bubbles show. Off keeps the picture and turns the bubbles off.',
+      }),
       m.MODE_OPTIONS.map(({ val, text }) =>
         el(
           'label',
@@ -5938,18 +5971,90 @@
           text,
         ),
       ),
-      locked
+      m.locked()
         ? el('p', {
             class: 'empty',
             text: 'Turned off for this board (board.mascot in queue.config.json or --mascot off).',
           })
         : null,
+      hideMascotField(m),
+    );
+  }
+
+  /**
+   * The whole mascot (picture and bubbles) can be hidden in this browser with a password: an easter egg for the
+   * author's self-roast. The check (case and punctuation do not matter) is isPassword in lib/queueMascot.js.
+   */
+  function hideMascotField(m) {
+    if (!m.hideMascot) return null;
+    if (m.isHidden()) {
+      return el(
+        'div',
+        { class: 'setting-field' },
+        el('p', { class: 'setting-explanation', text: 'The mascot is hidden in this browser.' }),
+        el(
+          'div',
+          { class: 'setting-control' },
+          el('button', {
+            type: 'button',
+            class: 'button button-muted',
+            text: 'Show the mascot again',
+            onclick: () => {
+              m.showMascot();
+              drawSettings();
+            },
+          }),
+        ),
+      );
+    }
+    const id = 'mascot-password';
+    const input = el('input', {
+      id,
+      type: 'text',
+      autocomplete: 'off',
+      spellcheck: 'false',
+      'aria-describedby': `${id}-help`,
+    });
+    const error = el('p', { class: 'setting-error', role: 'alert', hidden: true });
+    const tryIt = () => {
+      if (m.hideMascot(input.value)) {
+        drawSettings();
+        return;
+      }
+      error.textContent = 'Not quite. The bouncer says no.';
+      error.hidden = false;
+      input.select();
+    };
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        tryIt();
+      }
+    });
+    return el(
+      'div',
+      { class: 'setting-field' },
+      el('label', { for: id, text: 'Hide the mascot completely' }),
+      el('p', {
+        id: `${id}-help`,
+        class: 'setting-explanation',
+        text:
+          "Password needed. Hint: the password to the back room of Lefty's Bar in Leisure Suit Larry in the " +
+          'Land of the Lounge Lizards.',
+      }),
+      el(
+        'div',
+        { class: 'setting-control' },
+        input,
+        el('button', { type: 'button', class: 'button button-muted', text: 'Hide', onclick: tryIt }),
+      ),
+      error,
     );
   }
 
   function setView(v) {
     t.view = v;
-    localStorage.setItem('queue-board-view', v);
+    store.setItem('queue-board-view', v);
     // Real tabs. The selected tab is the only tab stop in the tab list (roving tabindex).
     for (const x of VIEWS) {
       const tab = $(`show-${x}`);

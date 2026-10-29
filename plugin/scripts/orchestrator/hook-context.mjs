@@ -28,7 +28,7 @@
 //     at once, focus in the /compact line, and the queue state and a resume instruction are added back by
 //     hook-after-compact.mjs (SessionStart, matcher compact).
 //   - Mode (limits.autocompact in queue.json, `queue.mjs compact auto|manual`, shown in the messages): manual gives the
-//     proposal above; auto says Claude Code compacts by itself (the owner has set /autocompact), with the line only as backup.
+//     proposal above; auto says Claude Code compacts by itself (autoCompactEnabled on, window 300k), with the line only as backup.
 //   - "continue:" first in the message always passes through.
 //   - The limits can be overridden with CONTEXT_WARNING, CONTEXT_STOP, CONTEXT_WIND_DOWN, CONTEXT_STOP_ORCHESTRATOR and
 //     CONTEXT_COMPACT (tokens).

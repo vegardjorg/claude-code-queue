@@ -88,6 +88,12 @@ describe('the modes', () => {
     expect(M.normalizeMode(undefined)).toBeNull();
     expect(M.MODE_OPTIONS.map((o: any) => o.text)).toEqual(['Chatty', 'Events only', 'Off']);
   });
+
+  it('isPassword: the bar password, case, punctuation and extra spaces do not matter', () => {
+    for (const ok of ['Ken sent me', 'ken sent me.', 'KEN SENT ME!', ' ken  sent me ', '"Ken sent me."'])
+      expect(M.isPassword(ok)).toBe(true);
+    for (const no of ['ken', 'kensentme', 'ken sent you', '', null, undefined]) expect(M.isPassword(no)).toBe(false);
+  });
 });
 
 describe('night over midnight', () => {

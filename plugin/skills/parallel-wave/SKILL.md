@@ -117,7 +117,7 @@ about 350k the hook sets wind-down (no new starts, exit 6) until the owner compa
 - **Visual QA:** tasks with the label `visual` get `qa_status: waiting` when finished. `cq qa` lists them; only the
   owner decides (`qa ok`, `qa deviation <id> "<text>"`, which creates `<id>-QA<n>`).
 - **The board:** `cq board` (local, 127.0.0.1, link with a key) shows the queue as
-  kanban, statistics, dependencies, plans and "Waiting for you". It writes only through `queue.mjs`. See
+  kanban, statistics, dependencies, plans and "Waiting on you". It writes only through `cq`. See
   `docs/queue/board.md`.
 
 ## Work outside the queue and push check

@@ -139,13 +139,13 @@
   const CLASSES = [
     {
       class: 'K',
-      name: 'client and interface',
+      name: 'ordinary code',
       explanation: 'Code in the application or the tools, and read-only database calls.',
     },
     {
       class: 'D',
       name: 'database',
-      explanation: 'Migrations that redefine features or create new RPCs.',
+      explanation: 'Database migrations and changes to database functions or access rules.',
     },
     {
       class: 'D+',

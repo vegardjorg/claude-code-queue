@@ -7,7 +7,7 @@ description: Pick a task from the work queue (`cq`) and do it yourself in this s
 
 Argument: **$ARGUMENTS** (empty = suggestions; an id = pick it; "visual" = suggestions with visible UI).
 The protocol is the same as for queue tracks (`${CLAUDE_PLUGIN_ROOT}/skills/parallel-wave/SKILL.md`). The queue lives in the main
-tree's `scripts/.queue/queue.json`: touch it only through `queue.mjs`.
+tree's `scripts/.queue/queue.json`: touch it only through `cq`.
 
 ## Without id: suggest
 
@@ -39,7 +39,7 @@ tree's `scripts/.queue/queue.json`: touch it only through `queue.mjs`.
    - **No orchestrator:** do the orchestrator's steps for this one task: from the main tree on the base branch,
      `cq merge-track queue/<id> --wave-base $(git merge-base <base> queue/<id>)`, the optional
      migration push, `cq gates --quick`, and `cq set <id> done --remark "picked by <who>"`.
-7. **Never `git push`** unless the owner says "push"; then `push-check.mjs` first.
+7. **Never `git push`** unless the owner says "push"; then `cq push-check` first.
 
 Changed your mind: `cq release <id>` (the branch is kept; it warns if the branch has commits). A picked task is never
 released automatically; after 72 h without commits it shows as "stale".

@@ -1,13 +1,22 @@
 # The board (`queue-board.mjs`)
 
-A local web board for the queue and the plan register. It reads the same JSON files as `queue.mjs` and writes through
+A local web board for the queue and the plan register. It reads the same JSON files as `cq` and writes through
 the same functions (same lock, same validation, same undo), so the board and the chat never disagree.
 
 ```
-cq board            # http://localhost:2000 (port from queue.config.json board.port)
+cq board            # prints the link, e.g. http://127.0.0.1:2000/#key=… (port: board.port)
 ```
 
-It listens on localhost only. There is no login; do not expose the port.
+How to start it:
+- **In Claude Code:** `/cq:board`, or ask Claude to start the board. It runs `cq board` in the background (never in
+  the foreground: it is a server and would block the chat) and gives you the link. It stops with the session.
+- **From your own terminal** (keeps running on its own): in the project folder,
+  `node "<plugin folder>/scripts/orchestrator/cq.mjs" board`. `cq` itself is only on the PATH inside Claude Code;
+  `/cq:board` prints the full path. In a vendored install: `node scripts/orchestrator/cq.mjs board`.
+
+It listens on 127.0.0.1 only. There is no user login, but every request needs the key in the printed link,
+and the key changes on every restart (an old tab then says "The key is old": open the new link). Do not expose
+the port.
 
 ## What it shows
 
@@ -47,6 +56,10 @@ browser comes from `queue.config.json`:
 `cq board --mascot off` overrides it for one run. With `"off"` from the config or
 the flag, the mascot is off for every viewer: no bubbles, no click, nothing is computed on the server, and the choice
 in the gear is locked.
+
+**Hiding the picture.** Off keeps the picture. To remove the mascot completely in one browser, type the password in
+**Hide the mascot completely** in the gear (the hint is there; case, spaces and punctuation do not matter).
+**Show the mascot again** in the same place brings it back.
 
 **Your own phrases.** The board ships the mascot's full built-in repertoire (night owl jabs, encouragement, stats roasts, events and vibe-coding jokes) in `lib/queueMascot.js`. To use your own, put
 `mascot-phrases.json` in the queue's data folder (`<dataFolder>`, default `scripts/.queue/`, which the installer adds

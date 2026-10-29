@@ -1723,8 +1723,9 @@ const SETTINGS = [
     name: 'autocompact',
     title: 'Automatic compaction',
     explanation:
-      'On: the orchestrator session is compacted by Claude Code itself (set /autocompact 300k in the session) and continues on its own. ' +
-      'Off: a notice with a ready /compact line, so you stay in control.',
+      'On: the orchestrator session is compacted by Claude Code itself at 300k (Auto-compact on, the default, and ' +
+      'autoCompactWindow 300000) and continues on its own. Off: a notice with a ready /compact line, so you stay in ' +
+      'control; then also turn off auto-compaction in Claude Code ("autoCompactEnabled": false), or it compacts anyway.',
     type: 'onoff',
   },
 ];

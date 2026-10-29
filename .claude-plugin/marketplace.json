@@ -1,7 +1,7 @@
 {
-  "name": "claude-cowie-queue",
+  "name": "claude-code-queue",
   "owner": { "name": "Vegard Cowie Jørgensen" },
-  "description": "claude-cowie-queue: a work queue and board for running Claude Code as an orchestrator with parallel worktree agents.",
+  "description": "claude-code-queue: a work queue and board for running Claude Code as an orchestrator with parallel worktree agents.",
   "plugins": [
     {
       "name": "cq",

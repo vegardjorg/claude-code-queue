@@ -102,7 +102,8 @@ Follow `parallel-wave` ("Continuous queue") unchanged. Specific to taking over:
   line to paste (you cannot run `/compact` yourself). Update the note, finish the step you are in, and do not start
   long new operations in the middle. After compaction `hook-after-compact.mjs` injects a resume instruction and the
   queue state; trust it over the summary and resume without waiting for the owner. Mode: `cq compact auto|manual`
-  (auto = Claude Code compacts itself after `/autocompact 300k` once in the session).
+  (auto = Claude Code compacts itself at 300k: `autoCompactEnabled` on, the default, and `autoCompactWindow` 300000;
+  manual also needs `autoCompactEnabled: false`, or Claude Code still compacts at 300k on its own).
 - **Wind-down (about 350k, emergency brake):** when the hook says WIND_DOWN, start nothing new (`next`/`start`/`fill`
   give exit 6). Finish what is started (receive, review, fix rounds, merge, `set … done`), update the note and ask
   the owner to compact now. Delivered tracks always get through.

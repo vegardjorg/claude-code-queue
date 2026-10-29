@@ -211,7 +211,7 @@ describe('the top: the markup in the top', () => {
     expect(mascot).not.toMatch(/\.innerHTML\s*=/);
     expect(mascot).toMatch(/bubble\.textContent = text/);
     // Off on the server locks the mode for every viewer.
-    expect(mascot).toMatch(/if \(locked\(\)\) return 'off';/);
+    expect(mascot).toMatch(/if \(locked\(\) \|\| gone\) return 'off';/);
   });
 });
 

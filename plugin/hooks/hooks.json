@@ -1,5 +1,5 @@
 {
-  "description": "claude-cowie-queue: context, read and push guards, compaction re-injection and the subagent time log. Every hook exits at once in projects without queue.config.json.",
+  "description": "claude-code-queue: context, read and push guards, compaction re-injection and the subagent time log. Every hook exits at once in projects without queue.config.json.",
   "hooks": {
     "PreToolUse": [
       {

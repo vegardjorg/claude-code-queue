@@ -700,7 +700,7 @@ describe('hook-context.mjs and queue.mjs: the wind-down step end to end', () => 
     expect(show.out).toMatch(/manual/);
     const auto = run('queue.mjs', ['compact', 'auto']);
     expect(auto.code).toBe(0);
-    expect(auto.out).toContain('/autocompact');
+    expect(auto.out).toContain('autoCompactEnabled=true');
     const readQueue = () => JSON.parse(readFileSync(join(folder, 'queue.json'), 'utf8'));
     expect(readQueue().limits.autocompact).toBe(true);
     expect(hook('s1', 300_000, 'hello').systemMessage).toMatch(/automatic/i);

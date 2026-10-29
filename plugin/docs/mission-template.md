@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Applies to | Every track started from the work queue (`queue.mjs`) or in a parallel wave (skill `parallel-wave`) |
+| Applies to | Every track started from the work queue (`cq`) or in a parallel wave (skill `parallel-wave`) |
 | Status | Living template. Update it when a wave teaches you something new. |
 | Used by | `scripts/orchestrator/make-queue-common.mjs` and `make-mission.mjs` (via `missionText.js`) |
 

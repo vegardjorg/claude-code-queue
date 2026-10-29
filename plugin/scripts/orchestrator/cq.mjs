@@ -39,13 +39,20 @@ const [first, ...rest] = process.argv.slice(2);
 
 if (!first || first === 'help' || first === '--help' || first === '-h') {
   console.log(
-    'cq: the work queue (claude-cowie-queue).\n\n' +
+    'cq: the work queue (claude-code-queue).\n\n' +
       '  cq <queue command> [args]   e.g. cq show, cq next, cq fill --scratchpad <dir>, cq plan show\n' +
       '  cq board                    the board (queue-board.mjs)\n' +
       '  cq takeover                 status picture for a new orchestrator (queue-takeover.mjs)\n' +
       `  cq <script> [args]          one of: ${scripts().join(', ')}\n\n` +
-      'The queue commands are listed in docs/queue/queue.md.',
+      'The queue commands (from the top of queue.mjs):\n',
   );
+  // The usage list lives as the comment at the top of queue.mjs: print those lines, with the long path shortened to cq.
+  const usage = fs
+    .readFileSync(path.join(HERE, 'queue.mjs'), 'utf8')
+    .split(/\r?\n/)
+    .filter((l) => /^\/\/\s+node scripts\/orchestrator\/queue\.mjs\b|^\/\/\s{20,}\S/.test(l))
+    .map((l) => l.replace(/^\/\/ ?/, '').replace('node scripts/orchestrator/queue.mjs', 'cq'));
+  console.log(usage.join('\n'));
   process.exit(0);
 }
 

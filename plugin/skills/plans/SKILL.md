@@ -68,4 +68,4 @@ Stop after the report, unless the argument already had an instruction: then carr
 - `plan active <entry-id> --end` for the entries you marked.
 - If a backup script is configured (`planBackup` in `queue.config.json`), offer `cq plan backup` when the register
   changed. Run it only when the owner says yes.
-- Short closing line: what changed and the change-log number from `queue.mjs` (undo with `cq plan undo`).
+- Short closing line: what changed and the change-log number from `cq` (undo with `cq plan undo`).

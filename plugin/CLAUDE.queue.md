@@ -1,4 +1,4 @@
-# Work queue and orchestration (claude-cowie-queue)
+# Work queue and orchestration (claude-code-queue)
 
 Import this file from your project's `CLAUDE.md` with a line `@CLAUDE.queue.md`.
 
