@@ -194,10 +194,9 @@ function equalValue(a, b) {
 const text = (v) => (typeof v === 'string' ? v.trim() : '');
 const isObject = (v) => v != null && typeof v === 'object' && !Array.isArray(v);
 
-/** Today's date in Norwegian time (YYYY-MM-DD). */
+/** Today's date in local time (YYYY-MM-DD). */
 function osloDate(now = new Date()) {
   return new Intl.DateTimeFormat('sv-SE', {
-    timeZone: 'Europe/Oslo',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -294,14 +293,14 @@ function validateEntry(entry, ctx = {}) {
 
   // The project must exist (the module follows from the project's area).
   if (!text(entry.project))
-    f('project missing (create it with queue.mjs project <pid> --title "…")');
+    f('project missing (create it with cq project <pid> --title "…")');
   else if (!Object.hasOwn(ctx.projects ?? {}, entry.project))
     f(
-      `unknown project ${entry.project} (create it first: queue.mjs project ${entry.project} --title "…")`,
+      `unknown project ${entry.project} (create it first: cq project ${entry.project} --title "…")`,
     );
   else if (!ctx.projects[entry.project]?.area)
     adv(
-      `the project ${entry.project} has no module (queue.mjs project ${entry.project} --area <oid>)`,
+      `the project ${entry.project} has no module (cq project ${entry.project} --area <oid>)`,
     );
 
   // Priority, category, reason and who set it.
@@ -375,7 +374,7 @@ function validateEntry(entry, ctx = {}) {
   }
   for (const s of Array.isArray(entry.ownerQuestions) ? entry.ownerQuestions : [])
     if (ctx.question && !Object.hasOwn(ctx.question, s))
-      adv(`ownerQuestion ${s} is not in the queue (queue.mjs question ${s} --text "…")`);
+      adv(`ownerQuestion ${s} is not in the queue (cq question ${s} --text "…")`);
 
   if (entry.deadline != null && !validDate(entry.deadline))
     f('deadline must be a date (YYYY-MM-DD) or null');
@@ -1277,7 +1276,7 @@ function planLinkError(reg, planId) {
   if (findEntry(reg, planId)) return null;
   if (reg?.archive?.[planId])
     return `planEntry ${planId} is merged into ${reg.archive[planId].merged_to}; use that one`;
-  return `unknown planEntry ${planId} (create it first: queue.mjs plan new --file <json>)`;
+  return `unknown planEntry ${planId} (create it first: cq plan new --file <json>)`;
 }
 
 /**
@@ -1678,7 +1677,7 @@ function check(reg, queue, ctx = {}) {
     if (n)
       statusDeviation.push({
         project: pid,
-        reason: `the project ${pid} has phase plan, but ${n} queue task(s) (queue.mjs project ${pid} --phase none)`,
+        reason: `the project ${pid} has phase plan, but ${n} queue task(s) (cq project ${pid} --phase none)`,
       });
   }
 
@@ -2226,7 +2225,7 @@ function validateDoc(doc, ctx = {}) {
     }
   for (const s of Array.isArray(doc.ownerQuestions) ? doc.ownerQuestions : [])
     if (ctx.question && !Object.hasOwn(ctx.question, s))
-      adv(`ownerQuestion ${s} is not in the queue (queue.mjs question ${s} --text "…")`);
+      adv(`ownerQuestion ${s} is not in the queue (cq question ${s} --text "…")`);
   if (doc.deadline != null && !validDate(doc.deadline))
     f('deadline must be a date (YYYY-MM-DD) or null');
   // modules is a list of module ids from the configuration's `modules`.

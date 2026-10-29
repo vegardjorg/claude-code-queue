@@ -151,8 +151,12 @@ Requirements: Node.js 20 or newer, git and Claude Code. No npm packages are need
 
 ## Daily use
 
-1. **Add work.** Say `/cq:add-to-queue` followed by what you want done, or `/cq:plans` to work on a plan. Tasks that
-   agents propose wait for your approval.
+You do not need the commands. Talk to Claude Code as usual: "add this to the queue", "what's next", "start the
+queue", "show the board". The skills pick that up, in any language, and when you have planned a task together,
+Claude offers to queue it. The slash commands below are the explicit way to do the same.
+
+1. **Add work.** Say "add it to the queue" (or `/cq:add-to-queue` followed by what you want done), or `/cq:plans`
+   to work on a plan. Tasks that agents propose wait for your approval.
 2. **Start the loop.** Open a chat and run `/cq:queue`. It reports the state and asks before it starts. Then it fills
    the free slots with track agents, reviews and merges what they deliver, and starts the next tasks, until the queue
    is empty, the daily budget is used, or everything left waits on you.
@@ -186,6 +190,14 @@ orchestration rules, and `/cq:start` to open a session cheaply before you paste 
 Hooks support the loop: they warn the orchestrator and the tracks when their context gets large, block force pushes,
 pushes of branches other than the base branch and migration pushes to the wrong environment, put the queue state back into the chat after compaction, and log the time and
 tokens of every subagent.
+
+**Context limit in every chat.** In a project with the queue, every chat gets a notice at 250k tokens of context,
+and at 400k the message is stopped so a long chat does not keep paying for its whole history. Compact the chat
+(`/compact`), or start the message with `continue:` to send it anyway. The limits can be changed with environment
+variables ([orchestration](plugin/docs/orchestration.md)).
+
+**Local time.** The night pause, the daily budget and the statistics per day use the machine's time zone. Set the
+`TZ` environment variable to use another.
 
 More detail: [orchestration](plugin/docs/orchestration.md), [queue reference](plugin/docs/queue.md),
 [plan register](plugin/docs/plan-register.md), [board](plugin/docs/board.md),

@@ -362,7 +362,7 @@
           ? h.el('p', {
               class: 'plans-help',
               text:
-                'The points are added to the entry with queue.mjs plan edit <PL-id> --set \'{"legal":{…}}\' (the fields are listed in docs/plan-register.md).',
+                'The points are added to the entry with cq plan edit <PL-id> --set \'{"legal":{…}}\' (the fields are listed in docs/plan-register.md).',
             })
           : null,
       );
@@ -840,7 +840,7 @@
         : null,
       h.el('p', {
         class: 'plans-help',
-        text: `Changed with queue.mjs plan edit ${x.entry} --set '{"legal":…}' (the whole field), or with the start line above.`,
+        text: `Changed with cq plan edit ${x.entry} --set '{"legal":…}' (the whole field), or with the start line above.`,
       }),
     );
   }
@@ -1000,7 +1000,7 @@
       h.el('label', {
         before: id,
         class: 'plans-help',
-        text: 'The answer is saved with queue.mjs resolve and logged in the decision log.',
+        text: 'The answer is saved with cq resolve and logged in the decision log.',
       }),
       (() => {
         const ta = h.el('textarea', {

@@ -36,8 +36,15 @@ context size. The system keeps both small:
   PARTIAL; a new agent continues. The hook `hook-track-context.mjs` enforces this on tool calls.
 - **Orchestrator compaction.** `hook-context.mjs` warns, then winds down, then stops the orchestrator chat as it
   grows; `/compact` with a focus is the normal path, and `hook-after-compact.mjs` re-injects the queue state after
-  compaction, so the summary does not have to carry it. `autoCompactWindow` is set to 300000. Claude Code's own compaction (`autoCompactEnabled`, on by default) is
-  what `cq compact auto` relies on; for `cq compact manual`, turn it off, or it still compacts at 300k.
+  compaction, so the summary does not have to carry it. `autoCompactWindow` is set to 300000. Automatic compaction is
+  the default (`cq compact auto`) and uses Claude Code's own compaction (`autoCompactEnabled`, on by default). For
+  `cq compact manual`, turn that off too, or Claude Code still compacts at 300k.
+- **Context limits in every chat.** The same hook also watches every other chat in a project with the queue, not only
+  the orchestrator: a notice at 250k, and at 400k the message is stopped so a long chat does not keep paying for its
+  whole history. Compact the chat (`/compact`), or start the message with `continue:` to send it anyway. Messages
+  Claude Code sends by itself (an agent is done) are never stopped. The limits can be changed with the environment
+  variables `CONTEXT_WARNING`, `CONTEXT_STOP`, `CONTEXT_WIND_DOWN`, `CONTEXT_STOP_ORCHESTRATOR` and `CONTEXT_COMPACT`
+  (tokens).
 - **Cache-friendly waiting.** No sleep or poll loops. Subagent prompt cache TTL is set to 1 hour
   (`subagentPromptCacheTtl`), so a reviewer started a while later still hits the cache.
 - **Reading guard.** `hook-read-guard.mjs` stops tracks and reviewers from re-reading files that are already loaded

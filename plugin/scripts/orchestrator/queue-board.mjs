@@ -668,7 +668,7 @@ async function bulk(b, queueNow) {
         changes = r.data.changes ?? [];
         warnings = r.data.warnings ?? [];
         changed = r.data.changed ?? changed;
-      } else error = [errorText(r, 'queue.mjs failed')];
+      } else error = [errorText(r, 'cq failed')];
     }
     const list = T.assess(queue, assessment, { now: Date.now() });
     return {
@@ -727,7 +727,7 @@ async function bulk(b, queueNow) {
         outdated,
         message: outdated
           ? 'The queue has changed since the preview. Review the change again.'
-          : errorText(r, 'queue.mjs failed'),
+          : errorText(r, 'cq failed'),
       },
     };
   }
@@ -753,7 +753,7 @@ async function undo(b) {
   if (b.show === true) {
     const r = await queueJson(['undo', '--show', '--json']);
     if (!r.data)
-      return { status: 500, answer: { ok: false, message: errorText(r, 'queue.mjs failed') } };
+      return { status: 500, answer: { ok: false, message: errorText(r, 'cq failed') } };
     return {
       status: 200,
       answer: {
@@ -774,7 +774,7 @@ async function undo(b) {
     `${new Date().toLocaleTimeString('en-GB')} undo${nr ? ` no. ${nr}` : ''}: ${r.ok ? 'ok' : `failed (${errorText(r, '?')})`}`,
   );
   if (!r.ok || r.data?.ok !== true)
-    return { status: 409, answer: { ok: false, message: errorText(r, 'queue.mjs undo failed') } };
+    return { status: 409, answer: { ok: false, message: errorText(r, 'cq undo failed') } };
   const p = r.data.entry;
   return {
     status: 200,
@@ -871,7 +871,7 @@ async function focus(b, queueNow) {
         outdated,
         message: outdated
           ? 'The queue has changed since the preview. Review the focus again.'
-          : errorText(r, 'queue.mjs focus save failed'),
+          : errorText(r, 'cq focus save failed'),
       },
     };
   }
@@ -934,7 +934,7 @@ async function area(b, queueNow) {
         message:
           r.code === 6
             ? 'The queue has changed since the preview. Review the change again.'
-            : r.error || r.out || 'queue.mjs area failed',
+            : r.error || r.out || 'cq area failed',
       },
     };
   return { status: 200, answer: { ok: true, message: r.out } };
@@ -1015,7 +1015,7 @@ async function planPrioritize(b) {
         changed: ok ? (r.data.changed ?? null) : null,
         changes: ok ? (r.data.changes ?? []) : [],
         warnings: ok ? (r.data.warnings ?? []) : (r.data?.warnings ?? []),
-        error: ok ? [] : [errorText(r, 'queue.mjs plan prioritize-many failed')],
+        error: ok ? [] : [errorText(r, 'cq plan prioritize-many failed')],
         can: ok,
       },
     };
@@ -1033,7 +1033,7 @@ async function planPrioritize(b) {
         outdated,
         message: outdated
           ? 'The plan register has changed since the preview. Review the draft again.'
-          : errorText(r, 'queue.mjs plan prioritize-many failed'),
+          : errorText(r, 'cq plan prioritize-many failed'),
       },
     };
   }
@@ -1184,7 +1184,7 @@ async function planBulk(b) {
         ok: false,
         outdated,
         message: notUndone.length
-          ? `${reason}\nSomething was saved and could not be undone automatically (changelog no. ${written.join(', ')}). Use queue.mjs plan undo.`
+          ? `${reason}\nSomething was saved and could not be undone automatically (changelog no. ${written.join(', ')}). Use cq plan undo.`
           : reason,
       },
     };
@@ -1215,7 +1215,7 @@ async function planUndo(b) {
         answer: {
           ok: false,
           undone,
-          message: `${errorText(r, 'queue.mjs plan undo failed')}${undone ? ` (${undone} of ${call.length} are undone)` : ''}`,
+          message: `${errorText(r, 'cq plan undo failed')}${undone ? ` (${undone} of ${call.length} are undone)` : ''}`,
         },
       };
     }
@@ -1311,7 +1311,7 @@ async function planCheck() {
   if (checkCache?.key === key) return checkCache.answer;
   const r = await queueJson(['plan', 'check', '--json']);
   if (!(r.ok && r.data?.ok === true))
-    return { ok: false, message: errorText(r, 'queue.mjs plan check failed') };
+    return { ok: false, message: errorText(r, 'cq plan check failed') };
   const unregistered = (r.data.unregistered ?? []).filter((s) => typeof s === 'string');
   const answer = { ok: true, unregistered, groups: PRIVACY.unregisteredGroups(unregistered) };
   checkCache = { key, answer };
@@ -1353,7 +1353,7 @@ async function write(filePath, b) {
     console.log(`${clock} ${what}: ${r.ok ? 'ok' : `failed (${r.error || r.out})`}`);
     return r.ok
       ? { status: 200, answer: { ok: true, message: r.out, info } }
-      : { status: 409, answer: { ok: false, message: r.error || r.out || 'queue.mjs failed' } };
+      : { status: 409, answer: { ok: false, message: r.error || r.out || 'cq failed' } };
   };
   const no = (message) => ({ status: 400, answer: { ok: false, message } });
 
@@ -1816,7 +1816,7 @@ const server = http.createServer(async (req, res) => {
       if (!ids.length || ids.length > 10 || ids.some((x) => !x))
         return json(res, 400, { ok: false, message: 'invalid id' });
       const r = await queueMjs(['cloud-package', ...ids]);
-      if (!r.ok) return json(res, 409, { ok: false, message: r.error || 'queue.mjs cloud-package failed' });
+      if (!r.ok) return json(res, 409, { ok: false, message: r.error || 'cq cloud-package failed' });
       return json(res, 200, { ok: true, text: r.out });
     }
 
@@ -1824,11 +1824,11 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && filePath === '/api/cloud-bundles') {
       const r = await queueMjs(['cloud-bundles', '--json']);
       if (!r.ok)
-        return json(res, 500, { ok: false, message: r.error || 'queue.mjs cloud-bundles failed' });
+        return json(res, 500, { ok: false, message: r.error || 'cq cloud-bundles failed' });
       try {
         return json(res, 200, { ok: true, data: JSON.parse(r.out) });
       } catch {
-        return json(res, 500, { ok: false, message: 'invalid response from queue.mjs cloud-bundles' });
+        return json(res, 500, { ok: false, message: 'invalid response from cq cloud-bundles' });
       }
     }
 

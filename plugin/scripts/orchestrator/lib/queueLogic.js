@@ -94,8 +94,9 @@ const CALIBRATED = {
 // number with `queue.mjs limit dailyBudget <usd>`.
 // nightRun / nightWindow: with nightRun off, no new tasks are started in the night window (local time, "23-06" =
 // from 23:00 to 06:00). Default is on.
-// autocompact: automatic compaction of the orchestrator session. Off (default): notice with a ready /compact line, so the owner
-// follows along. On: Claude Code compacts by itself (autoCompactEnabled on, window 300k) and the queue resumes automatically. The hooks
+// autocompact: automatic compaction of the orchestrator session. On (default, as in Claude Code itself): Claude Code compacts
+// by itself (autoCompactEnabled on, window 300k) and the queue resumes automatically. Off: notice with a ready /compact line,
+// so the owner follows along (also turn off Claude Code's own compaction then). The hooks
 // read the value (contextGuard.compactMode); `queue.mjs compact auto|manual`.
 const DEFAULT_LIMITS = {
   maxConcurrent: 5,
@@ -105,10 +106,11 @@ const DEFAULT_LIMITS = {
   dailyBudget: null,
   nightRun: true,
   nightWindow: '23-06',
-  autocompact: false,
+  autocompact: true,
 };
-/** The time zone the night window and the daily budget's day apply in. */
-const NIGHT_TZ = 'Europe/Oslo';
+/** The time zone the night window and the daily budget's day apply in: the machine's own (the TZ environment variable
+ * overrides it). */
+const NIGHT_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 /**
  * Statuses in which the task keeps its ownership (running, picked by a person or session, delivered and waiting for
@@ -207,7 +209,7 @@ function validateNewField(o, register, { stringProject = true } = {}) {
       !Object.hasOwn(register ?? {}, o.project)
     )
       error.push(
-        `unknown project ${o.project} (create it first: queue.mjs project ${o.project} --title "…")`,
+        `unknown project ${o.project} (create it first: cq project ${o.project} --title "…")`,
       );
   }
   // Plan entry the task belongs to (id in scripts/.queue/plans.json; queue.mjs checks that it exists).
@@ -240,7 +242,7 @@ function validateNewField(o, register, { stringProject = true } = {}) {
       Number.isFinite(Date.parse(p.at)) &&
       (p.to == null || (typeof p.to === 'string' && Number.isFinite(Date.parse(p.to)))) &&
       (p.reason == null || typeof p.reason === 'string');
-    if (!valid) error.push('parked must be { by, at, reason?, to? } (set with queue.mjs park)');
+    if (!valid) error.push('parked must be { by, at, reason?, to? } (set with cq park)');
   }
   return error;
 }
@@ -503,7 +505,7 @@ function newRegister(register, changes, areas = {}) {
         error.push(`${pid}: area must be a short kebab-case id`);
       else if (!Object.hasOwn(areas ?? {}, field.area))
         error.push(
-          `${pid}: unknown area ${field.area} (create it first: queue.mjs area ${field.area} --title "…")`,
+          `${pid}: unknown area ${field.area} (create it first: cq area ${field.area} --title "…")`,
         );
     }
     fresh[pid] = p;
@@ -774,14 +776,14 @@ function parseStep(raw, queue) {
     if (isArea) return { stage: `area:${s}` };
     if (isProject) return { stage: `project:${s}` };
     return {
-      error: `unknown stage ${s} (neither area nor project; see queue.mjs areas and projects)`,
+      error: `unknown stage ${s} (neither area nor project; see cq areas and projects)`,
     };
   }
   const type = s.slice(0, colon);
   const rest = s.slice(colon + 1).trim();
   if (type === 'area') {
     if (!Object.hasOwn(areas, rest))
-      return { error: `unknown area ${rest} (create it with queue.mjs area ${rest} --title "…")` };
+      return { error: `unknown area ${rest} (create it with cq area ${rest} --title "…")` };
     return { stage: `area:${rest}` };
   }
   if (type === 'project') {
@@ -933,14 +935,14 @@ function parkedText(o) {
   const p = o.parked ?? {};
   return (
     `parked${p.to ? ` until ${utcText(p.to)}` : ''} by ${p.by ?? '?'}` +
-    `${p.reason ? `: ${p.reason}` : ''} (queue.mjs continue ${o.id})`
+    `${p.reason ? `: ${p.reason}` : ''} (cq continue ${o.id})`
   );
 }
 
 /** The text for a task outside the focus when the rest waits. */
 function outsideText(queue) {
   const name = queue?.focus?.name ? ` "${queue.focus.name}"` : '';
-  return `outside focus${name} (rest waiting; queue.mjs focus)`;
+  return `outside focus${name} (rest waiting; cq focus)`;
 }
 
 /**
@@ -1106,7 +1108,7 @@ function setFocus(queue, input, now = new Date().toISOString()) {
   });
   const status = focusStatus(trial, { now: nowMs });
   if (status.active && status.readyOnes === 0)
-    warnings.push('the focus gives no ready tasks now (see queue.mjs focus)');
+    warnings.push('the focus gives no ready tasks now (see cq focus)');
   queue.focus = focus;
   return { error: [], warnings, focus };
 }
@@ -1214,7 +1216,7 @@ function focusStatus(queue, { now = Date.now(), canStart = null, context = null 
   if (k.expired) {
     out.notice =
       `Focus period${name} is over (until ${utcText(f.to)}). The queue is ranked as without focus until it is changed: ` +
-      'queue.mjs focus set … or queue.mjs focus off.';
+      'cq focus set … or cq focus off.';
     return out;
   }
   if (!k.applies) return out;
@@ -1249,7 +1251,7 @@ function focusStatus(queue, { now = Date.now(), canStart = null, context = null 
       : '';
     const rest =
       out.rest === 'wait'
-        ? ' The rest waits, so free slots stay empty until the focus has ready work or is changed (queue.mjs focus).'
+        ? ' The rest waits, so free slots stay empty until the focus has ready work or is changed (cq focus).'
         : ' The rest fills free slots (rest: fill).';
     out.notice =
       out.in_focus === 0 && out.inProgress === 0
@@ -1279,10 +1281,10 @@ function setArea(queue, oid, field = {}) {
       .map(([pid]) => pid);
     if (users.length)
       error.push(
-        `${oid} is used by ${users.join(', ')} (move them first: queue.mjs area ${oid} --remove …)`,
+        `${oid} is used by ${users.join(', ')} (move them first: cq area ${oid} --remove …)`,
       );
     if ((queue.focus?.order ?? []).includes(`area:${oid}`))
-      error.push(`${oid} is in the focus (edit the focus first: queue.mjs focus set … or focus off)`);
+      error.push(`${oid} is in the focus (edit the focus first: cq focus set … or focus off)`);
     if (error.length) return { error };
     delete areas[oid];
     queue.areas = areas;
@@ -1512,7 +1514,7 @@ function conflict(candidate, active) {
  */
 function blockerParts(o, tasks, resolved = []) {
   if (o.status === 'proposed')
-    return [{ type: 'status', text: `proposed (approve it first: queue.mjs approve ${o.id})` }];
+    return [{ type: 'status', text: `proposed (approve it first: cq approve ${o.id})` }];
   if (o.status === 'picked')
     return [{ type: 'status', text: `picked by ${o.picked_by ?? '?'}` }];
   if (o.status !== 'waiting') return [{ type: 'status', text: `status ${o.status}` }];
@@ -1807,7 +1809,7 @@ function state(queue, dailyUsage, { uncommitted = [], now = Date.now(), cursor =
 // ---- Budget guard -----------------------------------------------------------------------------------------
 
 /**
- * Is today's usage over the daily budget? `limits.dailyBudget` in the queue file is USD API equivalent per Oslo day; not
+ * Is today's usage over the daily budget? `limits.dailyBudget` in the queue file is USD API equivalent per local day; not
  * set, null, 0 or negative = off. The usage is measured by the caller (queue.mjs reads the time log via timeCost.js).
  * The usage of agents that are still running is counted only when they stop (hook-time writes the row then), so the guard
  * kicks in a little after the limit has actually been passed: set the limit with a margin.
@@ -1822,7 +1824,7 @@ function budgetGuard(queue, dailyUsage) {
   }
   const usage = Math.round(Number(dailyUsage ?? 0) * 100) / 100;
   const stop = usage >= limit;
-  const counts = `${usage.toFixed(2)} of ${limit.toFixed(2)} USD (API equivalent, Oslo day)`;
+  const counts = `${usage.toFixed(2)} of ${limit.toFixed(2)} USD (API equivalent, local day)`;
   return {
     active: true,
     stop,
@@ -1830,7 +1832,7 @@ function budgetGuard(queue, dailyUsage) {
     usage,
     message: stop
       ? `DAILY BUDGET USED UP: ${counts}. No new tasks are started today. Running tasks finish ` +
-        'as usual. The owner can raise the limit (queue.mjs limit dailyBudget <usd>) or start one task with start <id> --force.'
+        'as usual. The owner can raise the limit (cq limit dailyBudget <usd>) or start one task with start <id> --force.'
       : `Daily budget: ${counts} used.`,
   };
 }
@@ -1844,7 +1846,7 @@ function parseNightWindow(s) {
   return { from: Number(m[1]), to: Number(m[2]) };
 }
 
-/** The hour (0–23) a point in time has in the time zone `tz` (Oslo time by default, daylight saving time accounted for). */
+/** The hour (0–23) a point in time has in the time zone `tz` (local time by default, daylight saving time accounted for). */
 function hourIn(now, tz = NIGHT_TZ) {
   const t = new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', hourCycle: 'h23' })
     .format(new Date(now))
@@ -1862,7 +1864,7 @@ function inNightWindow(window, now = Date.now(), tz = NIGHT_TZ) {
 const clockTime = (t) => `${String(t).padStart(2, '0')}:00`;
 
 /**
- * Night pause: with `limits.nightRun` = false no new tasks are started inside the night window (Oslo time). Running
+ * Night pause: with `limits.nightRun` = false no new tasks are started inside the night window (local time). Running
  * tasks finish, and delivered tracks are received and merged as usual; only new starts stop. The default (on) gives
  * unchanged behavior. `queue.mjs next` then gives exit 5 and `start` refuses without --force (startGuard).
  * @returns {{ active: boolean, stop: boolean, to?: string, summary?: string, message?: string }}
@@ -1881,10 +1883,10 @@ function nightGuard(queue, now = Date.now(), tz = NIGHT_TZ) {
     to,
     summary,
     message: stop
-      ? `Night pause until ${to}: nightRun is off, so no new tasks are started between ${from} and ${to} (Oslo time). ` +
+      ? `Night pause until ${to}: nightRun is off, so no new tasks are started between ${from} and ${to} (local time). ` +
         'Running tasks finish, and delivered tracks are received and merged as usual. The owner can turn nightRun on ' +
-        '(queue.mjs limit nightRun on) or start one task with start <id> --force.'
-      : `Night run is off: no new tasks are started between ${from} and ${to} (Oslo time).`,
+        '(cq limit nightRun on) or start one task with start <id> --force.'
+      : `Night run is off: no new tasks are started between ${from} and ${to} (local time).`,
   };
 }
 
@@ -1943,7 +1945,7 @@ function windDownGuard(cursor, now = Date.now()) {
       'are started from this session. Finish receiving, review, fix rounds and merge of started tasks, update ' +
       `the handover note (${handoverNote()}) and ask the owner to compact now (the hook message has ` +
       'a ready /compact line); the wind-down is lifted by itself after the compaction. A new session only as ' +
-      'a last resort (the session has hung): `queue.mjs orchestrator pulse --session "<new name>"` resets the wind-down. ' +
+      'a last resort (the session has hung): `cq orchestrator pulse --session "<new name>"` resets the wind-down. ' +
       "Owner's word: start <id> --force.",
   };
 }
@@ -1976,7 +1978,7 @@ function limitText(name, v) {
 
 /**
  * Interprets a new limit value. max*: integer ≥ 0 (maxConcurrent 0 stops the queue). dailyBudget: number > 0 (USD), or
- * "off" for no limit. nightRun: "on" or "off". nightWindow: "HH-HH" in Oslo time, e.g. 23-06. autocompact:
+ * "off" for no limit. nightRun: "on" or "off". nightWindow: "HH-HH" in local time, e.g. 23-06. autocompact:
  * "on"/"auto" or "off"/"manual".
  * With `current` (the limits as they are now) maxDPlus cannot become larger than maxConcurrent. maxDb can:
  * picked tasks count in maxDb, but not in maxConcurrent, so 6 tracks with migrations and 5 agents makes sense.
@@ -2011,7 +2013,7 @@ function parseLimit(name, raw, current) {
     const v = parseNightWindow(s);
     if (!v)
       return {
-        error: 'nightWindow must have the form HH-HH in Oslo time (two digits, 00–23), e.g. 23-06, and from and to cannot be equal',
+        error: 'nightWindow must have the form HH-HH in local time (two digits, 00–23), e.g. 23-06, and from and to cannot be equal',
       };
     return { val: `${String(v.from).padStart(2, '0')}-${String(v.to).padStart(2, '0')}` };
   }
@@ -2193,7 +2195,7 @@ function markLogged(queue, ids) {
   if (!list.length) error.push('--mark-logged requires at least one question id');
   for (const id of list) {
     const a = queue.resolutions?.[id];
-    if (!a) error.push(`${id} is not resolved with a timestamp (queue.mjs resolve ${id} --answer "…")`);
+    if (!a) error.push(`${id} is not resolved with a timestamp (cq resolve ${id} --answer "…")`);
     else if (a.answer == null) error.push(`${id} has no answer to enter`);
   }
   if (error.length) return { marked: [], error };
@@ -2286,7 +2288,7 @@ function waitingOnError(o, queue, { earlier = [] } = {}) {
     else if (!questionRegistered(queue, sp))
       error.push(
         `waiting_on ${sp} is not registered with text and type: add it under "question" in the add file, or first ` +
-          `queue.mjs question ${sp} --text "…" --type <${QUESTION_TYPES.join('|')}>`,
+          `cq question ${sp} --text "…" --type <${QUESTION_TYPES.join('|')}>`,
       );
   }
   return error;
@@ -2324,8 +2326,8 @@ function resolveWaitsLines(list, { max = 10 } = {}) {
   if (!list?.length) return [];
   const what = {
     freeText: 'free text, not a question id: register a question and switch to the id',
-    unregistered: 'unregistered: queue.mjs question <id> --text "…" --type <type>',
-    'resolved-blocks': 'answered, but not in resolved: queue.mjs resolve <id> again',
+    unregistered: 'unregistered: cq question <id> --text "…" --type <type>',
+    'resolved-blocks': 'answered, but not in resolved: cq resolve <id> again',
   };
   const taskIds = new Set(list.map((x) => x.id));
   return [
@@ -2338,7 +2340,7 @@ function resolveWaitsLines(list, { max = 10 } = {}) {
           `  ${x.id} (${x.status}) waiting on "${cutText(x.sp, 70)}": ${what[x.reason] ?? x.reason}`,
       ),
     ...(list.length > max
-      ? [`  +${list.length - max} more (queue.mjs state, the field resolveWaits)`]
+      ? [`  +${list.length - max} more (cq state, the field resolveWaits)`]
       : []),
   ];
 }
@@ -2396,7 +2398,7 @@ function answerBlock(o, queue) {
     return `- ${id}${what} ${word}: "${a.answer}" (${a.by ?? '?'}, ${utcText(a.time)}).`;
   });
   return [
-    '**Owner answer to what the task waited on** (binding; from `queue.mjs resolve`, entered in the decision log by the orchestrator):',
+    '**Owner answer to what the task waited on** (binding; from `cq resolve`, entered in the decision log by the orchestrator):',
     ...lines,
   ].join('\n');
 }
@@ -2472,7 +2474,7 @@ function pick(
       o.status === 'picked'
         ? `already picked by ${o.picked_by ?? '?'}`
         : o.status === 'proposed'
-          ? `proposed (approve it first: queue.mjs approve ${id})`
+          ? `proposed (approve it first: cq approve ${id})`
           : `status ${o.status}`;
     return { error: `${id} cannot be picked: ${why}` };
   }
@@ -2581,17 +2583,17 @@ function setStatus(o, status, now = new Date().toISOString()) {
   if (!STATUSES.has(status)) return { error: `unknown status ${status}` };
   if (status === 'picked')
     return {
-      error: 'status picked is set with queue.mjs pick <id> --by "<who>" (assigns branch and migration block)',
+      error: 'status picked is set with cq pick <id> --by "<who>" (assigns branch and migration block)',
     };
   // Status external belongs only to records outside the queue, and such a record never becomes a task
   // that the queue can start (set waiting would have turned it into one).
   if (status === 'external')
     return {
-      error: 'status external is set with queue.mjs external add --name "<session>" --files <…> (record outside the queue)',
+      error: 'status external is set with cq external add --name "<session>" --files <…> (record outside the queue)',
     };
   if (isExternalRow(o) && status !== 'done' && status !== 'cancelled')
     return {
-      error: `${o.id} is a record outside the queue; it can only be ended (queue.mjs external done "${o.external_name ?? o.id}")`,
+      error: `${o.id} is a record outside the queue; it can only be ended (cq external done "${o.external_name ?? o.id}")`,
     };
   const from = o.status;
   if (status === 'review' && !o.delivered) o.delivered = now;
@@ -2670,7 +2672,7 @@ function qaDeviation(queue, id, text, now = new Date().toISOString()) {
   const isPath = typeof o.mission === 'string' && !/\n/.test(o.mission) && /\.md$/i.test(o.mission);
   const link = isPath
     ? `the mission: ${o.mission}`
-    : `the mission is on ${o.id} in the queue (queue.mjs show --all)`;
+    : `the mission is on ${o.id} in the queue (cq show --all)`;
   const fix = {
     id: `${root}-QA${n}`,
     title: `QA fix of ${o.id}: ${summary}`,
@@ -2796,7 +2798,7 @@ function consistency(externalOnes, tasks) {
         subject: c.subject ?? '',
         id,
         status: o.status,
-        proposed: o.status === 'waiting' ? `queue.mjs external accept ${id} ${summary}` : null,
+        proposed: o.status === 'waiting' ? `cq external accept ${id} ${summary}` : null,
       });
     }
   }
@@ -2973,7 +2975,7 @@ function trackFileWarning(o, collisions = [], mentioned = []) {
       );
   }
   if (collisions.length > MAX)
-    lines.push(`- … and ${collisions.length - MAX} more (queue.mjs external)`);
+    lines.push(`- … and ${collisions.length - MAX} more (cq external)`);
   if (mentioned.length)
     lines.push(
       `Commits outside the queue that mention ${o.id} (is something already done?): ` +
@@ -3040,7 +3042,7 @@ function externalAdd(
       domain: 'external',
       class: 'K',
       mission:
-        'Registered with queue.mjs external add. Not a task: the row owns the files until external done.',
+        'Registered with cq external add. Not a task: the row owns the files until external done.',
       value: 5,
       content_min: 0,
       migr_tens: 0,
@@ -3088,7 +3090,7 @@ function externalDone(queue, nameOrId, now = new Date().toISOString()) {
     (o) => isExternalRow(o) && o.status === 'external' && (o.external_name === x || o.id === x),
   );
   if (!row)
-    return { error: `no active record outside the queue with the name ${x} (see queue.mjs external)` };
+    return { error: `no active record outside the queue with the name ${x} (see cq external)` };
   row.status = 'done';
   row.done = now;
   return { row };
@@ -3104,7 +3106,7 @@ function externalAccept(queue, id, sha, { mentioned = true, now = new Date().toI
   const o = (queue.tasks ?? []).find((x) => x.id === id);
   if (!o) return { error: `unknown task ${id}` };
   if (isExternalRow(o))
-    return { error: `${id} is a record outside the queue (queue.mjs external done)` };
+    return { error: `${id} is a record outside the queue (cq external done)` };
   if (!sha) return { error: 'external accept <id> <sha>' };
   if (o.status !== 'waiting' && o.status !== 'proposed') {
     const why =
@@ -3651,7 +3653,7 @@ function cloudCancel(queue, id, { commits = 0, now = new Date().toISOString() } 
 
 /** The blocker a task in the batch queue gets (show, the board, start, pick). */
 const BATCHED_BLOCKER =
-  'in the batch queue (packed into a track with queue.mjs batch pack; taken out with edit --json \'{"batched":false}\')';
+  'in the batch queue (packed into a track with cq batch pack; taken out with edit --json \'{"batched":false}\')';
 
 /**
  * The target size per class in content minutes (add-to-queue): `min` = lower target (a group is "ready for packing" from
@@ -3718,7 +3720,7 @@ function batchedError(o, tasks = [], resolved = []) {
     const d = perId.get(dep);
     if (d && d.id !== o.id && inBatchQueue(d))
       error.push(
-        `depends on ${dep}, which is in the batch queue and is not started alone (pack it or take it out first: queue.mjs edit ${dep} --json '{"batched":false}')`,
+        `depends on ${dep}, which is in the batch queue and is not started alone (pack it or take it out first: cq edit ${dep} --json '{"batched":false}')`,
       );
   }
   return error;
@@ -3935,7 +3937,7 @@ function batchPack(queue, ids, { newId, title, mission, by, now = new Date().toI
   if (new Set(list).size !== list.length) error.push('the same id appears more than once');
   if (list.length < 2)
     error.push(
-      'pack requires at least two tasks (one task is taken out with queue.mjs edit <id> --json \'{"batched":false}\')',
+      'pack requires at least two tasks (one task is taken out with cq edit <id> --json \'{"batched":false}\')',
     );
   if (!newId || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,40}$/.test(newId))
     error.push('--id <new-id> missing or has invalid characters');
@@ -3994,7 +3996,7 @@ function batchPack(queue, ids, { newId, title, mission, by, now = new Date().toI
     class: first.class,
     mission,
     ...(sources.length ? { source: sources.join(' | ') } : {}),
-    added_by: by ?? 'queue.mjs batch pack',
+    added_by: by ?? 'cq batch pack',
     merged_from: list,
   };
   const feature = commonOrFirst(
@@ -4043,7 +4045,7 @@ function batchMissionText(fresh, parts, texts, now = new Date().toISOString()) {
   const lines = [
     `# ${fresh.id}: combined track (${parts.length} parts, ${fresh.class}, approx. ${fresh.content_min} content minutes)`,
     '',
-    `Combined track of ${parts.map((o) => o.id).join(', ')} (batch queue, queue.mjs batch pack ${date}, to save fixed ` +
+    `Combined track of ${parts.map((o) => o.id).join(', ')} (batch queue, cq batch pack ${date}, to save fixed ` +
       'overhead per track). Do them in this order, and commit per part (the commit message mentions the part id, e.g. ' +
       `"${parts[0].id}: …"). Each part below is the original track description unchanged; "Depends on" inside the parts ` +
       'that points to another part in this track is fulfilled by doing the parts in order. Owned files, owned DB and ' +
@@ -4131,10 +4133,10 @@ function stateLine(t) {
   return (
     `${t.activeOnes} active · ${t.picked ? `${t.picked} picked · ` : ''}${t.waiting} waiting · ${t.proposed} proposed · ` +
     `${t.canStart} can start now` +
-    `${t.batched ? ` · ${t.batched} in the batch queue (queue.mjs batch)` : ''}` +
-    `${t.qa ? ` · ${t.qa} in the QA list (queue.mjs qa)` : ''}${t.external ? ` · ${t.external} outside the queue (queue.mjs external)` : ''}` +
-    `${t.parked ? ` · ${t.parked} parked (queue.mjs continue)` : ''}` +
-    `${t.focus?.notice ? ' · FOCUS WARNING (queue.mjs focus)' : ''}` +
+    `${t.batched ? ` · ${t.batched} in the batch queue (cq batch)` : ''}` +
+    `${t.qa ? ` · ${t.qa} in the QA list (cq qa)` : ''}${t.external ? ` · ${t.external} outside the queue (cq external)` : ''}` +
+    `${t.parked ? ` · ${t.parked} parked (cq continue)` : ''}` +
+    `${t.focus?.notice ? ' · FOCUS WARNING (cq focus)' : ''}` +
     `${t.empty ? ' · THE QUEUE IS OUT OF WORK' : ''}`
   );
 }
@@ -4180,7 +4182,7 @@ function summaryView(
   const guard = startGuard(queue, dailyUsage, { now, cursor });
   const startable = guard ? [] : selectNext(queue, now, { uncommitted });
   out.push(
-    `STARTABLE NOW (${startable.length}${startable.length ? '; queue.mjs fill starts them' : ''}):`,
+    `STARTABLE NOW (${startable.length}${startable.length ? '; cq fill starts them' : ''}):`,
   );
   for (const v of startable) {
     const o = tasks.find((x) => x.id === v.id);
@@ -4223,7 +4225,7 @@ function summaryView(
     const readyOnes = batch.filter((g) => g.ready).length;
     out.push(
       `BATCH_QUEUE (${n} task(s) in ${batch.length} group(s)${readyOnes ? `, ${readyOnes} ready for packing` : ''}; ` +
-        'queue.mjs batch)',
+        'cq batch)',
     );
   }
   if (t.ownerQuestion.length)
@@ -4241,7 +4243,7 @@ function summaryView(
     const n = nightGuard(queue, now);
     if (n.active && n.message) out.push(cut(n.message));
   }
-  out.push('Full list: queue.mjs show --full (or --all, --grouped, --project <pid>).');
+  out.push('Full list: cq show --full (or --all, --grouped, --project <pid>).');
   return out;
 }
 
@@ -5210,11 +5212,11 @@ function addProjectWarnings(newOnes, register) {
     if (pid === WITHOUT_PROJECT) {
       out.push(
         f.pid
-          ? `${n.id} has no project; proposed ${f.pid} (${f.reason}). Set "project": "${f.pid}", or run queue.mjs classify --execute${f.safe ? '' : ' (the suggestion is uncertain: see queue.mjs classify)'}`
+          ? `${n.id} has no project; proposed ${f.pid} (${f.reason}). Set "project": "${f.pid}", or run cq classify --execute${f.safe ? '' : ' (the suggestion is uncertain: see cq classify)'}`
           : `${n.id} has no project and lands in "Sort" (${f.reason}). Set "project", or give the project a fileRoot/prefix`,
       );
     } else if (f.disagree) {
-      out.push(`${n.id}: ${f.reason}. Check the project (queue.mjs classify --disagree)`);
+      out.push(`${n.id}: ${f.reason}. Check the project (cq classify --disagree)`);
     }
     const known = reg[pid]?.features;
     if (
@@ -5562,7 +5564,7 @@ function infoView(o) {
   if (mark.length)
     out.push(`remarks: ${mark.length}; last: ${cutText(mark[mark.length - 1], 160)}`);
   if (o.mission) out.push(`mission: ${cutText(String(o.mission).replace(/\s+/g, ' '), 200)}`);
-  out.push('One field: queue.mjs info <id> --field <name> (also cost.usd, result.line).');
+  out.push('One field: cq info <id> --field <name> (also cost.usd, result.line).');
   return out;
 }
 

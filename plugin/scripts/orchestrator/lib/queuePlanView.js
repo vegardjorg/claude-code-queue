@@ -347,9 +347,9 @@
 
   // ---- Derived properties of an entry ------------------------------------------------------------------------------
 
-  /** Date (YYYY-MM-DD) in Oslo time for a point in time. */
+  /** Date (YYYY-MM-DD) in local time (the browser's time zone) for a point in time. */
   function osloDate(now) {
-    return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Oslo' }).format(new Date(now));
+    return new Intl.DateTimeFormat('sv-SE').format(new Date(now));
   }
 
   /** Whole days from `from` to `to` (both YYYY-MM-DD). */

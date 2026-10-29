@@ -26,14 +26,14 @@ const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'frida
 const HOUR_MS = 3_600_000;
 
 /**
- * Default reset when the config says nothing: tuesday (getUTCDay number 2) at 19.00 in Europe/Oslo, without
+ * Default reset when the config says nothing: tuesday (getUTCDay number 2) at 19.00 in the machine's local time zone, without
  * planName. Overridden in queue.config.json under `capacity`.
  */
 const RESET = Object.freeze({
   weekday: 2,
   hour: 19,
   minute: 0,
-  tz: 'Europe/Oslo',
+  tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
   planName: null,
 });
 
@@ -352,7 +352,7 @@ function quotaCap(p, activeOnes) {
     };
   return {
     limit: null,
-    message: `${text} (Notice only; queue.mjs capacity --mode cap makes it a cap.)`,
+    message: `${text} (Notice only; cq capacity --mode cap makes it a cap.)`,
   };
 }
 
@@ -429,8 +429,8 @@ function lines(p) {
   out.push(
     latest
       ? `Calibrated ${tt(Date.parse(latest.time))}: ${latest.percent} % = ${latest.usd} USD → ${latest.usd_per_100} per 100 %. ` +
-          'New: queue.mjs capacity --calibrate <percent from Claude>.'
-      : 'Default constant (not calibrated yet). Calibrate: queue.mjs capacity --calibrate <percent from Claude>.',
+          'New: cq capacity --calibrate <percent from Claude>.'
+      : 'Default constant (not calibrated yet). Calibrate: cq capacity --calibrate <percent from Claude>.',
   );
   return out;
 }

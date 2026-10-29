@@ -125,7 +125,7 @@ describe('proposals from agents', () => {
   it('a proposal is never started, and the blocker says how it is approved', () => {
     const all = [o('F1', { status: 'proposed', added_by: 'SB-D2' }), o('V1')];
     expect(K.selectNext({ tasks: all }).map((v) => v.id)).toEqual(['V1']);
-    expect(K.blockers(all[0], all)[0]).toMatch(/queue\.mjs approve F1/);
+    expect(K.blockers(all[0], all)[0]).toMatch(/cq approve F1/);
     expect(K.state({ tasks: all }).proposed).toBe(1);
     expect(K.validate({ ...o('X', { status: 'proposed' }), mission: 'text' })).toEqual([]);
   });

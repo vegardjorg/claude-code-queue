@@ -311,7 +311,7 @@ describe('classification of commits on main', () => {
       expect.objectContaining({
         id: 'A-T8c',
         status: 'waiting',
-        proposed: 'queue.mjs external accept A-T8c abcdef12',
+        proposed: 'cq external accept A-T8c abcdef12',
       }),
     ]);
   });
@@ -574,7 +574,7 @@ describe('against a temporary git repo', () => {
     expect(b.consistency).toEqual([
       expect.objectContaining({
         id: 'A-T8c',
-        proposed: `queue.mjs external accept A-T8c ${external.slice(0, 8)}`,
+        proposed: `cq external accept A-T8c ${external.slice(0, 8)}`,
       }),
     ]);
     expect(b.branches.map((g) => g.name)).toEqual(['hotfix/z']);

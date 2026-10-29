@@ -316,7 +316,7 @@
 //   node scripts/orchestrator/queue.mjs plan doc web [--write] [--dry] [--json]    (manual only: GET on the published
 //        web addresses, whether they answer and the version stated there)
 //
-// Budget guard: with limits.dailyBudget set (USD API equivalent per day in Europe/Oslo, the owner sets the number) `next`
+// Budget guard: with limits.dailyBudget set (USD API equivalent per local day, the owner sets the number) `next`
 // proposes nothing and `start` refuses when today's usage has reached the limit. The usage is read from the time log
 // (config().timeLog), deduplicated per agent (lib/timeCost.js, the same numbers as `log-time.mjs --cost`). Default: off.
 //
@@ -535,7 +535,7 @@ function batchPackExecute(planFn) {
         newId: p.id,
         title: p.title,
         mission: missionRef(file),
-        by: 'queue.mjs batch pack',
+        by: 'cq batch pack',
         now,
       });
       if (r.error.length) die(`Nothing packed (${p.id ?? 'without id'}):\n  ${r.error.join('\n  ')}`);
@@ -616,16 +616,16 @@ function writeExternalWarning(o) {
   if (v.collisions.length) {
     console.log(
       `WARNING: ${v.collisions.length} change(s) in the owned files outside the queue since ${o.id} was added. ` +
-        'The track file gets the warning (queue.mjs trackFile), so the track reads the diff before it builds:',
+        'The track file gets the warning (cq trackFile), so the track reads the diff before it builds:',
     );
     for (const k of v.collisions.slice(0, 5))
       console.log(`  ${L.collisionText(k, { withId: false })}`);
     if (v.collisions.length > 5)
-      console.log(`  ... and ${v.collisions.length - 5} more (queue.mjs external --all)`);
+      console.log(`  ... and ${v.collisions.length - 5} more (cq external --all)`);
   }
   if (v.mentioned.length)
     console.log(
-      `NOTE: commits outside the queue mention ${o.id}; is it already completed? (queue.mjs external accept ${o.id} <sha>): ` +
+      `NOTE: commits outside the queue mention ${o.id}; is it already completed? (cq external accept ${o.id} <sha>): ` +
         v.mentioned
           .slice(0, 3)
           .map((c) => `${c.summary} "${c.subject.slice(0, 50)}"`)
@@ -683,7 +683,7 @@ function parallelWarning() {
   try {
     for (const l of D.diagnoseLines(D.parallelDiagnose(read()))) console.log(l);
   } catch (e) {
-    console.log(`(The queue diagnosis failed: ${e?.message ?? e}. Run queue.mjs diagnose.)`);
+    console.log(`(The queue diagnosis failed: ${e?.message ?? e}. Run cq diagnose.)`);
   }
 }
 
@@ -740,7 +740,7 @@ const editLogged = (action, fn) =>
 /** "(undo: queue.mjs undo)" after a logged write. */
 const undoHint = () =>
   lastEntry
-    ? `Changelog no. ${lastEntry.nr} (${lastEntry.changes.length} field(s)); undo: queue.mjs undo`
+    ? `Changelog no. ${lastEntry.nr} (${lastEntry.changes.length} field(s)); undo: cq undo`
     : null;
 
 // ---- The plan register: storage under the same lock as the queue ---------------------------------------
@@ -841,7 +841,7 @@ function planAnswer(r, heading) {
   for (const l of planDiffLines(r.changes)) console.log(`  ${l}`);
   if (!r.changes.length) console.log('  (no change)');
   for (const x of r.warnings ?? []) console.log(`WARNING: ${x}`);
-  if (r.log) console.log(`Changelog no. ${r.log} in plans.json; undo: queue.mjs plan undo`);
+  if (r.log) console.log(`Changelog no. ${r.log} in plans.json; undo: cq plan undo`);
 }
 /** The positional arguments before the first flag (`plan prioritize A B now --category ...`). */
 const forFlag = (from) => {
@@ -1029,7 +1029,7 @@ function docCheckAnswer(json, findings, ran, written) {
     for (const l of planDiffLines(written.changes)) console.log(`  ${l}`);
     for (const x of written.warnings ?? []) console.log(`WARNING: ${x}`);
     if (written.log)
-      console.log(`Changelog no. ${written.log} in plans.json; undo: queue.mjs plan undo`);
+      console.log(`Changelog no. ${written.log} in plans.json; undo: cq plan undo`);
   } else if (findings.some((f) => f.doc && f.check !== 'revision'))
     console.log('Enter them as problems: add --write (--dry shows them first).');
 }
@@ -1121,7 +1121,7 @@ function planModules(json) {
   if (!dry && !empty && undoHint()) console.log(undoHint());
   if (!link)
     console.log(
-      'Projects are linked with queue.mjs plan modules --link (proposed) or queue.mjs project <pid> --area <oid>.',
+      'Projects are linked with cq plan modules --link (proposed) or cq project <pid> --area <oid>.',
     );
 }
 
@@ -1167,7 +1167,7 @@ function planBackup() {
   console.log(
     push
       ? 'Backup done and pushed.'
-      : 'Backup done (push with queue.mjs plan backup --push).',
+      : 'Backup done (push with cq plan backup --push).',
   );
 }
 
@@ -1201,7 +1201,7 @@ function planActive(json) {
     console.log(r.changed ? `${id}: the cursor is removed.` : `${id}: had no marker.`);
   else
     console.log(
-      `${id}: under work (by ${r.cursor.by}, ${r.cursor.at}); end with queue.mjs plan active ${id} --end`,
+      `${id}: under work (by ${r.cursor.by}, ${r.cursor.at}); end with cq plan active ${id} --end`,
     );
 }
 
@@ -1279,7 +1279,7 @@ function planDoc(json) {
     }
     if (!reg.documents.length) {
       console.log(
-        'The document register is empty. Add documents with: queue.mjs plan doc new --file <json>',
+        'The document register is empty. Add documents with: cq plan doc new --file <json>',
       );
       return;
     }
@@ -1409,7 +1409,7 @@ function planDoc(json) {
   } else if (under === 'web') {
     planDocWeb(json).catch((e) => die(`plan doc web failed: ${e?.message ?? e}`));
   } else {
-    die('Use: queue.mjs plan doc <show|get|new|edit|revise> ...  (see the top of the file)', under ? 1 : 0);
+    die('Use: cq plan doc <show|get|new|edit|revise> ...  (see the top of the file)', under ? 1 : 0);
   }
 }
 
@@ -1449,7 +1449,7 @@ function planCommand() {
       return;
     }
     if (!reg.entries.length) {
-      console.log('The plan register is empty. Add entries with: queue.mjs plan new --file <json>');
+      console.log('The plan register is empty. Add entries with: cq plan new --file <json>');
       return;
     }
     let previous = null;
@@ -1659,7 +1659,7 @@ function planCommand() {
         console.log(
           s.error.length
             ? `Can NOT be undone now:\n  ${s.error.join('\n  ')}`
-            : 'Can be undone (queue.mjs plan undo).',
+            : 'Can be undone (cq plan undo).',
         );
       }
       return;
@@ -1701,7 +1701,7 @@ function planCommand() {
     planDoc(json);
   } else {
     die(
-      'Use: queue.mjs plan <show|get|new|edit|prioritize|prioritize-many|combine|verify|undo|active|rules|check|modules|backup|doc> ...  (see the top of the file)',
+      'Use: cq plan <show|get|new|edit|prioritize|prioritize-many|combine|verify|undo|active|rules|check|modules|backup|doc> ...  (see the top of the file)',
       under ? 1 : 0,
     );
   }
@@ -2053,7 +2053,7 @@ if (command === 'init') {
   console.log(
     `The queue is created: ${FILE}` +
       (queue.next_migr != null ? ` (next migration block from ${queue.next_migr})` : '') +
-      '. The example project "example" (prefix EX-) can be renamed with queue.mjs project.',
+      '. The example project "example" (prefix EX-) can be renamed with cq project.',
   );
 } else if (command === 'add') {
   const source = val('--file') ? fs.readFileSync(val('--file'), 'utf8') : val('--json');
@@ -2081,7 +2081,7 @@ if (command === 'init') {
   // the plan entry must exist in the plan register (an unknown or merged entry is refused), and the entry becomes in-queue automatically.
   const planArg = a.includes('--plan') ? val('--plan') : null;
   if (a.includes('--plan') && (!planArg || planArg.startsWith('--')))
-    die('--plan requires a plan entry id (queue.mjs plan show)');
+    die('--plan requires a plan entry id (cq plan show)');
   const added = edit((queue) => {
     const error = [];
     let planWarnings = [];
@@ -2173,7 +2173,7 @@ if (command === 'init') {
   if (waiting.length) console.log(`Added: ${waiting.join(', ')}`);
   if (proposed.length)
     console.log(
-      `Added as proposed (not started until the orchestrator or the owner approves: queue.mjs approve <id...>): ${proposed.join(', ')}`,
+      `Added as proposed (not started until the orchestrator or the owner approves: cq approve <id...>): ${proposed.join(', ')}`,
     );
   const { withoutProject, withoutFeature } = added.missing;
   if (withoutProject.length || withoutFeature.length)
@@ -2187,7 +2187,7 @@ if (command === 'init') {
         .filter(Boolean)
         .join(
           '; ',
-        )}. Fix with queue.mjs edit-many --file <json> ([{ "id": "...", "project": "...", "feature": "..." }]).`,
+        )}. Fix with cq edit-many --file <json> ([{ "id": "...", "project": "...", "feature": "..." }]).`,
     );
   for (const x of added.projectWarnings) console.log(`WARNING: ${x}`);
   for (const x of added.planWarnings) console.log(`WARNING: ${x}`);
@@ -2199,7 +2199,7 @@ if (command === 'init') {
   if (added.withoutText.length)
     console.log(
       `WARNING: question without text (shown without text in "Waiting on you"): ${added.withoutText.join(', ')}. ` +
-        'Add them in "question" in the add file, or: queue.mjs question <id> --text "..." --type <type>.',
+        'Add them in "question" in the add file, or: cq question <id> --text "..." --type <type>.',
     );
 } else if (
   command === 'show' &&
@@ -2296,7 +2296,7 @@ if (command === 'init') {
     .filter(inProject);
   if (proposed.length) {
     console.log(
-      `\nSUGGESTION (${proposed.length}, not started until they are approved: queue.mjs approve <id...>):`,
+      `\nSUGGESTION (${proposed.length}, not started until they are approved: cq approve <id...>):`,
     );
     for (const o of proposed.sort((x, y) => Number(y.value ?? 5) - Number(x.value ?? 5))) {
       console.log(
@@ -2319,7 +2319,7 @@ if (command === 'init') {
     const readyOnes = batchGr.filter((g) => g.ready).length;
     console.log(
       `\nBATCH_QUEUE (${n} task(s) in ${batchGr.length} group(s)${readyOnes ? `, ${readyOnes} ready for packing` : ''}; ` +
-        'not started alone, see queue.mjs batch):',
+        'not started alone, see cq batch):',
     );
     for (const g of batchGr) console.log(cut(`  ${batchGroupLine(g)}`, WIDTH));
   }
@@ -2327,7 +2327,7 @@ if (command === 'init') {
   const registered = queue.tasks.filter((o) => L.isExternalRow(o) && o.status === 'external');
   if (registered.length) {
     console.log(
-      `\nOUTSIDE QUEUE (${registered.length}, registered with external add; owns the files until queue.mjs external done "<name>"):`,
+      `\nOUTSIDE QUEUE (${registered.length}, registered with external add; owns the files until cq external done "<name>"):`,
     );
     for (const o of registered) {
       const age = o.added_at ? L.ageText(Date.now() - Date.parse(o.added_at)) : '?';
@@ -2382,7 +2382,7 @@ if (command === 'init') {
     for (const h of skipped.slice(0, 10)) console.log(`  ${h.id.padEnd(12)} file ${h.path}`);
     if (skipped.length > 10) console.log(`  ... and ${skipped.length - 10} more`);
     console.log(
-      '  Wait, ask the session to commit or register itself (queue.mjs external add), or start --force on the owner\'s word.',
+      '  Wait, ask the session to commit or register itself (cq external add), or start --force on the owner\'s word.',
     );
   }
   if (b.active) console.log(b.message);
@@ -2416,18 +2416,18 @@ if (command === 'init') {
       if (L.projectPaused(o, register)) {
         const pid = L.projectFor(o, register);
         die(
-          `${id} belongs to the project ${pid}, which is paused (queue.mjs project ${pid} --continue, or start --force).`,
+          `${id} belongs to the project ${pid}, which is paused (cq project ${pid} --continue, or start --force).`,
         );
       }
       if (space.out)
         die(
-          `${id} cannot be started: ${space.reason}. Edit the focus (queue.mjs focus set ...), or start --force on the owner's word.`,
+          `${id} cannot be started: ${space.reason}. Edit the focus (cq focus set ...), or start --force on the owner's word.`,
         );
       const u = L.uncommittedCollision(o, uncommitted);
       if (u)
         die(
           `${id} cannot be started: file ${u.path} is uncommitted in the main tree (another session is working in it). Wait, ask the session ` +
-            'to commit or register itself (queue.mjs external add), or start --force on the owner\'s word.',
+            'to commit or register itself (cq external add), or start --force on the owner\'s word.',
         );
       die(
         `${id} is not among those that can start now (the limits for concurrent, D+ or domain are reached). See \`next\`.`,
@@ -2498,7 +2498,7 @@ if (command === 'init') {
     );
   }
   console.log(
-    `${id}: ${status}${qa ? ' · label visual: now in the owner QA list (queue.mjs qa)' : ''}`,
+    `${id}: ${status}${qa ? ' · label visual: now in the owner QA list (cq qa)' : ''}`,
   );
   if (orchestratorStep) pulseCursor(`set ${id} ${status}`);
 } else if (command === 'edit') {
@@ -2559,7 +2559,7 @@ if (command === 'init') {
   console.log(`${id} changed: ${changedField.join(', ')}`);
   if (bonus != null)
     console.log(
-      'The addition is in the track block from now on (queue.mjs trackFile / fill --ids). If the track is already running: send it with SendMessage.',
+      'The addition is in the track block from now on (cq trackFile / fill --ids). If the track is already running: send it with SendMessage.',
     );
   if (undoHint()) console.log(undoHint());
 } else if (command === 'resolve') {
@@ -2612,7 +2612,7 @@ if (command === 'init') {
     if (onlyUnlogged && rows.length)
       console.log(
         `\nEnter the answers in the decision log (and the plan the question is in), commit with --trailer "Queue: orchestrator", ` +
-          `then: queue.mjs resolutions --mark-logged ${rows.map((r) => r.sp).join(' ')}`,
+          `then: cq resolutions --mark-logged ${rows.map((r) => r.sp).join(' ')}`,
       );
   }
 } else if (command === 'question') {
@@ -2647,7 +2647,7 @@ if (command === 'init') {
         : `open, ${r.tasks.length} ${r.tasks.length === 1 ? 'task waiting' : 'tasks waiting'}`;
       console.log(cut(`${r.sp}  [${r.type}; ${status}]`, WIDTH));
       console.log(
-        `  ${cut(r.text ?? '(missing text: queue.mjs question <id> --text "...")', WIDTH - 2)}`,
+        `  ${cut(r.text ?? '(missing text: cq question <id> --text "...")', WIDTH - 2)}`,
       );
       if (r.recommendation) console.log(`  ${cut(`recommendation: ${r.recommendation}`, WIDTH - 2)}`);
     }
@@ -2691,7 +2691,7 @@ if (command === 'init') {
   if (fresh) {
     edit((queue) => {
       const r = L.parseLimit('autocompact', fresh);
-      if ('error' in r) die(`${r.error}. Use: queue.mjs compact [auto|manual]`);
+      if ('error' in r) die(`${r.error}. Use: cq compact [auto|manual]`);
       queue.limits = { ...(queue.limits ?? {}), autocompact: r.val };
       return r;
     });
@@ -2737,7 +2737,7 @@ if (command === 'init') {
   );
   if (withWarning.length)
     console.log(
-      `A warning about changes outside the queue is in the track block for: ${withWarning.join(', ')} (queue.mjs external).`,
+      `A warning about changes outside the queue is in the track block for: ${withWarning.join(', ')} (cq external).`,
     );
 } else if (command === 'fill') {
   // ---- next -> start -> trackFile -> make-queue-common -> make-mission in one call ----
@@ -2794,7 +2794,7 @@ if (command === 'init') {
         if (t.message) quotaMessage = t.message;
         if (t.limit != null && !a.includes('--over-quota')) quotaMax = t.limit;
       } catch (e) {
-        quotaMessage = `(The quota forecast failed: ${e?.message ?? e}; queue.mjs capacity)`;
+        quotaMessage = `(The quota forecast failed: ${e?.message ?? e}; cq capacity)`;
       }
       for (const v of L.selectNext(queue, Date.now(), { uncommitted }).slice(
         0,
@@ -2838,7 +2838,7 @@ if (command === 'init') {
       die(
         `${name} failed: ${String(e?.stderr ?? e?.message ?? e).trim()}\n` +
           (newIds.length ? `Started (running): ${newIds.join(', ')}. ` : '') +
-          `When the error is fixed: queue.mjs fill --ids ${selected.map((v) => v.id).join(' ')} --scratchpad "${scratch}"`,
+          `When the error is fixed: cq fill --ids ${selected.map((v) => v.id).join(' ')} --scratchpad "${scratch}"`,
       );
     }
   };
@@ -3065,7 +3065,7 @@ if (command === 'init') {
     }
   };
   const queueMjs = path.join(HERE, 'queue.mjs');
-  const remark = `merged with queue.mjs merge${plan.migrPush ? ' (migrations pushed)' : ''}`;
+  const remark = `merged with cq merge${plan.migrPush ? ' (migrations pushed)' : ''}`;
   /** The command for one step: [program, arguments, shell?]. The migration command is a shell line from the config. */
   const command = ({ step }) => {
     if (step === 'merge')
@@ -3316,7 +3316,7 @@ if (command === 'init') {
   const queue = read();
   if (!Object.keys(queue.projects ?? {}).length)
     console.log(
-      'The register is empty: create one with queue.mjs project <pid> --title "..." --prefix EX- (or edit-many --file).\n',
+      'The register is empty: create one with cq project <pid> --title "..." --prefix EX- (or edit-many --file).\n',
     );
   for (const r of L.projectOverview(queue)) {
     const parts = [
@@ -3517,7 +3517,7 @@ if (command === 'init') {
     console.log(`  ${cut(p.title, WIDTH - 2)}`);
   }
   if (list.length)
-    console.log(`\n${list.length} can be picked. Pick: queue.mjs pick <id> --by "<who>"`);
+    console.log(`\n${list.length} can be picked. Pick: cq pick <id> --by "<who>"`);
 } else if (command === 'pick') {
   const id = a[1];
   if (!id || id.startsWith('--')) die('pick <id> --by "<who>" [--force]');
@@ -3536,20 +3536,20 @@ if (command === 'init') {
   if (r.overridden.length) console.log(`--force overrode: ${r.overridden.join(' · ')}`);
   // The owned files changed outside the queue since the task was added, or commits that mention the id.
   writeExternalWarning(o);
-  console.log(`Mission: ${file ?? `the text is in the queue (queue.mjs trackFile ${id} --out <file>)`}`);
+  console.log(`Mission: ${file ?? `the text is in the queue (cq trackFile ${id} --out <file>)`}`);
   console.log(
     [
       'Next step (the same protocol as a queue track: own worktree, common protocol, gates and review by class):',
       g.exists
         ? `  1. Worktree on the existing branch (${g.commits} commit(s) ahead of ${BASE}): git worktree add ${wt} ${o.branch}`
         : `  1. Worktree: git worktree add ${wt} -b ${o.branch} ${BASE}`,
-      `  2. The mission: queue.mjs trackFile ${id} --out <scratch>/queue-track.md; make-queue-common.mjs --out <scratch>/queue-common.md;`,
+      `  2. The mission: cq trackFile ${id} --out <scratch>/queue-track.md; make-queue-common.mjs --out <scratch>/queue-common.md;`,
       `     make-mission.mjs --common <scratch>/queue-common.md --track <scratch>/queue-track.md --head <HEAD>`,
       `  3. In the worktree: ${require('./lib/projectRoot.js').cqCommand({ fromWorktree: true })} prepare-track ${id} --branch ${o.branch} --scratchpad "<scratch>"`,
-      `  4. Done: orchestrator active -> queue.mjs deliver ${id} (it merges). No orchestrator -> merge yourself`,
-      `     (merge-track.mjs ${o.branch})${MIGR.folder ? ', push the migrations' : ''}, then queue.mjs set ${id} done.`,
+      `  4. Done: orchestrator active -> cq deliver ${id} (it merges). No orchestrator -> merge yourself`,
+      `     (merge-track.mjs ${o.branch})${MIGR.folder ? ', push the migrations' : ''}, then cq set ${id} done.`,
       '     Never git push without the owner\'s "push".',
-      `  If you give up: queue.mjs release ${id} (the branch and the migration block are kept).`,
+      `  If you give up: cq release ${id} (the branch and the migration block are kept).`,
     ].join('\n'),
   );
 } else if (command === 'deliver') {
@@ -3603,7 +3603,7 @@ if (command === 'init') {
     }
     if (count)
       console.log(
-        '\nApprove: queue.mjs qa ok <id...> · deviation: queue.mjs qa deviation <id> "<what is wrong, and where>"',
+        '\nApprove: cq qa ok <id...> · deviation: cq qa deviation <id> "<what is wrong, and where>"',
       );
   } else if (under === 'ok') {
     const ids = positional(2);
@@ -3648,7 +3648,7 @@ if (command === 'init') {
     const owner = [...r.row.owned_files, ...r.row.owner_db].join(', ');
     console.log(
       `${r.new ? 'Registered' : 'Updated'} ${r.row.id} ("${r.row.external_name}"${r.row.branch ? `, branch ${r.row.branch}` : ''}): ` +
-        `owns ${owner}. The queue starts nothing that collides until: queue.mjs external done "${r.row.external_name}"`,
+        `owns ${owner}. The queue starts nothing that collides until: cq external done "${r.row.external_name}"`,
     );
     for (const x of r.warnings) console.log(`WARNING: ${x}`);
   } else if (under === 'done') {
@@ -3660,7 +3660,7 @@ if (command === 'init') {
     });
     console.log(
       `${r.row.id} ("${r.row.external_name}"): done. The files are free for the queue again. If the work is committed on ${BASE}, ` +
-        'queue.mjs external shows whether it mentions pending tasks.',
+        'cq external shows whether it mentions pending tasks.',
     );
   } else if (under === 'accept') {
     const [id, ref] = positional(2);
@@ -3679,7 +3679,7 @@ if (command === 'init') {
     });
     console.log(
       `${id}: done (completed outside the queue in ${full.slice(0, 8)})` +
-        `${r.qa ? ' · label visual: now in the owner QA list (queue.mjs qa)' : ''}` +
+        `${r.qa ? ' · label visual: now in the owner QA list (cq qa)' : ''}` +
         `${mentioned ? '' : ' · NB: the commit message does not mention the id (noted in the remark)'}`,
     );
   } else {
@@ -3714,7 +3714,7 @@ if (command === 'init') {
     else if (s.active)
       console.log(
         `ACTIVE ORCHESTRATOR: "${s.session}", last updated ${L.ageText(s.age_ms)} ago (${s.event ?? '-'}). ` +
-          'Whoever has picked a task delivers: queue.mjs deliver <id>.' +
+          'Whoever has picked a task delivers: cq deliver <id>.' +
           (L.windDownGuard(readCursor()).stop
             ? ' The session is in WIND_DOWN (no new starts until it is compacted).'
             : ''),
@@ -3756,7 +3756,7 @@ if (command === 'init') {
     fs.writeFileSync(out, `${pkg}\n`);
     console.log(
       `Wrote the cloud package for ${ids.join(', ')} to ${out} (${pkg.length} chars). Start: RemoteTrigger run with ` +
-        `{ "text": <the package> }, then queue.mjs cloud start ${ids.join(' ')} --run <session-id>.`,
+        `{ "text": <the package> }, then cq cloud start ${ids.join(' ')} --run <session-id>.`,
     );
   } else process.stdout.write(`${pkg}\n`);
 } else if (command === 'cloud-bundles') {
@@ -3806,7 +3806,7 @@ if (command === 'init') {
       `Bundle ${i + 1}: ${b.ids.length} task(s), ${b.minutes} min · ${b.areas.join(' + ')}`,
     );
     for (const id of b.ids) console.log(cut(`  ${id.padEnd(12)} ${title.get(id)}`, WIDTH));
-    console.log(`  → queue.mjs cloud-package ${b.ids.join(' ')} --out <file>`);
+    console.log(`  → cq cloud-package ${b.ids.join(' ')} --out <file>`);
   });
   const sessions = L.cloudSessions(queue);
   if (bundles.length) console.log(`\n${sessions} cloud session(s) running now (at most ${L.CLOUD_MAX}).`);
@@ -3844,7 +3844,7 @@ if (command === 'init') {
         ),
       );
     if (suitable.length > 15) console.log(`  ... and ${suitable.length - 15} more`);
-    if (suitable.length) console.log('\nPackage: queue.mjs cloud-package <id> [--out <file>]');
+    if (suitable.length) console.log('\nPackage: cq cloud-package <id> [--out <file>]');
   } else if (under === 'start') {
     // More ids = a bundle in the same cloud session (the same --run).
     const ids = id ? [id, ...more] : [];
@@ -3877,8 +3877,8 @@ if (command === 'init') {
       );
     if (r.overridden.length) console.log(`--force overrode: ${r.overridden.join(' · ')}`);
     console.log(
-      'When CLOUD-DONE <id> arrives: queue.mjs cloud done <id> [--branch <branch the cloud pushed>] [--sha <sha>]. ' +
-        'If it gives up (CLOUD-STOP): queue.mjs cloud cancel <id>.',
+      'When CLOUD-DONE <id> arrives: cq cloud done <id> [--branch <branch the cloud pushed>] [--sha <sha>]. ' +
+        'If it gives up (CLOUD-STOP): cq cloud cancel <id>.',
     );
   } else if (under === 'done') {
     if (!id) die('cloud done <id> [--branch <branch>] [--sha <sha>]');
@@ -3944,7 +3944,7 @@ if (command === 'init') {
         'The orchestrator merges:',
         `  1. ${CQ} merge-track ${local}   (local branch = ${REMOTE}/${branch})`,
         `  2. git push ${REMOTE} --delete ${branch}   (after the merge; a fixed claude/... branch would otherwise be reused)`,
-        `  3. queue.mjs set ${id} done`,
+        `  3. cq set ${id} done`,
       ].join('\n'),
     );
   } else if (under === 'cancel') {
@@ -4000,7 +4000,7 @@ if (command === 'init') {
           console.log(cut(`    shared files: ${g.common_files.join(', ')}`, WIDTH));
       }
       if (gr.some((g) => g.ready))
-        console.log('\nSuggested packages: queue.mjs batch pack --auto (executed with --execute).');
+        console.log('\nSuggested packages: cq batch pack --auto (executed with --execute).');
     }
   } else if (a.includes('--auto')) {
     const execute = a.includes('--execute');
@@ -4008,13 +4008,13 @@ if (command === 'init') {
     if (!proposed.length) {
       console.log('No groups in the batch queue are ready for packing.');
     } else if (!execute) {
-      console.log(`Proposed (${proposed.length}; execute all with queue.mjs batch pack --auto --execute):`);
+      console.log(`Proposed (${proposed.length}; execute all with cq batch pack --auto --execute):`);
       for (const f of proposed)
         console.log(
           f.out
             ? `  ${f.pid} ${f.class}: ${f.parts[0]} has ${f.sum} min alone; take it out: ` +
-                `queue.mjs edit ${f.parts[0]} --json '{"batched":false}'`
-            : `  ${f.pid} ${f.class}, ${f.sum} min: queue.mjs batch pack ${f.parts.join(' ')} --id ${f.id}`,
+                `cq edit ${f.parts[0]} --json '{"batched":false}'`
+            : `  ${f.pid} ${f.class}, ${f.sum} min: cq batch pack ${f.parts.join(' ')} --id ${f.id}`,
         );
     } else {
       // All the proposals in one write under the lock: all or nothing (the proposals are recomputed inside the lock).
@@ -4061,7 +4061,7 @@ if (command === 'init') {
   const queue = read();
   if (!Object.keys(queue.areas ?? {}).length)
     console.log(
-      'No areas yet: create one with queue.mjs area <oid> --title "..." --projects <pid> ...\n',
+      'No areas yet: create one with cq area <oid> --title "..." --projects <pid> ...\n',
     );
   for (const r of L.areaOverview(queue)) {
     const parts = [
@@ -4176,7 +4176,7 @@ if (command === 'init') {
     if (!queue.focus) {
       console.log(
         'No focus set: the queue is ranked by score and projectBonus.\n' +
-          'Set: queue.mjs focus set area:<oid> project:<pid> feature:<pid>/<name> ... [--rest wait|fill] [--to <date>]',
+          'Set: cq focus set area:<oid> project:<pid> feature:<pid>/<name> ... [--rest wait|fill] [--to <date>]',
       );
     } else {
       const uncommitted = uncommittedPaths();
@@ -4246,7 +4246,7 @@ if (command === 'init') {
     return s;
   });
   console.log(
-    `Parked (stays until queue.mjs continue${val('--to') ? ' or the date' : ''}): ${r.parked.join(', ')}`,
+    `Parked (stays until cq continue${val('--to') ? ' or the date' : ''}): ${r.parked.join(', ')}`,
   );
   for (const x of r.warnings) console.log(`WARNING: ${x}`);
   if (undoHint()) console.log(undoHint());
@@ -4367,7 +4367,7 @@ if (command === 'init') {
       console.log(
         s.error.length
           ? `Can NOT be undone now:\n  ${s.error.join('\n  ')}`
-          : 'Can be undone (queue.mjs undo).',
+          : 'Can be undone (cq undo).',
       );
     }
   } else {
@@ -4446,11 +4446,11 @@ if (command === 'init') {
       if (json) console.log(JSON.stringify({ ok: true, ...k }));
       else {
         console.log(
-          `Proposed (${k.move.length}; set with queue.mjs classify --execute${filter.withoutProject ? ' --without-project' : ''}${filter.disagreeing ? ' --disagree' : ''}):`,
+          `Proposed (${k.move.length}; set with cq classify --execute${filter.withoutProject ? ' --without-project' : ''}${filter.disagreeing ? ' --disagree' : ''}):`,
         );
         for (const x of k.move) console.log(rowText(x));
         console.log(
-          `Sort (${k.sort.length}; uncertain or disagreeing, fix with queue.mjs edit-many --file <json> [{ "id", "project" }]):`,
+          `Sort (${k.sort.length}; uncertain or disagreeing, fix with cq edit-many --file <json> [{ "id", "project" }]):`,
         );
         for (const x of k.sort) console.log(`${rowText(x)} [${x.type}]`);
         const pre = L.prefixWarnings(read().projects ?? {});
@@ -4460,7 +4460,7 @@ if (command === 'init') {
   }
 } else {
   die(
-    'Use: queue.mjs <init|add|approve|show|next|start|set|edit|resolve|resolutions|question|limit|state|trackFile|' +
+    'Use: cq <init|add|approve|show|next|start|set|edit|resolve|resolutions|question|limit|state|trackFile|' +
       'projects|project|edit-many|pickable|pick|deliver|release|qa|external|orchestrator|cloud|cloud-package|batch|' +
       'area|areas|focus|park|continue|rank|undo|classify|plan|fill|receive|merge|info|activeOnes|next-migr|' +
       'capacity|compact|diagnose|cost> ...  (see the top of the file)',
@@ -4542,7 +4542,7 @@ function externalScan() {
     for (const k of v.collisions) console.log(`  ${L.collisionText(k, { withId: false })}`);
     for (const c of v.mentioned)
       console.log(
-        `  mentioned in ${c.summary} "${c.subject}"${o.status === 'waiting' ? ` -> completed? queue.mjs external accept ${onlyId} ${c.summary}` : ''}`,
+        `  mentioned in ${c.summary} "${c.subject}"${o.status === 'waiting' ? ` -> completed? cq external accept ${onlyId} ${c.summary}` : ''}`,
       );
     if (!v.collisions.length && !v.mentioned.length)
       console.log('  Nothing outside the queue affects it.');
@@ -4639,7 +4639,7 @@ function externalScan() {
   ].filter(Boolean);
   if (missing.length) {
     out.push(cut(`Tasks in progress ${missing.join('; ')}.`, WIDTH));
-    out.push('  Fix with queue.mjs edit-many --file <json> ([{ "id", "project", "feature" }]).');
+    out.push('  Fix with cq edit-many --file <json> ([{ "id", "project", "feature" }]).');
   }
 
   // Collisions and consistency.

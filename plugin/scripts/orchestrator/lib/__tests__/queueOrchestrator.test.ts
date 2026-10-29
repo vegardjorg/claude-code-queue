@@ -185,7 +185,7 @@ describe('short view (show)', () => {
     expect(text).toMatch(/^ACTIVE \(2\):/m);
     expect(text).toMatch(/^ {2}ACT-1 +running/m);
     expect(text).toMatch(/^ {2}REV-1 +review/m);
-    expect(text).toMatch(/STARTABLE NOW \(1; queue\.mjs fill starts them\)/);
+    expect(text).toMatch(/STARTABLE NOW \(1; cq fill starts them\)/);
     expect(text).toMatch(/^ {2}FREE-1 /m);
     expect(text).toMatch(/2 active · 301 waiting/);
     expect(text).toMatch(/Waiting per class: K 301; 300 of them are blocked now/);
@@ -561,7 +561,7 @@ describe('queue.mjs show, fill, receive, set done and cost (against a copy)', ()
     const v = run('show');
     expect(v.code).toBe(0);
     expect(v.out).toMatch(/STARTABLE NOW \(1;/);
-    expect(v.out).toContain('Full list: queue.mjs show --full');
+    expect(v.out).toContain('Full list: cq show --full');
     expect(run('show', '--full').out).toMatch(/Q1/);
 
     // fill: starts A (D, migration block), creates the prompt file and the JSON with agent type and message.

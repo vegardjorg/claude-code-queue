@@ -315,9 +315,9 @@ describe('COMPACT: /compact with focus before wind-down', () => {
     expect(others.reason).not.toContain('/compact keep');
   });
 
-  it('compactMode: limits.autocompact in the queue file, default manual', () => {
-    expect(KV.compactMode(null)).toBe('manual');
-    expect(KV.compactMode({})).toBe('manual');
+  it('compactMode: limits.autocompact in the queue file, default auto', () => {
+    expect(KV.compactMode(null)).toBe('auto');
+    expect(KV.compactMode({})).toBe('auto');
     expect(KV.compactMode({ limits: { autocompact: false } })).toBe('manual');
     expect(KV.compactMode({ limits: { autocompact: true } })).toBe('auto');
     expect(L.LIMIT_NAME).toContain('autocompact');
@@ -697,7 +697,7 @@ describe('hook-context.mjs and queue.mjs: the wind-down step end to end', () => 
     expect(run('queue.mjs', ['orchestrator', 'pulse', '--session', 'queue A']).code).toBe(0);
     const show = run('queue.mjs', ['compact']);
     expect(show.code).toBe(0);
-    expect(show.out).toMatch(/manual/);
+    expect(show.out).toMatch(/auto/);
     const auto = run('queue.mjs', ['compact', 'auto']);
     expect(auto.code).toBe(0);
     expect(auto.out).toContain('autoCompactEnabled=true');

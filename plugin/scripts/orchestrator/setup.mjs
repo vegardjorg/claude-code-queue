@@ -127,6 +127,17 @@ export function mergeSettings(target, o = {}) {
   if (o.hooks) {
     const commands = (groups) => new Set((groups ?? []).flatMap((g) => (g.hooks ?? []).map((h) => h.command)));
     existing.hooks = existing.hooks ?? {};
+    // Older installs wrote relative paths (`node scripts/orchestrator/hook-x.mjs`), which break when the session's working
+    // directory is not the project root. Rewrite those to the $CLAUDE_PROJECT_DIR form, so they are not added twice.
+    const OLD = /^node scripts/orchestrator/(hook-[w-]+.mjs)$/;
+    for (const groups of Object.values(existing.hooks))
+      for (const g of groups ?? [])
+        for (const h of g.hooks ?? []) {
+          const m = OLD.exec(h.command ?? '');
+          if (!m) continue;
+          h.command = `node "$CLAUDE_PROJECT_DIR/scripts/orchestrator/${m[1]}"`;
+          changes.push(`hook path made absolute: ${m[1]}`);
+        }
     for (const [event, groups] of Object.entries(fresh.hooks ?? {})) {
       const list = (existing.hooks[event] = existing.hooks[event] ?? []);
       const there = commands(list);
@@ -134,11 +145,11 @@ export function mergeSettings(target, o = {}) {
         const added = (g.hooks ?? []).filter((h) => !there.has(h.command));
         if (!added.length) continue;
         list.push({ ...g, hooks: added });
-        changes.push(`hook ${event}: ${added.map((h) => h.command.split('/').pop()).join(', ')}`);
+        changes.push(`hook ${event}: ${added.map((h) => h.command.split('/').pop().replace(/"$/, '')).join(', ')}`);
       }
     }
   }
-  const touched = (o.keys && wanted.length) || changes.some((c) => c.startsWith('hook '));
+  const touched = (o.keys && wanted.length) || changes.some((c) => c.startsWith('hook'));
   if (touched && !o.dry) {
     fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
     fs.writeFileSync(settingsPath, JSON.stringify(existing, null, 2) + '\n');

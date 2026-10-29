@@ -755,7 +755,7 @@
             h.el('p', {
               class: 'plans-help',
               text:
-                'Documents in the document folders that no plan entry points to (queue.mjs plan check). Make a new entry, or add the document as source on an existing entry.',
+                'Documents in the document folders that no plan entry points to (cq plan check). Make a new entry, or add the document as source on an existing entry.',
             }),
             u.error ? h.el('p', { class: 'read-error', role: 'alert', text: u.error }) : null,
             ...(u.data?.groups ?? []).map((g) =>

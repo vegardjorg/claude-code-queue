@@ -706,7 +706,7 @@ describe('queue.mjs: edit-many --dry/--expect-changed, rank, undo, classify (aga
     expect(readQueue().tasks[0].project).toBeUndefined();
     const ok = run(['edit-many', '--file', f, '--expect-changed', ISO, '--by', 'board']);
     expect(ok.code).toBe(0);
-    expect(ok.out).toContain('undo: queue.mjs undo');
+    expect(ok.out).toContain('undo: cq undo');
     const queue = readQueue();
     expect(queue.tasks[0].project).toBe('ui');
     expect(queue.changelog!.at(-1)).toMatchObject({ nr: 1, by: 'board', action: 'edit-many' });

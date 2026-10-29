@@ -2408,7 +2408,7 @@
       el('p', {
         class: 'inbox-info',
         text:
-          'Everything the panel writes goes via queue.mjs with a lock, and nothing changes before you have seen the explanation and confirmed.',
+          'Everything the panel writes goes via cq with a lock, and nothing changes before you have seen the explanation and confirmed.',
       }),
     );
     panel.querySelector('.button-icon')?.focus();
@@ -3489,7 +3489,7 @@
       ),
       el('p', {
         class: s.text ? 'sp-text' : 'sp-text missing',
-        text: s.text ?? 'No text registered yet (queue.mjs question <id> --text …).',
+        text: s.text ?? 'No text registered yet (cq question <id> --text …).',
       }),
       s.recommendation ? el('p', { class: 'sp-meta', text: `Recommendation: ${s.recommendation}` }) : null,
       s.source ? el('p', { class: 'sp-meta', text: `Source: ${s.source}` }) : null,
@@ -3943,7 +3943,7 @@
           class: 'inbox-info',
           text:
             `${d.unlogged.length} ${d.unlogged.length === 1 ? 'answer is' : 'answers are'} not entered in the decision log yet ` +
-            `(${d.unlogged.map((x) => x.sp).join(', ')}). The orchestrator enters them (queue.mjs resolutions --unlogged).`,
+            `(${d.unlogged.map((x) => x.sp).join(', ')}). The orchestrator enters them (cq resolutions --unlogged).`,
         }),
       );
 
@@ -4126,7 +4126,7 @@
         ? `could not read (${d.error})`
         : 'fetching …';
     const status = k.batched
-      ? 'In batch queue (not started alone; packed into a track with queue.mjs batch pack)'
+      ? 'In batch queue (not started alone; packed into a track with cq batch pack)'
       : ({
           waiting: k.ready ? 'In queue, ready now' : 'In queue, blocked',
           proposed: 'Proposed (must be approved)',
@@ -4957,7 +4957,7 @@
         'bulk-project',
         'Project',
         option,
-        'A new project is created with queue.mjs project <pid> --title "…".',
+        'A new project is created with cq project <pid> --title "…".',
       );
     }
     if (type === 'feature')

@@ -81,6 +81,9 @@ or `cancelled` (cancelled). Tasks added by an agent start as `proposed` and need
 - Two tasks that own the same file or DB object never run at the same time.
 - `dailyBudget <usd>` stops new starts when the day's measured spend (API-equivalent) is used up. The night window
   (`nightRun`, `nightWindow`) can pause starts at night.
+- Times are the machine's local time: the night window, the day the daily budget counts, the weekly quota reset
+  and the statistics per day. To use another time zone, set the `TZ` environment variable (for example
+  `TZ=America/New_York`) for Claude Code.
 - Agents may only ADD proposals. Approval, merging and pushing belong to the orchestrator and the owner.
 
 ## Configuration
@@ -100,7 +103,7 @@ reviewer agents per class. Missing values fall back to safe defaults.
 | `sharedLinks` | `["node_modules"]` | Folders linked into each worktree instead of reinstalled |
 | `readGuard` | built-in lists | Extra agent types, auto-loaded files and large-file globs for the reading guard |
 | `cloudHidden` | `[]` | Paths a cloud session cannot see (missions pointing there are stopped) |
-| `capacity` | Tuesday 19:00 Europe/Oslo | Weekly quota reset for `cq capacity` |
+| `capacity` | Tuesday 19:00 local time | Weekly quota reset for `cq capacity` |
 | `excludeBranches` | `["main","master"]` | Branches never treated as external work |
 | `modules`, `projectModuleSuggestion`, `priorityRules`, `documentFolders`, `indexFile`, `documents`, `planBackup` | see `queue.config.example.json` | Plan register (see `plan-register.md`) |
 | `board.port`, `board.title` | `2000`, `Queue board` | Board |

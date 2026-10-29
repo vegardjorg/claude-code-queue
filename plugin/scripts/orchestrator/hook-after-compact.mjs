@@ -81,7 +81,7 @@ function queueShow() {
       env: { ...process.env, COLUMNS: '110' },
     });
   } catch {
-    return '(queue.mjs show failed; run it yourself)';
+    return '(cq show failed; run it yourself)';
   }
 }
 

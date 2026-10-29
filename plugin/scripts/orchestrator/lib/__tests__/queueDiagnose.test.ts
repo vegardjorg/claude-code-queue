@@ -320,7 +320,7 @@ describe('the threshold and the output', () => {
     const lines = D.diagnoseLines(d);
     expect(lines[0]).toBe('LOW PARALLELISM: 2 of 6 tracks (33 %, threshold 70 %). Quick diagnosis:');
     expect(lines.length).toBeLessThanOrEqual(12);
-    expect(lines.join('\n')).toMatch(/\+\d+ more findings \(queue\.mjs diagnose\)/);
+    expect(lines.join('\n')).toMatch(/\+\d+ more findings \(cq diagnose\)/);
   });
 
   it('no output when the share is above the threshold (5 of 6), but diagnose shows everything', () => {

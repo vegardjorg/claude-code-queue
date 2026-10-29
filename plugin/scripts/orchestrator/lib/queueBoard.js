@@ -1215,7 +1215,7 @@ function assess(queue, action = {}, context = {}) {
     if (context.orchestrator?.active)
       add(
         'info',
-        `An orchestrator is active: deliver when you are done (queue.mjs deliver ${o.id}), then the orchestrator merges.`,
+        `An orchestrator is active: deliver when you are done (cq deliver ${o.id}), then the orchestrator merges.`,
       );
     if (L.hasMigr(o))
       add(
@@ -1604,7 +1604,7 @@ function assessBulk(queue, action, add) {
 
   if (h === 'project' && val.pid) {
     if (!Object.hasOwn(register, val.pid))
-      add('stop', `The project ${val.pid} does not exist. Create it first (queue.mjs project).`);
+      add('stop', `The project ${val.pid} does not exist. Create it first (cq project).`);
     else if (register[val.pid]?.pause === true)
       add(
         'warning',
@@ -1715,7 +1715,7 @@ const SETTINGS = [
   },
   {
     name: 'nightWindow',
-    title: 'Night window (Oslo time)',
+    title: 'Night window (local time)',
     explanation: 'The hours the night pause applies, like "23-06" (from 23:00 to 06:00).',
     type: 'text',
   },

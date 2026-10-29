@@ -11,7 +11,20 @@ Import this file from your project's `CLAUDE.md` with a line `@CLAUDE.queue.md`.
 - Docs: `docs/queue/queue.md`, `docs/queue/plan-register.md`, `docs/queue/orchestration.md`, `docs/queue/board.md`,
   `docs/queue/mission-template.md`.
 
+## Plain language first
+The owner does not need to type commands. Read ordinary requests, in any language, as queue actions and use the
+matching skill:
+- "add it to the queue", "put this on the queue", "queue it" → `add-to-queue`.
+- "what's in the queue", "what is next" → `cq show`; "start the queue", "take over" → `queue`.
+- "I'll do one myself", "give me something from the queue" → `pick`; "show the board" → `board`.
+- "what about plan X", "update the plan" → `plans`.
+- When a task has been planned and agreed in this chat, offer to add it to the queue in the same turn (one short
+  question), and add it on yes. If the owner has said to always queue planned work, add it without asking and say so.
+Run the `cq` commands yourself; show the owner the result, not the command.
+
 ## Skills
+In a plugin install the skills are named `/cq:<name>` (for example `/cq:add-to-queue`); in a vendored install they
+are `/<name>`.
 - `/queue`: run as orchestrator (fill, receive, review, merge, ask owner questions).
 - `/parallel-wave`: parallel work with track agents in worktrees. ALWAYS use it for parallel agents.
 - `/add-to-queue`: turn a request or plan section into queue tasks.

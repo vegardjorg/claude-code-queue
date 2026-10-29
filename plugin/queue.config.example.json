@@ -39,7 +39,7 @@
   "readGuard": { "agentTypes": [], "autoLoaded": [], "largeFiles": [], "maxLines": 300, "blockLines": 2000 },
   "excludeBranches": ["main", "master"],
   "cloudHidden": [],
-  "_capacity": "Weekly quota reset used by queue.mjs capacity. null = default (Tuesday 19:00 Europe/Oslo). resetDay 0-6, 0 = Sunday.",
+  "_capacity": "Weekly quota reset used by queue.mjs capacity. null = default (Tuesday 19:00 local time). resetDay 0-6, 0 = Sunday.",
   "capacity": { "resetDay": null, "resetClock": null, "timeZone": null, "planName": null },
   "_board": "mascot: the speech bubble on the board, \"chatty\", \"events\" (only events and clicks) or \"off\" (no bubbles for anyone). queue-board.mjs --mascot overrides it.",
   "board": { "port": 2000, "title": "Queue board", "mascot": "chatty" }

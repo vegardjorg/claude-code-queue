@@ -687,7 +687,7 @@ describe('queue.mjs batch (against a copy of the queue)', () => {
   it('batch pack --auto proposes without editing; --execute packs', () => {
     const snapshot = readFileSync(join(folder, 'queue.json'), 'utf8');
     const r = run(['batch', 'pack', '--auto']);
-    expect(r.out).toContain('queue.mjs batch pack VA-1 VA-2 --id VA-S1');
+    expect(r.out).toContain('cq batch pack VA-1 VA-2 --id VA-S1');
     expect(readFileSync(join(folder, 'queue.json'), 'utf8')).toBe(snapshot);
     const u = run(['batch', 'pack', '--auto', '--execute']);
     expect(u.error).toBe('');
@@ -698,7 +698,7 @@ describe('queue.mjs batch (against a copy of the queue)', () => {
   it('show counts the batch queue separately and does not show the cards as pending', () => {
     const r = run(['show']);
     expect(r.out).toMatch(/BATCH_QUEUE \(2 task\(s\) in 1 group\(s\), 1 ready for packing/);
-    expect(r.out).toMatch(/2 in the batch queue \(queue\.mjs batch\)/);
+    expect(r.out).toMatch(/2 in the batch queue \(cq batch\)/);
     expect(r.out).not.toMatch(/^VA-1 +waiting/m);
   });
 });

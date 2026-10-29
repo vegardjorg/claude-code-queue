@@ -25,8 +25,8 @@ const PRICES = {
 };
 const DEFAULT_MODEL = 'claude-opus-5-5';
 
-/** The time zone "day" is computed in (local day). */
-const TZ = 'Europe/Oslo';
+/** The time zone "day" is computed in: the machine's own (set the TZ environment variable to use another). */
+const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 /** The cache lifetime per type (s). A pause longer than this before a turn = the cache expired and was written again. */
 const CACHE_TTL_S = { '5m': 300, '1h': 3600 };

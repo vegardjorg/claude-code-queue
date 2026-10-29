@@ -272,7 +272,7 @@ if (AS_JSON) {
   if (windDown.stop) {
     out.push(`⚠ ${windDown.message}`);
     out.push(
-      '  If you take over as the new orchestrator: `queue.mjs orchestrator pulse --session "<new name>"` resets the wind-down.',
+      '  If you take over as the new orchestrator: `cq orchestrator pulse --session "<new name>"` resets the wind-down.',
     );
     out.push('');
   }
@@ -288,7 +288,7 @@ if (AS_JSON) {
     orchestrator.session
       ? `Orchestrator cursor: "${orchestrator.session}", updated ${age(orchestrator.age_ms)} ago` +
           `${orchestrator.event ? ` (${orchestrator.event})` : ''} → ${orchestrator.active ? 'ACTIVE' : 'expired (over 2 t)'}`
-      : 'Orchestrator cursor: none (no orchestrator has checked in with queue.mjs orchestrator pulse)',
+      : 'Orchestrator cursor: none (no orchestrator has checked in with cq orchestrator pulse)',
   );
   out.push(
     `Git: ${branch} @ ${head}, ${ahead} ahead / ${back} behind ${REMOVE}` +
@@ -328,7 +328,7 @@ if (AS_JSON) {
     );
   }
   if (!picked.length) out.push('  (none)');
-  out.push(`QA list: ${t.qa} done task(s) waiting for the owner (queue.mjs qa).`);
+  out.push(`QA list: ${t.qa} done task(s) waiting for the owner (cq qa).`);
   out.push('');
   out.push(
     `Waiting: ${t.waiting}. Can start now (${canStart.length}): ${canStart.join(', ') || '-'}`,
@@ -337,7 +337,7 @@ if (AS_JSON) {
   for (const e of report.ownerQuestion) out.push(`  ${e.sp}: ${e.tasks} task(s)`);
   if (!report.ownerQuestion.length) out.push('  (none)');
   out.push('');
-  out.push(`Work outside the queue (${outside.window}; details: queue.mjs external):`);
+  out.push(`Work outside the queue (${outside.window}; details: cq external):`);
   for (const f of outside.error) out.push(`  ⚠ ${f}`);
   out.push(
     `  ${outside.external_commits.length} external commit(s) on ${BASE}, ${outside.branches.length} branch(es) outside ${K.branchPrefix}*, ` +
@@ -352,7 +352,7 @@ if (AS_JSON) {
     out.push(`    collision: ${k.slice(0, 110)}`);
   if (outside.collisions_pending)
     out.push(
-      `    ${outside.collisions_pending} collision(s) with pending tasks (queue.mjs external)`,
+      `    ${outside.collisions_pending} collision(s) with pending tasks (cq external)`,
     );
   out.push('  Push: run push-check.mjs first; external commits are never pushed without an owner answer.');
   console.log(out.join('\n'));

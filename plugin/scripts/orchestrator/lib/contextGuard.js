@@ -185,14 +185,14 @@ const AUTOCOMPACT_FILE = '"autoCompactEnabled": false in .claude/settings.local.
 
 /** Compaction mode from the queue file: limits.autocompact = true gives 'auto', everything else 'manual' (default). */
 function compactMode(queue) {
-  return queue?.limits?.autocompact === true ? 'auto' : 'manual';
+  return queue?.limits?.autocompact === false ? 'manual' : 'auto';
 }
 
 /** The mode in plain language, as it appears in the messages. */
 function modeText(mode) {
   return mode === 'auto'
-    ? 'automatic compaction (queue.mjs compact manual turns it off)'
-    : 'manual compaction (queue.mjs compact auto turns on automatic)';
+    ? 'automatic compaction (cq compact manual turns it off)'
+    : 'manual compaction (cq compact auto turns on automatic)';
 }
 
 /**
@@ -310,7 +310,7 @@ function hookOutput(b, { n, orchestrator, g = limits(), compactions = 0, mode = 
       hookSpecificOutput: {
         hookEventName: 'UserPromptSubmit',
         additionalContext: fresh
-          ? `[hook-context] WIND_DOWN (about ${k(n)} tokens). From now on: start NO new tasks (queue.mjs next/start/fill ` +
+          ? `[hook-context] WIND_DOWN (about ${k(n)} tokens). From now on: start NO new tasks (cq next/start/fill ` +
             'refuses with exit 6). Allowed: receive delivered tracks (receive), review, fix rounds for already started ' +
             'tasks, merge, db push/deploy for what is merged, set done, resolve. Update the ' +
             `handover note ${note} (active tasks with branch/worktree/prompt, review packages and reviewers, ` +
@@ -409,7 +409,7 @@ function afterCompactText({
   ];
   if (windDownRevoked)
     header.push(
-      'The wind-down for this session is revoked (the owner compacted), so queue.mjs fill works again.',
+      'The wind-down for this session is revoked (the owner compacted), so cq fill works again.',
     );
   header.push(resumeText(mode));
   header.push(`Unpushed commits on ${base}: ${unpushed == null ? 'unknown' : unpushed}`);
@@ -422,11 +422,11 @@ function afterCompactText({
       ? `Open owner questions (${openOnes.length}):\n${openOnes.join('\n')}`
       : 'No open owner questions.',
   );
-  header.push('The queue (queue.mjs show):');
+  header.push('The queue (cq show):');
   const start = header.join('\n') + '\n';
   const rest = Math.max(0, maxDraw - start.length);
   const v = String(show ?? '').trimEnd();
-  const cut = '\n… (truncated; run queue.mjs show)';
+  const cut = '\n… (truncated; run cq show)';
   const body = v.length <= rest ? v : v.slice(0, Math.max(0, rest - cut.length)) + cut;
   return (start + body).slice(0, maxDraw);
 }
