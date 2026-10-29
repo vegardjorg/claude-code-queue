@@ -314,4 +314,9 @@ or endorsed by the owners of those games.
 Keeping the logo in the top-left corner of the board is a friendly request, not a license condition. You are
 welcome to restyle it.
 
+The mascot also talks. It nags you when you work at night, cheers when a branch is merged, comments on the
+numbers, and once in a while tells a vibe coding joke. Turn the speech bubbles off under Mascot in the settings.
+
+<p align="center"><img src="assets/screenshots/light-12-mascot-night.png" alt="The mascot at 02:47: the agents don't need sleep, you do" width="480"></p>
+
 Ken sent me.
