@@ -129,7 +129,7 @@ export function mergeSettings(target, o = {}) {
     existing.hooks = existing.hooks ?? {};
     // Older installs wrote relative paths (`node scripts/orchestrator/hook-x.mjs`), which break when the session's working
     // directory is not the project root. Rewrite those to the $CLAUDE_PROJECT_DIR form, so they are not added twice.
-    const OLD = /^node scripts/orchestrator/(hook-[w-]+.mjs)$/;
+    const OLD = /^node scripts\/orchestrator\/(hook-[\w-]+\.mjs)$/;
     for (const groups of Object.values(existing.hooks))
       for (const g of groups ?? [])
         for (const h of g.hooks ?? []) {
