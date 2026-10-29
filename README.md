@@ -203,6 +203,24 @@ More detail: [orchestration](plugin/docs/orchestration.md), [queue reference](pl
 [plan register](plugin/docs/plan-register.md), [board](plugin/docs/board.md),
 [mission template](plugin/docs/mission-template.md).
 
+## Cloud sessions
+
+Tracks can also run in Claude Code's cloud sessions on claude.ai instead of on your machine. I built this to use the
+$250 in cloud credits I got from Anthropic, but it works just as well with pay-as-you-go: the cloud gives you more
+parallel tracks without more load on your own computer.
+
+- **What can go to the cloud:** ordinary code tasks (K and U) without migrations or database changes. The queue
+  decides which tasks fit, and the board's **Cloud** tab lists them, grouped into bundles of up to 4 tasks per session.
+- **Start:** copy the package from the Cloud tab into a cloud session, or run
+  `node "<plugin folder>/scripts/orchestrator/cq.mjs" cloud-start <id> [<id> …]` in your own terminal from the
+  project folder (ask Claude for the full path). It opens `claude --cloud`, which draws from the cloud session credits.
+  At most 3 cloud sessions run at once.
+- **Back home:** when the cloud session reports it is done, the orchestrator fetches the branch and reviews and merges
+  it like any other track (`cq cloud done <id>`).
+- **Push first:** a cloud session starts from your base branch on GitHub, so it only sees what is pushed.
+- **Keep track of the credits:** `cq capacity --cloud-credit <usd left>` records the cloud pot separately from your
+  plan's weekly quota.
+
 ## Key commands
 
 All scripts share one entry point, `cq`. With the plugin, `cq` is on the PATH of Claude Code's Bash tool. In a
