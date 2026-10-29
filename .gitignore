@@ -1,5 +1,5 @@
 node_modules/
 # Data from a test installation must never go into the repo
 scripts/.queue/
-template/scripts/.queue/
+plugin/scripts/.queue/
 *.log

@@ -3,6 +3,10 @@
 These instructions are written TO Claude Code. The user has downloaded this repository and asked you to install it
 into their project. Follow the steps in order, and ask the user where a step says ASK. Do not push anything.
 
+This is the vendored install: everything is copied into the project. The recommended way is the Claude Code plugin
+(`/plugin marketplace add vegardjorg/claude-cowie-queue`, `/plugin install cq@claude-cowie-queue`, then `/cq:setup`).
+If the user has not chosen, ASK which they want before you copy anything.
+
 ## 0. Check the prerequisites
 
 - Node.js 20 or newer (`node --version`). The scripts use only Node built-ins; no npm packages are needed at run
@@ -25,14 +29,15 @@ It copies:
 
 | From | To (in the target) |
 |---|---|
-| `template/scripts/orchestrator/` (without tests) | `scripts/orchestrator/` |
-| `template/.claude/skills/*` | `.claude/skills/` (queue, add-to-queue, parallel-wave, plans, pick, start) |
-| `template/.claude/agents/*` | `.claude/agents/` (track, track-d, reviewer, reviewer-security) |
-| `docs/*.md` | `docs/queue/` |
-| `CLAUDE.queue.md` | `CLAUDE.queue.md` |
-| `queue.config.example.json` | `queue.config.json` (only if missing) |
+| `plugin/scripts/orchestrator/` (without tests) | `scripts/orchestrator/` |
+| `plugin/skills/*` (except setup) | `.claude/skills/` (queue, add-to-queue, parallel-wave, plans, pick, start) |
+| `plugin/agents/*` | `.claude/agents/` (track, track-d, reviewer, reviewer-security) |
+| `plugin/docs/*.md` | `docs/queue/` |
+| `plugin/CLAUDE.queue.md` | `CLAUDE.queue.md` |
+| `plugin/queue.config.example.json` | `queue.config.json` (only if missing) |
 
-It merges `template/.claude/settings.queue.json` into `.claude/settings.json` (adds missing keys and hooks, keeps every
+In the copied Markdown, `cq <...>` becomes `node scripts/orchestrator/cq.mjs <...>` (there is no `cq` on PATH without
+the plugin). It merges `plugin/settings.queue.json` into `.claude/settings.json` (adds missing keys and hooks, keeps every
 existing value), and adds `scripts/.queue/` and `.claude/worktrees/` to `.gitignore`.
 
 If a skill or agent with the same name already exists in the target, ASK the user whether to keep theirs, rename one,
@@ -72,27 +77,27 @@ they can edit it.
 In the target project:
 
 ```
-node scripts/orchestrator/queue.mjs init
-node scripts/orchestrator/queue.mjs show
-node scripts/orchestrator/queue.mjs plan show
+node scripts/orchestrator/cq.mjs init
+node scripts/orchestrator/cq.mjs show
+node scripts/orchestrator/cq.mjs plan show
 ```
 
 `init` creates the queue in `scripts/.queue/` (gitignored) with one example project `example` (prefix `EX-`); rename it
 with `queue.mjs project`. The plan register file is created on the first `plan` write. Then run
-`node scripts/orchestrator/queue.mjs plan modules` to create the modules from `queue.config.json`.
+`node scripts/orchestrator/cq.mjs plan modules` to create the modules from `queue.config.json`.
 
 ## 5. Smoke test
 
 ```
-node scripts/orchestrator/queue.mjs add --json '{"id":"EX-1","title":"Demo task","domain":"demo","class":"U","project":"example","feature":"Demo","mission":"Write a one-paragraph note about the repository layout.","value":5,"content_min":60}'
-node scripts/orchestrator/queue.mjs show
-node scripts/orchestrator/queue.mjs next
-node scripts/orchestrator/queue-board.mjs
+node scripts/orchestrator/cq.mjs add --json '{"id":"EX-1","title":"Demo task","domain":"demo","class":"U","project":"example","feature":"Demo","mission":"Write a one-paragraph note about the repository layout.","value":5,"content_min":60}'
+node scripts/orchestrator/cq.mjs show
+node scripts/orchestrator/cq.mjs next
+node scripts/orchestrator/cq.mjs board
 ```
 
 Open the board URL it prints (it contains an access key), check that EX-1 is shown, then stop the board (the pid it printed, or Ctrl+C in
 its terminal; never kill node by name). Remove the demo task with
-`node scripts/orchestrator/queue.mjs set EX-1 cancelled`.
+`node scripts/orchestrator/cq.mjs set EX-1 cancelled`.
 
 ## 6. Bring in the user's own work
 
@@ -118,7 +123,7 @@ before the first parallel run. Commit with a pathspec, for example:
 
 ```
 git add scripts/orchestrator .claude/skills .claude/agents .claude/settings.json docs/queue CLAUDE.queue.md queue.config.json .gitignore CLAUDE.md
-git commit -m "chore: install claude-cowie-qeue work queue" -- scripts/orchestrator .claude/skills .claude/agents .claude/settings.json docs/queue CLAUDE.queue.md queue.config.json .gitignore CLAUDE.md
+git commit -m "chore: install claude-cowie-queue work queue" -- scripts/orchestrator .claude/skills .claude/agents .claude/settings.json docs/queue CLAUDE.queue.md queue.config.json .gitignore CLAUDE.md
 ```
 
 Do not push unless the user asks.
@@ -128,4 +133,4 @@ Do not push unless the user asks.
 - `/start` for a short status at the start of a session.
 - `/queue` to run this chat as the orchestrator.
 - `/add-to-queue` to turn a request into queue tasks, `/plans` for plan work, `/pick` to do one task by hand.
-- The board: `node scripts/orchestrator/queue-board.mjs`.
+- The board: `node scripts/orchestrator/cq.mjs board`.

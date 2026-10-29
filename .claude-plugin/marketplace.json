@@ -1,0 +1,12 @@
+{
+  "name": "claude-cowie-queue",
+  "owner": { "name": "Vegard Cowie Jørgensen" },
+  "description": "claude-cowie-queue: a work queue and board for running Claude Code as an orchestrator with parallel worktree agents.",
+  "plugins": [
+    {
+      "name": "cq",
+      "source": "./plugin",
+      "description": "Work queue, plan register and local board for running Claude Code as an orchestrator with parallel worktree agents."
+    }
+  ]
+}

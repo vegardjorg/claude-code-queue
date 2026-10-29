@@ -1,0 +1,3 @@
+#!/bin/sh
+# cq: the work queue. On the Bash tool's PATH while the plugin is enabled (the plugin's bin/ folder).
+exec node "$(dirname "$0")/../scripts/orchestrator/cq.mjs" "$@"
