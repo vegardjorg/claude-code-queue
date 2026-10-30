@@ -43,6 +43,8 @@ Pick the claims the track's conclusion rests on (usually three to six) and try t
    change if you removed any one source?
 
 A finding you could not check fully says so on its own last line: `Unverified: <what>, because <why>.`
+Two findings on the same file and overlapping lines that ask for opposite actions are both marked
+`conflicts with <the other one>`. Never start other agents to check a finding; that is your own job here.
 
 ## Answer
 

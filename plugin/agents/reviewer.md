@@ -24,3 +24,18 @@ same folder: `00-package.md` (result line, changed objects, diff stats), `diff.p
   `FINDINGS H=<n> M=<n> L=<n> deferrable=<n>`
   then one line per finding: severity, file:line, what is wrong, and the suggested fix. Mark small mechanical MEDIUM
   fixes "M, mechanical" and LOW findings either "L, safe to defer" or "L, needed before merge".
+
+## Before you write a HIGH or MEDIUM finding
+
+Disprove it first. This is a step inside your own review: never start other agents to check a finding.
+
+1. Read the code at the place again (the branch version under `files/`), not your memory of it.
+2. Look for counter-evidence: an existing check, test, policy or guard elsewhere that already handles it (`grep`).
+3. Check that this change introduced or worsened the problem. One that was already there before the track's base
+   is not this track's finding: say "pre-existing" in the line.
+4. When you find no ground for it, lower it one level and say why in the line.
+
+- **Self-consistency:** two findings on the same file and overlapping lines that ask for opposite actions are
+  both marked `conflicts with <the other one>`.
+- **Unverified:** a finding that rests on something you could not read ends with its own line
+  `Unverified: <what>, because <why>.`
