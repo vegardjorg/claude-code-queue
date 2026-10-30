@@ -62,7 +62,7 @@ word.
 2. **When a track delivers:** `cq receive <id>` BEFORE merging (status review, the review package as plain files in
    `<scratch>/rev-<id>/`, the track's RESULT line from the transcript, one reviewer prompt per reviewer for the
    class, and the merge command). Read the long report only when RESULT says PARTIAL, RED or ownerQuestions>0. Start the
-   reviewers for D/D+ in the SAME turn. Fix round in a new agent on findings. When review is green:
+   reviewers `receive` prints (fixed per class plus the helper agents that hit) in the SAME turn. Fix round in a new agent on findings. When review is green:
    **`cq merge <id>`** from Bash with a long timeout (merge with `--wave-base`, optional migration push if
    configured, `gates --quick`, `set <id> done` with cost and findings, `fill`). It stops at the first error with
    the step and an excerpt; full log in `<scratch>/merge-<id>.log`. PARTIAL = continuation in a new agent, not a merge.
@@ -80,10 +80,12 @@ word.
 
 ## Review
 
-- K and U: no review. D: one reviewer. D+: two. The reviewer types per class come from `queue.config.json`
-  (`reviewers`, default `reviewer` and `reviewer-security`).
+- Fixed reviewers per class: K none, U none, D one, D+ two (`reviewers` in `queue.config.json`, default `reviewer`
+  and `reviewer-security`). The class is the floor. Helper agents add to it when they are on and hit (`helpers`;
+  `cq helpers` lists them; by default the challenger for U and `bug`, design for `visual`). Start exactly the
+  reviewers `receive` prints; the package says why each helper was chosen.
 - The review package is made by `cq receive` BEFORE merging (afterwards the diff is empty): `00-package.md`,
-  `diff.patch`, `files/` (changed files in full), `trackReply.md`, `trackReport.md`, `handover.md`.
+  `diff.patch`, `files/` (changed files in full), `trackReply.md`, `trackReport.md`, `handover.md`, `mission.md`.
 - Fixed lines: a track's last answer starts with `RESULT status=… branch=… commits=… gates=… ownerQuestions=…`, a reviewer's
   with `FINDINGS H=… M=… L=… deferrable=…`. `receive` and `set done` read them.
 - Fix rounds by severity: HIGH always gives a fix round. MEDIUM you fix yourself at merge when small and mechanical,

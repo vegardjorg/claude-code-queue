@@ -43,7 +43,13 @@ what waits on you. **Plan entries** shows the entries as a list, a priority map,
 filters and the details of the selected entry. **Documents and agreements**, **Legal**, **Decisions** and **Launch**
 show the documents, the legal points, the owner decisions and what stands between the plan and launch.
 
-The gear holds the settings (theme, mascot, the queue's limits and the read-only setup) and the help.
+The gear holds the settings and the help, in two tabs. **General**: theme, mascot, the queue's limits and the
+read-only setup. **Helper agents**: one row per [helper agent](orchestration.md#helper-agents) with what it does,
+when it runs (classes, labels, paths in plain text), an on/off switch (a checkbox with role switch; Space toggles it)
+and what it has cost: runs, median and total minutes, tokens and USD, its share of the task cost, and H/M/L findings
+per run ("No runs yet" until it has run). The switch is saved through `cq helpers on|off <agent>` (the board posts
+to `/api/helper` behind the key and the Origin check, like every other write; it never writes files itself). The
+arrow keys move between the two tabs, and the board remembers the last one.
 
 ## Update banner
 

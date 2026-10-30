@@ -6,6 +6,21 @@ and `package.json`.
 ## Unreleased
 
 ### Added
+- **Helper agents**: optional reviewers on top of the fixed ones per class, switched with `cq helpers on|off <agent>`
+  or the new **Helper agents** tab in the board's settings (saved in `queue.json`, which wins over the new `helpers`
+  block in `queue.config.json`). Each runs when it is on and one condition hits: class, label, changed paths, most
+  of the diff, a plan entry or the number of mission points. New agents `reviewer-design` (on for `visual`),
+  `reviewer-tests`, `reviewer-gap` and `reviewer-docs` (off), adapted from testdouble/han (MIT, see NOTICE);
+  `reviewer-challenger` moves into the same system (on for U and `bug`). The reviewers for a task are worked out in
+  one place (`lib/queueHelpers.js`) and used by `receive`, the cost per task, the cost guard and the read guard.
+  The review package lists each reviewer with a `why:` line and carries the mission as `mission.md`.
+- **Helper measurement**: the cost per agent now keeps its tokens, minutes and FINDINGS numbers, so `cq helpers`,
+  `cq cost` and the board show per helper the runs, median and total minutes, tokens and USD, its share of the task
+  cost and findings per run.
+- **Counter-evidence step in every reviewer**: a HIGH or MEDIUM finding is disproved first (reread, look for an
+  existing guard or test, check that the change introduced it, lower it one level without ground). Security findings
+  are lowered only on counter-evidence at file:line and carry an `EXPLOIT:` part; `Unverified:` lines and a
+  self-consistency rule for all.
 - **Update banner on the board**: the board server checks GitHub for a newer `cq` at most once per 24 hours (a plain
   GET with a short timeout that sends nothing about you; errors are silent) and shows "cq X is out (you have Y)" with
   a CHANGELOG link and copyable update steps. Close it per version. Off with `board.updateCheck: false` or
@@ -13,6 +28,11 @@ and `package.json`.
 - **Setup notice after an update**: `cq setup --settings` records the plugin version in `<dataFolder>/setup.json`,
   and the board says when the installed plugin differs from it (local, works with the check off). The vendored
   installer writes `scripts/orchestrator/cq-version.json` so the board knows that version too.
+
+### Changed
+- `reviewers.U` is empty by default; the challenger for U now comes from `helpers` (same result, but it can be
+  switched off). A config that lists `reviewer-challenger` under `reviewers.U` keeps it as a fixed reviewer.
+- The read guard also covers `reviewer-challenger` and every helper agent in the setup.
 
 ## 0.3.0 (2026-10-30)
 

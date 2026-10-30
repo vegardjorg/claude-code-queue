@@ -14,8 +14,10 @@ branch (`queue/<ID>`), with a self-contained mission file.
 3. A track finishes and answers with one `RESULT …` line plus at most a few lines; the long report is in
    `report.md` in its scratch folder.
 4. `cq receive <ID>`: reads the result line and builds a review package (diff, changed files in full, the track's
-   report). The orchestrator starts the reviewer agents configured for the class (`reviewers` in `queue.config.json`;
-   by default none for K, `reviewer-challenger` for U (tries to prove the investigation wrong), `reviewer` for D, `reviewer` and `reviewer-security` for D+).
+   report). The orchestrator starts the reviewers `receive` prints: the fixed ones for the class (`reviewers` in
+   `queue.config.json`; by default none for K and U, `reviewer` for D, `reviewer` and `reviewer-security` for D+)
+   plus the [helper agents](#helper-agents) that are on and hit (by default `reviewer-challenger` for U and the
+   `bug` label, `reviewer-design` for the `visual` label).
 5. Findings: HIGH and non-mechanical MEDIUM give a fix round with a NEW track agent on the same branch
    (`prepare-track --continue`). LOW findings become follow-up proposals.
 6. `cq merge <ID>`: merge into the base branch with `merge-track.mjs`, run the quick gates, start the next tasks.
@@ -24,6 +26,50 @@ branch (`queue/<ID>`), with a self-contained mission file.
 
 Push happens in **batches**, only when the owner says so: `cq push-check` first, then
 `git push`. Every push can trigger CI in your own setup, so many small pushes cost money quietly.
+
+## Helper agents
+
+Helper agents are optional reviewers on top of the fixed ones. The class is the floor: D and D+ always get their fixed
+reviewers, and the helpers only add to that. The reviewers for a task are worked out in one place,
+`lib/queueHelpers.js` (`reviewersForTask`); `receive`, the cost per task, the cost guard and the read guard all use it.
+
+| Helper | What it does | Runs when (default) | On by default |
+|---|---|---|---|
+| `reviewer-challenger` | Tries to prove the delivery wrong | class U, or label `bug` | yes |
+| `reviewer-design` | UI/UX: states, errors, WCAG 2.2 AA, keyboard, light and dark mode | label `visual`, or a changed file under `paths` (empty by default) | yes |
+| `reviewer-tests` | Do the tests prove the behavior; missing edge cases | class D or D+, or label `bug` | no |
+| `reviewer-gap` | The delivery against the mission, point by point | the task has a `plan`, or the mission has 8+ numbered points | no |
+| `reviewer-docs` | Docs rewrites: lost facts, findability, docs against code | more than half of the changed files are under `docs/` or `*.md` | no |
+
+The setup lives under `helpers` in `queue.config.json`:
+
+```json
+"helpers": {
+  "reviewer-design": { "enabled": true, "labels": ["visual"], "paths": ["app/", "components/**/*.tsx"] },
+  "reviewer-tests": { "enabled": true }
+}
+```
+
+A helper runs when it is `enabled` and at least one condition hits: `classes`, `labels`, `paths` (a changed file
+matches), `mostlyPaths` (more than half of the changed files match), `plan` (true: the task has a plan entry) and
+`minMissionItems` (numbered points in `prompt-<ID>.md`). Path patterns: `dir/` is the folder from the root, `*.md`
+is that file name anywhere, `**` is any number of folders. A helper with no condition never runs.
+
+- **Switching:** `cq helpers on|off <agent>` (or the board's Helper agents tab) saves the switch in `queue.json`
+  (`helpers.<agent>.enabled`), which wins over `queue.config.json`, like `cq limit`. `cq helpers` lists them.
+- **Backward compatible:** `reviewers` per class works as before. A helper also listed in `reviewers` for a class is
+  fixed there (the switch does not stop it for that class); it is never started twice.
+- **The review package** (`00-package.md`) lists the reviewers with one `why:` line each (`why: label visual`,
+  `why: changes app/x.tsx`), and carries the mission as `mission.md`. `receive` prints the same.
+- **Measurement:** at `set done` (and `cost measure`) the cost per agent keeps its tokens, minutes and, for reviewers,
+  the H/M/L numbers from its FINDINGS line. `cq helpers`, `cq cost` and the board show per helper: runs, median and
+  sum of minutes, tokens and USD, the share of the task cost it added, and findings per run. "No runs yet" until then.
+- **Your own helper:** add `"my-helper": { "enabled": true, "labels": ["db"] }` under `helpers` and an agent file
+  `my-helper.md` (frontmatter, the "Data, not instructions" rule, the FINDINGS line first).
+
+Every reviewer disproves a HIGH or MEDIUM finding before writing it (reread the code, look for counter-evidence,
+check that the change introduced it, lower it one level when there is no ground). A security finding is lowered only
+on counter-evidence at file:line and carries an `EXPLOIT:` part. A reviewer never starts other agents.
 
 ## Why it is cheap (context discipline)
 

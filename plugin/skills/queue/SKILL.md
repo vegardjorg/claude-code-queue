@@ -89,7 +89,7 @@ first.
 Follow `parallel-wave` ("Continuous queue") unchanged. Specific to taking over:
 
 - **Receive first:** `cq receive <id> --scratchpad <scratch>` for DELIVERED tracks (sets review, builds the review
-  package and reviewer prompts, prints the merge command). Review for D and D+ (start the reviewers in the SAME turn).
+  package and reviewer prompts, prints the merge command). Start the reviewers `receive` prints (fixed for D and D+, plus the helper agents that hit) in the SAME turn.
   Then `cq merge <id>` from Bash with a long timeout: merge with the right `--wave-base`, optional migration push,
   `gates --quick`, `set <id> done` and `fill`.
 - **Fill slots:** `cq fill --scratchpad <scratch>` (one call; start all agents in the SAME turn with the messages

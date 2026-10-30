@@ -133,7 +133,8 @@ reviewer agents per class. Missing values fall back to safe defaults.
 | `gates.quick`, `gates.full` | `[]` | Commands `gates.mjs` runs (empty = green) |
 | `migrations.folder` | `null` | Optional numbered migrations; `null` turns block numbering and migration push off |
 | `migrations.pushCommand`, `environmentFile`, `allowedEnvironment` | `null`, `null`, `[]` | `merge` runs the push command after merging (skip with `--without-migr-push`), but only when the environment file names an allowed environment |
-| `reviewers` | D: `reviewer`, D+: `reviewer` + `reviewer-security` | Reviewer agents per class after `receive` |
+| `reviewers` | D: `reviewer`, D+: `reviewer` + `reviewer-security` | Fixed reviewer agents per class after `receive` |
+| `helpers` | challenger (U, `bug`) and design (`visual`) on; tests, gap, docs off | Optional helper agents with conditions; switch with `cq helpers on\|off <agent>` (see orchestration.md) |
 | `architectureRules` | `[]` | Short rules copied into every mission |
 | `sharedLinks` | `["node_modules"]` | Folders linked into each worktree instead of reinstalled |
 | `readGuard` | built-in lists | Extra agent types, auto-loaded files and large-file globs for the reading guard |

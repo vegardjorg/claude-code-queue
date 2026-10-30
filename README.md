@@ -57,9 +57,14 @@ Task classes decide size and review:
 | Class | Meaning | Size of one task | Review |
 |---|---|---|---|
 | K | Ordinary code | 90 to 120 min of work | none |
-| U | Investigation | about 60 min | none |
+| U | Investigation | about 60 min | the challenger (a helper agent) |
 | D | Database or contract change | about 40 min | one reviewer agent |
 | D+ | High-risk database or security | 25 to 30 min | two reviewer agents |
+
+On top of that come **helper agents**: optional reviewers you switch on and off (`cq helpers`, or the Helper agents
+tab in the board's settings). By default the challenger runs for U and `bug` tasks and the design reviewer for
+`visual` tasks; the tests, gap and docs reviewers are off. The board shows what each one costs in minutes, tokens and
+dollars, and how many findings it gives. See [orchestration](plugin/docs/orchestration.md#helper-agents).
 
 ## A tour of the board
 
@@ -266,6 +271,7 @@ cq fill --scratchpad <dir>   # start what the limits allow
 cq receive <ID>              # receive a finished track
 cq merge <ID>                # merge it
 cq cost                      # measured cost per class
+cq helpers                   # helper agents: on/off and what they cost
 cq plan show                 # plan register
 cq board                     # the board: prints a local link with a key
 cq follow                    # follow-up entries
