@@ -3247,33 +3247,205 @@
       return;
     }
     const o = d.setup;
+    // Two tabs: General (everything that was here before) and Helper agents (the switches and the measurement).
+    const tab = settingsTab();
+    if (tab === 'helpers') {
+      panel.replaceChildren(header, settingsTabs(tab), helpersPanel(d));
+      panel.scrollTop = scroll;
+      return;
+    }
     panel.replaceChildren(
       header,
-      helpSection(),
-      themeSection(),
-      mascotSection(),
+      settingsTabs(tab),
       el(
-        'section',
-        { class: 'setting', 'aria-labelledby': 'setting-queue' },
-        el('h3', { id: 'setting-queue', class: 'setting-title', text: 'The queue' }),
-        d.field.map((f) => settingField(f, d)),
-      ),
-      undoSection(),
-      el(
-        'section',
-        { class: 'setting', 'aria-labelledby': 'setting-setup' },
-        el('h3', { id: 'setting-setup', class: 'setting-title', text: 'Setup (read only)' }),
-        el('dl', { class: 'facts' }, setupFacts(o)),
-      ),
-      el(
-        'section',
-        { class: 'setting', 'aria-labelledby': 'setting-rules' },
-        el('h3', { id: 'setting-rules', class: 'setting-title', text: 'Rules from the skill' }),
-        list2(o.rules),
-        el('p', { class: 'setting-source', text: `Source: ${o.rulesSource}` }),
+        'div',
+        { id: 'settings-panel-general', role: 'tabpanel', 'aria-labelledby': 'settings-tab-general' },
+        helpSection(),
+        themeSection(),
+        mascotSection(),
+        el(
+          'section',
+          { class: 'setting', 'aria-labelledby': 'setting-queue' },
+          el('h3', { id: 'setting-queue', class: 'setting-title', text: 'The queue' }),
+          d.field.map((f) => settingField(f, d)),
+        ),
+        undoSection(),
+        el(
+          'section',
+          { class: 'setting', 'aria-labelledby': 'setting-setup' },
+          el('h3', { id: 'setting-setup', class: 'setting-title', text: 'Setup (read only)' }),
+          el('dl', { class: 'facts' }, setupFacts(o)),
+        ),
+        el(
+          'section',
+          { class: 'setting', 'aria-labelledby': 'setting-rules' },
+          el('h3', { id: 'setting-rules', class: 'setting-title', text: 'Rules from the skill' }),
+          list2(o.rules),
+          el('p', { class: 'setting-source', text: `Source: ${o.rulesSource}` }),
+        ),
       ),
     );
     panel.scrollTop = scroll;
+  }
+
+  // ---- The settings tabs: General and Helper agents ----
+  const SETTINGS_TABS = [
+    { id: 'general', text: 'General' },
+    { id: 'helpers', text: 'Helper agents' },
+  ];
+  /** The chosen tab (remembered in this browser; a value that is no tab gives General). */
+  function settingsTab() {
+    const v = store.getItem('queue-board-settings-tab');
+    return SETTINGS_TABS.some((x) => x.id === v) ? v : 'general';
+  }
+  function chooseSettingsTab(id, focus = false) {
+    store.setItem('queue-board-settings-tab', id);
+    drawSettings();
+    if (focus) $(`settings-tab-${id}`)?.focus();
+  }
+  /** Real tabs (role tab, aria-selected, roving tabindex); the arrow keys, Home and End move and select. */
+  function settingsTabs(now) {
+    return el(
+      'div',
+      {
+        class: 'toggles settings-tabs',
+        role: 'tablist',
+        'aria-label': 'Settings',
+        onkeydown: (e) => {
+          const i = SETTINGS_TABS.findIndex((x) => `settings-tab-${x.id}` === document.activeElement?.id);
+          if (i < 0) return;
+          const j = window.QueueA11y.tabMeasure(SETTINGS_TABS.length, i, e.key);
+          if (j == null) return;
+          e.preventDefault();
+          chooseSettingsTab(SETTINGS_TABS[j].id, true);
+        },
+      },
+      SETTINGS_TABS.map((x) =>
+        el('button', {
+          type: 'button',
+          id: `settings-tab-${x.id}`,
+          class: 'toggles-button',
+          role: 'tab',
+          'aria-selected': x.id === now ? 'true' : 'false',
+          'aria-controls': `settings-panel-${x.id}`,
+          tabindex: x.id === now ? '0' : '-1',
+          text: x.text,
+          onclick: () => chooseSettingsTab(x.id, true),
+        }),
+      ),
+    );
+  }
+
+  /**
+   * The "Helper agents" tab: one row per helper with what it does, when it runs, an on/off switch (a real checkbox
+   * with role switch and a label) and what it has cost (runs, minutes, tokens, USD, share of the task cost, findings).
+   * The switch goes through /api/helper -> `cq helpers on|off <agent>`; the board never writes the files itself.
+   */
+  function helpersPanel(d) {
+    const rows = Array.isArray(d.helpers) ? d.helpers : [];
+    return el(
+      'div',
+      { id: 'settings-panel-helpers', role: 'tabpanel', 'aria-labelledby': 'settings-tab-helpers' },
+      el(
+        'section',
+        { class: 'setting', 'aria-labelledby': 'setting-helpers' },
+        el('h3', { id: 'setting-helpers', class: 'setting-title', text: 'Helper agents' }),
+        el('p', {
+          class: 'setting-explanation',
+          text:
+            'Optional reviewers on top of the fixed ones for the class (D: reviewer, D+: reviewer and reviewer-security). ' +
+            'One runs for a task when it is on and one of its conditions hits. The conditions are in queue.config.json ' +
+            '(helpers); the switch here is saved in the queue.',
+        }),
+        rows.length
+          ? rows.map((h) => helperRow(h))
+          : el('p', { class: 'empty', text: 'No helper agents in the setup (helpers in queue.config.json).' }),
+      ),
+    );
+  }
+
+  function helperRow(h) {
+    const id = `helper-${h.name}`;
+    const error = el('p', { class: 'setting-error', role: 'alert', hidden: true });
+    const box = el('input', {
+      id,
+      type: 'checkbox',
+      role: 'switch',
+      class: 'switch',
+      checked: h.enabled,
+      'aria-describedby': `${id}-text ${id}-when ${id}-measure`,
+    });
+    box.addEventListener('change', () => saveHelper(h, box, error));
+    const fixed = h.fixedIn?.length
+      ? ` Also a fixed reviewer for class ${h.fixedIn.join(', ')} (reviewers), so the switch does not stop it there.`
+      : '';
+    return el(
+      'div',
+      { class: 'setting-field helper-row', 'data-helper': h.name },
+      el(
+        'div',
+        { class: 'helper-head' },
+        box,
+        el(
+          'label',
+          { for: id },
+          el('span', { class: 'helper-title', text: h.title }),
+          ' ',
+          el('code', { text: h.name }),
+          // A helper of the project's own (source custom) says so; the switch and the measurement are the same.
+          h.source === 'custom' ? el('span', { class: 'helper-source', text: ' (custom)' }) : null,
+        ),
+        el('span', { class: 'helper-state', 'aria-hidden': 'true', text: h.enabled ? 'On' : 'Off' }),
+      ),
+      el('p', { id: `${id}-text`, class: 'setting-explanation', text: h.text }),
+      el('p', { id: `${id}-when`, class: 'setting-meta', text: h.when + fixed }),
+      helperMeasure(h, `${id}-measure`),
+      error,
+    );
+  }
+
+  /** The measurement: "No runs yet", or the numbers as a small list of facts. */
+  function helperMeasure(h, id) {
+    const s = h.stats;
+    if (!s || !s.runs) return el('p', { id, class: 'setting-meta helper-empty', text: 'No runs yet' });
+    const tok = (n) => (n == null ? '?' : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n));
+    const rows = [
+      ...facts('Runs', `${s.runs} on ${s.tasks} task(s)`),
+      ...facts('Minutes', s.minutes ? `${s.minutes.median} median, ${s.minutes.sum} total` : 'not measured'),
+      ...facts('Tokens', s.tokens ? `${tok(s.tokens.median)} median, ${tok(s.tokens.sum)} total` : 'not measured'),
+      ...facts('Cost', s.usd ? `${usd(s.usd.median)} median, ${usd(s.usd.sum)} total` : 'not measured'),
+      ...facts('Share of the task cost', s.sharePct != null ? `${s.sharePct} %` : 'not measured'),
+      ...facts(
+        'Findings',
+        s.findings.reviewed
+          ? `H=${s.findings.H} M=${s.findings.M} L=${s.findings.L} (${s.findings.perRun} per run)`
+          : 'no FINDINGS lines measured',
+      ),
+    ];
+    return el('dl', { id, class: 'facts helper-measure' }, rows);
+  }
+
+  async function saveHelper(h, box, errorEl) {
+    errorEl.hidden = true;
+    const wanted = box.checked;
+    box.disabled = true;
+    try {
+      const answer = await writeWithGuard('/api/helper', { name: h.name, enabled: wanted });
+      if (!answer) {
+        box.checked = !wanted; // cancelled
+        return;
+      }
+      messageWithInfo(`${h.title}: ${wanted ? 'on' : 'off'}`, answer);
+      await getSettings();
+      $(`helper-${h.name}`)?.focus();
+    } catch (e) {
+      // Not saved: the switch goes back, and the message from queue.mjs is shown by the row.
+      box.checked = !wanted;
+      errorEl.textContent = e.message;
+      errorEl.hidden = false;
+    } finally {
+      box.disabled = false;
+    }
   }
 
   function settingField(f, d) {

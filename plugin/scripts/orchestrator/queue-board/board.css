@@ -1345,6 +1345,93 @@ code {
   padding-left: var(--distance-md);
 }
 
+/* ---- Settings: the tabs (General, Helper agents) and the helper rows with an on/off switch ---- */
+
+.settings-tabs {
+  margin-top: var(--distance-md);
+}
+
+.helper-head {
+  display: flex;
+  align-items: center;
+  gap: var(--distance-sm);
+}
+
+.helper-head label {
+  flex: 1;
+  cursor: pointer;
+}
+
+.helper-head code,
+.helper-source {
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.helper-state {
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+/* A real checkbox drawn as a slider (role switch). The track is outline when off and primary when on; the knob is a
+   pseudo element. Focus shows the same ring as the rest of the board. */
+input.switch {
+  appearance: none;
+  flex: none;
+  position: relative;
+  width: 44px;
+  height: 24px;
+  margin: 0;
+  border: 2px solid var(--color-outline);
+  border-radius: 9999px;
+  background: var(--color-surface-container-high);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+input.switch::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--color-on-surface-variant);
+  transition: transform 0.15s ease;
+}
+
+input.switch:checked {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+}
+
+input.switch:checked::before {
+  transform: translateX(20px);
+  background: var(--color-on-primary);
+}
+
+input.switch:focus-visible {
+  outline: var(--focus);
+  outline-offset: 2px;
+}
+
+input.switch:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  input.switch,
+  input.switch::before {
+    transition: none;
+  }
+}
+
+.helper-measure {
+  margin-top: var(--distance-sm);
+}
+
 .fare {
   color: var(--color-error);
 }
