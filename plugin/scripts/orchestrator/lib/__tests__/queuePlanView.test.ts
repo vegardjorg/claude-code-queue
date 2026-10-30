@@ -465,3 +465,22 @@ describe('the wiring in the board', () => {
       expect(['400', '600']).toContain(m[1].trim());
   });
 });
+
+// PLAN-3a-QA1: optional parts (the deadline band, the Unregistered box, the action line) are null on surfaces where they
+// do not apply, and Element.append(null) inserts the text "null". The room is therefore only filled via roomChildren.
+describe('roomChildren (PLAN-3a-QA1)', () => {
+  it('removes null, undefined and false and keeps the order', () => {
+    const a = { id: 'a' };
+    const b = { id: 'b' };
+    expect(V.roomChildren([null, a, undefined, false, b, null])).toEqual([a, b]);
+    expect(V.roomChildren([])).toEqual([]);
+    expect(V.roomChildren(undefined)).toEqual([]);
+  });
+
+  it('plans.js never puts children straight into the room with room.append', () => {
+    const source = readFileSync(join(CLIENT, 'plans', 'plans.js'), 'utf8');
+    // The only call is inside fillRoom, which filters with roomChildren first.
+    expect(source.match(/\broom\.append\(/g)).toHaveLength(1);
+    expect(source).toMatch(/room\.append\(\.\.\.V\.roomChildren\(children\)\)/);
+  });
+});

@@ -83,6 +83,9 @@
     for (const b of children.flat()) if (b != null && b !== false) e.append(b);
     return e;
   }
+  // PLAN-3a-QA1: the room is filled only with the parts that apply to the surface. Optional parts are null, and adding
+  // them directly would insert a raw "null" text under the tabs (Element.append turns null into text).
+  const fillRoom = (...children) => room.append(...V.roomChildren(children));
   function readList(key, standard = []) {
     try {
       const x = JSON.parse(localStorage.getItem(key) ?? 'null');
@@ -267,7 +270,7 @@
 
     room.replaceChildren();
     if (!s.data) {
-      room.append(
+      fillRoom(
         el('p', {
           class: 'empty plans-fetching',
           text: s.error ? `Could not read the plan register: ${s.error}` : 'Fetching the plan register …',
@@ -280,7 +283,7 @@
     // The overview is drawn by overview.js.
     if (t.surface === 'overview' && window.QueuePlanOverview) {
       room.classList.remove('has-selected');
-      room.append(
+      fillRoom(
         pathEl(d),
         surfaceOptionEl(d),
         window.QueuePlanMap ? window.QueuePlanMap.deadlineBand(mapHelp, d, null) : null,
@@ -296,7 +299,7 @@
     if (jbSurface) {
       room.classList.toggle('has-selected', window.QueuePlanLegal.hasSelected(legalHelp, d));
       room.classList.toggle('drawer-open', s.drawer);
-      room.append(
+      fillRoom(
         pathEl(d),
         surfaceOptionEl(d),
         t.surface === 'launch' && window.QueuePlanMap
@@ -319,7 +322,7 @@
     room.classList.toggle('has-selected', docSurface ? selectedDoc : !!selected);
     room.classList.toggle('drawer-open', s.drawer);
     const pickedOut = V.countFilters(t.filter) > 0 || !!t.search;
-    room.append(
+    fillRoom(
       pathEl(d),
       surfaceOptionEl(d),
       docSurface || !window.QueuePlanMap

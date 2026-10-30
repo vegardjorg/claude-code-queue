@@ -294,7 +294,8 @@
 //        the plan entry; an unknown or merged entry is refused, the project is taken from the entry when missing, and the entry
 //        becomes in-queue automatically. The field `plan` can also be in the file, and is set on existing tasks with edit-many.)
 //   node scripts/orchestrator/queue.mjs plan check [--json] [--max N]   (unregistered documents, dead paths, stale,
-//        statusDeviation, ruleDeviation, gaps, possible duplicates and capacity; read-only)
+//        statusDeviation, ruleDeviation, gaps, possible duplicates and capacity, and INDEX drift against the register
+//        (make-index.mjs --check, the field `index` in --json); read-only)
 //   node scripts/orchestrator/queue.mjs plan modules [--link] [--dry] [--json]   (creates modules from
 //        config().modules that are missing in areas; --link gives projects without a module the proposal in
 //        config().projectModuleSuggestion)
@@ -921,6 +922,26 @@ function changedFiles(files, { date, commit }) {
   ].sort();
 }
 
+/**
+ * The drift check for the index file (make-index.mjs --check). The index is ordered by the register, so an entry that
+ * gets new sources makes it stale; `plan check` shows that as its own point. Read-only. The same data folder as
+ * queue.mjs (QUEUE_FOLDER passed on). make-index.mjs skips with exit 0 when the index is turned off (indexFile: null),
+ * or the register or the index file is missing.
+ * Answer: { status: 'ok' | 'drift' | 'skipped' | 'error', text } (text = the output, short).
+ */
+function indexDrift() {
+  const s = spawnSync(process.execPath, [path.join(HERE, 'make-index.mjs'), '--check'], {
+    cwd: KK.config().root,
+    encoding: 'utf8',
+    env: { ...process.env, QUEUE_FOLDER: FOLDER },
+  });
+  if (s.error) return { status: 'error', text: `make-index.mjs did not start: ${s.error.message}` };
+  const text = `${s.stdout ?? ''}${s.stderr ?? ''}`.trim();
+  if (s.status === 1) return { status: 'drift', text };
+  if (s.status !== 0) return { status: 'error', text: text || `exit ${s.status}` };
+  return { status: /skipping/.test(text) ? 'skipped' : 'ok', text };
+}
+
 /** `plan check [--json] [--max N]`: the hygiene of the plan register. Read-only; changes nothing. */
 function planCheck(json) {
   const queue = readQueueForPlan();
@@ -935,8 +956,9 @@ function planCheck(json) {
     donePerWeek,
     projectFor: (o) => L.projectFor(o, queue.projects ?? {}),
   });
+  const index = indexDrift();
   if (json) {
-    console.log(JSON.stringify({ ok: true, changed: reg.changed ?? null, ...r }));
+    console.log(JSON.stringify({ ok: true, changed: reg.changed ?? null, ...r, index }));
     return;
   }
   const max = Number(val('--max') ?? 15) || 15;
@@ -975,6 +997,14 @@ function planCheck(json) {
       r.doc_consistency,
       docFindingsLine,
     );
+  // The index against the register (make-index.mjs --check). Drift or an error is shown with the output; fix it with
+  // `node scripts/orchestrator/make-index.mjs` (writes the index in this tree).
+  if (index.status === 'drift' || index.status === 'error') {
+    console.log(`\nIndex against the register (${index.status === 'drift' ? 'DRIFT' : 'ERROR'})`);
+    for (const l of index.text.split('\n')) console.log(`  ${cut(l.trim(), WIDTH - 2)}`);
+  } else {
+    console.log(`\nIndex against the register: ${index.status === 'ok' ? 'OK' : 'skipped (turned off, or no register or index file)'}`);
+  }
 }
 
 // ---- The consistency checks for documents and agreements ---------------------------------------

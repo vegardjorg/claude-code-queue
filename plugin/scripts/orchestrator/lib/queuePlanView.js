@@ -33,6 +33,19 @@
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
 
+  // ---- The room's children (PLAN-3a-QA1) ---------------------------------------------------------------------------
+
+  /**
+   * The children that really go into the room: optional parts (the deadline band, the Unregistered box, the action line
+   * ...) are null or false when they do not apply to the surface. Element.append(null) inserts the text "null", so they
+   * are removed first.
+   * @param {unknown[]} children
+   * @returns {unknown[]}
+   */
+  function roomChildren(children) {
+    return (children ?? []).filter((c) => c != null && c !== false);
+  }
+
   // ---- The values and how they are shown ---------------------------------------------------------------------------
 
   /** The priorities in display order (like queuePlan.PRIORITIES). The symbol always sits together with the text. */
@@ -3679,5 +3692,7 @@
     planNodeText,
     planGraphText,
     criticalPathText,
+    // PLAN-3a-QA1
+    roomChildren,
   };
 });
