@@ -1233,13 +1233,13 @@ function planModules(json) {
   }
   const pre = dry ? 'Preview (nothing written): ' : '';
   console.log(
-    `${pre}${r.newOnes.length ? `new modules: ${r.newOnes.map((m) => `${m.oid} (${m.title})`).join(', ')}` : 'all modules exist'}`,
+    `${pre}${r.newOnes.length ? `new areas: ${r.newOnes.map((m) => `${m.oid} (${m.title})`).join(', ')}` : 'all areas exist'}`,
   );
   if (r.exists.length)
     console.log(`Already exist (unchanged): ${r.exists.map((m) => m.oid).join(', ')}`);
   if (r.link.length)
     console.log(
-      `${pre}projects linked to module: ${r.link.map((k) => `${k.pid} → ${k.oid}`).join(', ')}`,
+      `${pre}projects linked to area: ${r.link.map((k) => `${k.pid} → ${k.oid}`).join(', ')}`,
     );
   if (!dry && !empty && undoHint()) console.log(undoHint());
   if (!link)
@@ -1577,7 +1577,7 @@ function planCommand() {
     }
     let previous = null;
     for (const p of entries) {
-      const group = `${p.module ?? '(without module)'} / ${p.project}`;
+      const group = `${p.module ?? '(without area)'} / ${p.project}`;
       if (group !== previous) console.log(`\n${group}`);
       previous = group;
       console.log(`  ${planRow(p)}`);

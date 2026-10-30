@@ -45,7 +45,7 @@ bonus; `priority_bonus` overrides.
 **Classes and sizes:** K (client/UI/ordinary code) 90-120 min of content; D (database/RPC/contract changes) about 40;
 D+ (new tables, retention, unauthenticated endpoints, shared-function patches) 25-30, never merged with other work;
 U (investigation) about 60. Fixed overhead per track is large (see `docs/queue/orchestration.md`), so small tasks go in
-the collection queue (`"batched": true`) and are packed into right-sized tracks with `cq batch pack`.
+the batch queue (`"batched": true`) and are packed into right-sized tracks with `cq batch pack`.
 
 **Limits:** `cq limit` shows and sets `maxConcurrent`, `maxDPlus`, `maxPerDomain`, `dailyBudget`,
 `nightRun`, `nightWindow`, `parallelThreshold`. One owner per file and DB function. Change limits only on the owner's

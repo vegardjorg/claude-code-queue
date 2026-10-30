@@ -110,14 +110,14 @@ the agents' contexts got. This is where you see whether the queue earns its keep
 
 ### Plans
 
-<p align="center"><img src="assets/screenshots/light-07-plans-overview.jpg" alt="The plan register overview per module" width="800"></p>
+<p align="center"><img src="assets/screenshots/light-07-plans-overview.jpg" alt="The plan register overview per area" width="800"></p>
 
-The **Plans** room is the plan register: one card per module with priority (now, owner, later) and maturity (from
+The **Plans** room is the plan register: one card per area with priority (now, owner, later) and maturity (from
 idea to built and verified), open questions, legal points and stale plans, plus what is being worked on right now.
 
-<p align="center"><img src="assets/screenshots/light-09-priority-map.jpg" alt="The priority map: plan entries per module and priority column" width="800"></p>
+<p align="center"><img src="assets/screenshots/light-09-priority-map.jpg" alt="The priority map: plan entries per area and priority column" width="800"></p>
 
-The **priority map** puts every plan entry in a grid of module by priority. Drag an entry to another column (or use
+The **priority map** puts every plan entry in a grid of area by priority. Drag an entry to another column (or use
 the keyboard); changes are collected in a draft you review before anything is saved. **Tree map** and
 **Dependencies** show the same entries by size and by order.
 
@@ -149,7 +149,7 @@ As a Claude Code plugin (recommended). In Claude Code:
 Then open your own project and run `/cq:setup`. It:
 - creates `queue.config.json`, `docs/queue/` and `CLAUDE.queue.md`, and adds two lines to `.gitignore`;
 - asks before it changes `CLAUDE.md` or `.claude/settings.json`;
-- fills in your checks (type check, lint, tests) and your project's modules with you;
+- fills in your checks (type check, lint, tests) and your project's areas with you;
 - creates the empty queue and runs a short smoke test;
 - offers to turn your existing notes, TODOs and issues into plan entries and tasks.
 

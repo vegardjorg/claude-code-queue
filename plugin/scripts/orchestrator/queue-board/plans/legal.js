@@ -65,7 +65,7 @@
   }
 
   function moduleName(d, oid) {
-    if (!oid) return 'Without module';
+    if (!oid) return 'Without area';
     return (d.modules ?? []).find((m) => m.oid === oid)?.title ?? oid;
   }
 
@@ -561,7 +561,7 @@
       h.el(
         'summary',
         { class: 'doc-section-title', 'data-focus': 'legal-privacy' },
-        'Privacy per module',
+        'Privacy per area',
       ),
       h.el(
         'div',
@@ -569,7 +569,7 @@
         h.el(
           'table',
           { class: 'doc-table' },
-          h.el('caption', { class: 'hidden-for-eye', text: 'Privacy status per module' }),
+          h.el('caption', { class: 'hidden-for-eye', text: 'Privacy status per area' }),
           h.el(
             'thead',
             {},
@@ -577,7 +577,7 @@
               'tr',
               {},
               ...[
-                'Module',
+                'Area',
                 'Art. 9 surfaces',
                 'DPIA needed',
                 'DPIA not assessed',
@@ -932,7 +932,7 @@
           'Added',
           x.added_at ? `${summaryDate(x.added_at)} (${x.days_open} days ago)` : null,
         ),
-        h.field('Modules', x.modules.map((m) => moduleName(d, m)).join(', ')),
+        h.field('Areas', x.modules.map((m) => moduleName(d, m)).join(', ')),
         h.field('Projects', x.projects.join(', ')),
       ),
       section(

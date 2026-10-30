@@ -197,7 +197,7 @@ describe('the filters and the facets', () => {
   it('the chips have the facet name and the value text', () => {
     const f = { ...V.emptyFilter(), module: ['alpha'], pri: ['now'] };
     expect(V.chips(f, DATA).map((b: { text: string }) => b.text)).toEqual([
-      'Module: Alpha',
+      'Area: Alpha',
       'Priority: Now',
     ]);
   });

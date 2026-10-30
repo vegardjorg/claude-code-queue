@@ -282,7 +282,7 @@
         class: 'button button-outline button-small',
         text: 'Areas …',
         title:
-          'Create and name areas (program parts), and move projects between them. You see what changes before it ' +
+          'Create and name areas, and move projects between them. You see what changes before it ' +
           'is saved.',
         onclick: openAreas,
       }),
@@ -938,7 +938,7 @@
       el('p', {
         class: 'bulk-explanation',
         text:
-          'An area (program part) groups projects that belong together, so you prioritize a few areas instead ' +
+          'An area groups projects that belong together, so you prioritize a few areas instead ' +
           'of many projects. A project belongs to one area. Every change is shown before it is saved.',
       }),
       el('h3', { class: 'setting-title', text: 'The areas' }),

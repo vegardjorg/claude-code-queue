@@ -43,7 +43,7 @@ a track adding a proposal) cannot corrupt the file. `cq undo` undoes the last ch
 | `owned_files`, `owner_db` | Files and DB objects the task owns exclusively while it runs |
 | `shared_patch` | Shared functions the task changes in patch form |
 | `project`, `feature`, `source` | Project id (must exist), feature name, and the plan section the task comes from |
-| `batched` | `true` for small low-value tasks: they go to the bundle queue (`cq batch`) instead of their own track |
+| `batched` | `true` for small low-value tasks: they go to the batch queue (`cq batch`) instead of their own track |
 
 Status flow: `proposed` (proposal) → `waiting` (waiting, approved) → `running` (running) → `review` → `done` (done),
 or `cancelled` (cancelled). Tasks added by an agent start as `proposed` and need `approve` (approve).
@@ -124,7 +124,7 @@ handover note.
 ## Configuration
 
 Project-specific values live in `queue.config.json` at the project root (see `queue.config.example.json`): base branch,
-branch prefix, gate commands, migration folder (optional), modules for the plan register, board port and title,
+branch prefix, gate commands, migration folder (optional), areas (`modules`) for the plan register, board port and title,
 reviewer agents per class. Missing values fall back to safe defaults.
 
 | Key | Default | Used for |

@@ -273,7 +273,7 @@
           'table',
           {
             class: `map${k.dropOpen ? '' : ' map-drop-folded'}`,
-            'aria-label': 'Priority map: modules by priority',
+            'aria-label': 'Priority map: areas by priority',
             'aria-describedby': 'map-help',
           },
           el(
@@ -282,7 +282,7 @@
             el(
               'tr',
               {},
-              el('th', { scope: 'col', class: 'map-corner', text: 'Module' }),
+              el('th', { scope: 'col', class: 'map-corner', text: 'Area' }),
               ...columns.map((col) => columnHeader(h, d, col)),
               k.dropOpen ? null : columnHeader(h, d, drop),
             ),

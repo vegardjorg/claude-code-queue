@@ -70,7 +70,7 @@
     const surface = V.TREE_MAP_SURFACE;
     const cells = V.treeMapCells(tk.fields, surface);
     const perId = new Map(tk.fields.map((f) => [f.id, f]));
-    const levelText = { module: 'modules', project: 'projects', entry: 'entries' }[tk.level];
+    const levelText = { module: 'areas', project: 'projects', entry: 'entries' }[tk.level];
 
     let content;
     if (!d.exists)

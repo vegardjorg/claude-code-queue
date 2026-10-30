@@ -1,6 +1,6 @@
 ---
 name: add-to-queue
-description: Add saved-up or new work to the work queue (scripts/.queue, `cq`) as tracks of the right size (K 90-120 min, D about 40, D+ 25-30, U about 60; small non-blocking tasks in the collection queue), with risk class, project and feature, ownership, dependencies and owner questions. Also takes a plan entry from the plan register (`/add-to-queue PL-…`) and sets the plan field. Use when the user says "add to the queue", "/add-to-queue …", or wants to send work to the continuous queue. Builds nothing itself.
+description: Add saved-up or new work to the work queue (scripts/.queue, `cq`) as tracks of the right size (K 90-120 min, D about 40, D+ 25-30, U about 60; small non-blocking tasks in the batch queue), with risk class, project and feature, ownership, dependencies and owner questions. Also takes a plan entry from the plan register (`/add-to-queue PL-…`) and sets the plan field. Use when the user says "add to the queue", "/add-to-queue …", or wants to send work to the continuous queue. Builds nothing itself.
 ---
 
 # Add to the work queue
@@ -25,8 +25,8 @@ Background: `${CLAUDE_PLUGIN_ROOT}/skills/parallel-wave/SKILL.md` and `docs/queu
    - **U** (investigation), weight 0.6: about 60 min.
    - Keep apart: K and D; tasks with different owner questions; unrelated hotspot files. Parallelism before cohesion.
    - **Small-task guard (`add` enforces it):** 10 min or less: not in the queue; ask the owner "fix now
-     (recommended) or collection queue?". Over 10 min but under the lower target for the class and value 7 or less:
-     collection queue (`"batched": true`). Unsure value: ask with a recommended value. Deliberate own track:
+     (recommended) or batch queue?". Over 10 min but under the lower target for the class and value 7 or less:
+     batch queue (`"batched": true`). Unsure value: ask with a recommended value. Deliberate own track:
      `"own_track": "<reason>"`. Not for D+, for tasks others depend on, or for tasks with open owner questions.
    `content_min` = the time the content would take as a K track (estimate = content_min × weight).
 2. **Write one self-contained track description per track** to `scripts/.queue/mission/<id>.md`: what and why, "Read

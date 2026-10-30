@@ -2249,7 +2249,7 @@
   const HELP = [
     [
       'Areas',
-      'An area (program part) groups projects that belong together, for example Auth or Payments and invoicing. ' +
+      'An area groups projects that belong together, for example Auth or Payments and invoicing. ' +
         'You prioritize areas instead of many projects. Create and edit them in Plan → "Areas …". A project ' +
         'belongs to one area.',
     ],

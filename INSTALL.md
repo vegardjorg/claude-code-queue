@@ -53,7 +53,7 @@ Open `queue.config.json` in the target and fill in, asking the user where you ar
   scripts (or the equivalent for the stack) and propose them; empty lists are allowed (gates then pass trivially).
 - `migrations`: only if the project has database migrations (folder and file name pattern). Otherwise leave `folder`
   as `null`.
-- `modules`: ASK the user which areas, projects or modules the product has (for example "auth", "billing",
+- `modules`: ASK the user which areas the product has (for example "auth", "billing",
   "mobile"). Use their answer for `modules` and `projectModuleSuggestion`.
 - `reviewers`: reviewer agents per class. The default (`reviewer` for D, `reviewer` + `reviewer-security` for D+)
   is a good start.

@@ -27,7 +27,7 @@
   "_modules": "Areas of the product for the plan register (queue.mjs plan modules).",
   "modules": [
     { "oid": "example", "title": "Example", "description": "Example module, rename or delete it" },
-    { "oid": "without-module", "title": "No module yet", "description": "Projects that do not belong to a module yet" }
+    { "oid": "without-module", "title": "No area yet", "description": "Projects that do not belong to an area yet" }
   ],
   "projectModuleSuggestion": { "example": "example" },
   "reviewers": { "K": [], "U": [], "D": ["reviewer"], "D+": ["reviewer", "reviewer-security"] },

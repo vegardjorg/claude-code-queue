@@ -51,8 +51,8 @@ const STANDARD = Object.freeze({
   architectureRules: [],
   // The plan register modules (areas). Created with `queue.mjs plan modules`.
   modules: [
-    { oid: 'example', title: 'Example', description: 'Example module, give it a new name or delete it' },
-    { oid: 'without-module', title: 'No fixed module', description: 'Projects that do not belong to a module yet' },
+    { oid: 'example', title: 'Example', description: 'Example area, give it a new name or delete it' },
+    { oid: 'without-module', title: 'No fixed area', description: 'Projects that do not belong to an area yet' },
   ],
   // Suggested module per project id (used by `plan modules --link`).
   projectModuleSuggestion: {},

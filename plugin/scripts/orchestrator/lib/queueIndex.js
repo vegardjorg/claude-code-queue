@@ -48,7 +48,7 @@ const AUTO_ROLES = ['plan', 'reference'];
 
 const SECTION_CROSS_CUTTING = {
   oid: 'crossCutting',
-  title: 'Cross-cutting (plan entries in several modules)',
+  title: 'Cross-cutting (plan entries in several areas)',
 };
 const SECTION_UNLINKED = { oid: 'unlinked', title: 'Not linked to a plan entry' };
 

@@ -21,8 +21,8 @@ undo.
 ```
 
 - `project` (required): must exist (`cq projects`; create with `cq project <pid> --title "…"`). It links
-  the entry to queue tasks in the same project. The module (area) comes from the project: `cq project <pid>
-  --area <oid>`, with modules from `modules` in `queue.config.json` (`cq plan modules` creates them).
+  the entry to queue tasks in the same project. The area comes from the project: `cq project <pid>
+  --area <oid>`, with the areas from `modules` in `queue.config.json` (`cq plan modules` creates them).
 - `priority`: `now` (now), `owner` (owner must decide), `later` (later), `drop` (dropped). Categories such as
   `security` (security), `for-prod` (before production) and `important` (important) explain why.
 - `maturity` (maturity): from `idea` (idea) to a plan that is ready to become queue tasks.

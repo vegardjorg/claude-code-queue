@@ -71,7 +71,7 @@
     S: 'under half a day',
     M: '1 to 3 tracks',
     L: '4 to 10 tracks',
-    XL: 'a whole module',
+    XL: 'a whole area',
   };
   const WAITING = { owner: 'The owner', lawyer: 'Legal resolution', none: 'Nothing' };
   /** The deadline bands (days from today). */
@@ -169,7 +169,7 @@
   const FACETS = [
     {
       id: 'module',
-      title: 'Module',
+      title: 'Area',
       param: 'module',
       values: null,
       by: (p) => [p.module ?? WITHOUT_MODULE],
@@ -461,7 +461,7 @@
       let name;
       if (f.id === 'module') {
         name = new Map(modules.map((m) => [m.oid, m.title]));
-        name.set(WITHOUT_MODULE, 'Without module');
+        name.set(WITHOUT_MODULE, 'Without area');
       } else if (f.id === 'project') {
         name = new Map(Object.entries(projects).map(([pid, x]) => [pid, x?.summary ?? pid]));
         name.set(WITHOUT_PROJECT, 'Without project');
@@ -492,7 +492,7 @@
     for (const f of FACETS)
       for (const v of filter?.[f.id] ?? []) {
         let text = f.values?.[v] != null ? valueText(f.values[v]) : null;
-        if (f.id === 'module') text = v === WITHOUT_MODULE ? 'Without module' : (modName.get(v) ?? v);
+        if (f.id === 'module') text = v === WITHOUT_MODULE ? 'Without area' : (modName.get(v) ?? v);
         if (f.id === 'project')
           text = v === WITHOUT_PROJECT ? 'Without project' : (projects[v]?.summary ?? v);
         out.push({ facet: f.id, val: v, text: `${f.title}: ${text ?? v}` });
@@ -556,7 +556,7 @@
       const all = proj.flatMap((x) => x.entries);
       out.push({
         oid,
-        title: oid === WITHOUT_MODULE ? 'Without module' : (titleFor.get(oid) ?? oid),
+        title: oid === WITHOUT_MODULE ? 'Without area' : (titleFor.get(oid) ?? oid),
         projects: proj,
         count: all.length,
         progress: progress(all),
@@ -599,7 +599,7 @@
     const modName = (data.modules ?? []).find((m) => m.oid === entry.module);
     const pr = entry.project ? data.projects?.[entry.project] : null;
     return [
-      modName?.title ?? (entry.module ? entry.module : 'Without module'),
+      modName?.title ?? (entry.module ? entry.module : 'Without area'),
       pr ? (pr.summary ?? entry.project) : entry.project ? entry.project : 'Without project',
     ];
   }
@@ -1307,7 +1307,7 @@
   function mapGrid(entries, modules = [], draft = {}) {
     const rowSequence = [...(modules ?? []).map((m) => m.oid), WITHOUT_MODULE];
     const titles = new Map((modules ?? []).map((m) => [m.oid, m.title]));
-    titles.set(WITHOUT_MODULE, 'Without module');
+    titles.set(WITHOUT_MODULE, 'Without area');
     const rows = new Map();
     const count = Object.fromEntries(MAP_COLUMN_IDS.map((k) => [k, 0]));
     const withoutPriority = [];
@@ -2202,7 +2202,7 @@
     },
     {
       id: 'module',
-      title: 'Module',
+      title: 'Area',
       param: 'jmod',
       values: null,
       by: (x) => [x.module ?? WITHOUT_MODULE],
@@ -2233,7 +2233,7 @@
     },
     {
       id: 'module',
-      title: 'Module',
+      title: 'Area',
       param: 'bmod',
       values: null,
       by: (x) => (x.modules?.length ? x.modules : [WITHOUT_MODULE]),
@@ -2358,7 +2358,7 @@
         for (const v of new Set(f.by(x, now))) counts.set(v, (counts.get(v) ?? 0) + 1);
       const name =
         f.id === 'module'
-          ? new Map([...modules.map((m) => [m.oid, m.title]), [WITHOUT_MODULE, 'Without module']])
+          ? new Map([...modules.map((m) => [m.oid, m.title]), [WITHOUT_MODULE, 'Without area']])
           : new Map(Object.entries(f.values).map(([v, t]) => [v, valueText(t)]));
       const selected = filter?.[f.id] ?? [];
       const option = [...new Set([...name.keys(), ...counts.keys(), ...selected])]
@@ -2383,7 +2383,7 @@
         const text =
           f.id === 'module'
             ? v === WITHOUT_MODULE
-              ? 'Without module'
+              ? 'Without area'
               : (modName.get(v) ?? v)
             : valueText(f.values[v] ?? v);
         out.push({ facet: f.id, val: v, text: `${f.title}: ${text}` });
@@ -2625,7 +2625,7 @@
       const f = progress(activeOnes);
       out.push({
         oid,
-        title: oid === WITHOUT_MODULE ? 'Without module' : (titles.get(oid) ?? oid),
+        title: oid === WITHOUT_MODULE ? 'Without area' : (titles.get(oid) ?? oid),
         count: activeOnes.length,
         dropped: all.length - activeOnes.length,
         priority: ['now', 'owner', 'later'].map((k) => ({
@@ -2894,7 +2894,7 @@
         text: pr?.summary ?? pid,
         path: pathText([
           'Plans',
-          pr?.area ? (modTitle.get(pr.area) ?? pr.area) : 'Without module',
+          pr?.area ? (modTitle.get(pr.area) ?? pr.area) : 'Without area',
         ]),
       });
     }
@@ -3185,7 +3185,7 @@
       if (level === 'module') {
         title =
           key === WITHOUT_MODULE
-            ? 'Without module'
+            ? 'Without area'
             : (modules.find((m) => m.oid === key)?.title ?? key);
         zoom = { module: [key], project: [] };
       } else if (level === 'project') {

@@ -65,7 +65,7 @@
           type: 'button',
           class: 'overview-summary',
           'data-focus': `moduleCard:${k.oid}`,
-          'aria-label': `${k.title}: ${k.count} entries. Open the list filtered on the module.`,
+          'aria-label': `${k.title}: ${k.count} entries. Open the list filtered on the area.`,
           onclick: () => {
             const f = V.emptyFilter();
             f.module = [k.oid];
@@ -294,8 +294,8 @@
         workingNowEl(h, d),
         h.el(
           'section',
-          { class: 'overview-modules', 'aria-label': 'Modules' },
-          h.el('h2', { class: 'hidden-for-eye', text: 'Modules' }),
+          { class: 'overview-modules', 'aria-label': 'Areas' },
+          h.el('h2', { class: 'hidden-for-eye', text: 'Areas' }),
           h.el(
             'ul',
             { class: 'overview-shortlist' },

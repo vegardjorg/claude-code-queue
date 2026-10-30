@@ -613,8 +613,8 @@
       'aria-expanded': 'true',
       'aria-controls': 'plans-palette-list',
       'aria-autocomplete': 'list',
-      'aria-label': 'Jump to a module, project or entry, or run an action',
-      placeholder: 'Jump to a module, project, entry or action',
+      'aria-label': 'Jump to an area, project or entry, or run an action',
+      placeholder: 'Jump to an area, project, entry or action',
       autocomplete: 'off',
       oninput: (e) => {
         a.palette.search = e.target.value.slice(0, 120);
@@ -668,7 +668,7 @@
     a.palette.match = d ? V.paletteMatch(V.paletteCandidates(d), a.palette.search, a.recentOnes) : [];
     if (a.palette.selected >= a.palette.match.length)
       a.palette.selected = Math.max(0, a.palette.match.length - 1);
-    const TYPE = { entry: 'Entry', project: 'Project', module: 'Module', action: 'Action' };
+    const TYPE = { entry: 'Entry', project: 'Project', module: 'Area', action: 'Action' };
     paletteEl._list.replaceChildren(
       ...(d
         ? a.palette.match.map((k, i) =>

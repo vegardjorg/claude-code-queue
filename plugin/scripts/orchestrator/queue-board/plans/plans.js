@@ -868,7 +868,7 @@
     else
       content = el(
         'ul',
-        { class: 'plans-tree', 'aria-label': 'The plans by module and project' },
+        { class: 'plans-tree', 'aria-label': 'The plans by area and project' },
         ...tree.map((m) => moduleEl(m, actively, selected, d)),
       );
     return el(

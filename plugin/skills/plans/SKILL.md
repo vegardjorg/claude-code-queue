@@ -1,6 +1,6 @@
 ---
 name: plans
-description: Fetch and work with plans in the plan register (scripts/.queue/plans.json, cq plan). Fetches a plan entry, a project or a module, checks status against the code with read-only Explore agents, gives a short report and waits for the owner's instruction. Saves the plan work (document, plan entry, owner questions, verification). Never builds. Use when the user types "/plans …", pastes a copy line from the board, or wants to look at, prioritise or verify a plan.
+description: Fetch and work with plans in the plan register (scripts/.queue/plans.json, cq plan). Fetches a plan entry, a project or an area, checks status against the code with read-only Explore agents, gives a short report and waits for the owner's instruction. Saves the plan work (document, plan entry, owner questions, verification). Never builds. Use when the user types "/plans …", pastes a copy line from the board, or wants to look at, prioritise or verify a plan.
 ---
 
 # /plans: work with plans in the plan register

@@ -1417,7 +1417,7 @@ describe('queue.mjs: add --plan, edit-many, project --phase, plan check, modules
     const ar = readQueue().areas ?? {};
     expect(Object.keys(ar)).toHaveLength(5);
     expect(ar.alpha.title).toBe('Alpha');
-    expect(run(['plan', 'modules']).out).toContain('all modules exist');
+    expect(run(['plan', 'modules']).out).toContain('all areas exist');
   });
 
   it('plan backup runs sync.mjs with --push, and an error in sync gives an exit code and no "done"', () => {
