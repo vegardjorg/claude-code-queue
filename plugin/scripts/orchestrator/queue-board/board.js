@@ -3143,13 +3143,14 @@
           n.accuracy == null ? 'no data' : `${counts(n.accuracy, 2)} ×`,
           'median of actual time divided by the estimate (1.00 = as estimated)',
         ),
-        tile(
-          'Usage today',
-          usd(n.usageToday),
-          n.dailyBudget
-            ? `of ${usd(n.dailyBudget)} daily quota (${Math.round((n.usageToday / n.dailyBudget) * 100)} %)`
-            : 'API equivalent; no daily quota set',
-        ),
+        // Only with a daily quota: without one, "0.00 USD" as a large number says nothing to act on.
+        n.dailyBudget
+          ? tile(
+              'Usage today',
+              usd(n.usageToday),
+              `of ${usd(n.dailyBudget)} daily quota (${Math.round((n.usageToday / n.dailyBudget) * 100)} %)`,
+            )
+          : null,
         // Batch queue counted separately (waiting to be packed, not to be started).
         n.batchQueue?.count
           ? tile(

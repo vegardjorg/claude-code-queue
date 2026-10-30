@@ -213,7 +213,8 @@ function bottleneckRecommendation(o, queue) {
  * The diagnosis for low parallelism. Pure: reads the queue, never writes.
  * @param {object} queue the queue
  * @param {{ now?: number }} [option] now = the time (ms) the focus and parking are evaluated against
- * @returns {{ activeOnes: number, max: number, threshold: number, share: number, low: boolean, focus: boolean,
+ * `empty` = no task is waiting to run; then `low` is always false (an empty queue is not an alarm).
+ * @returns {{ activeOnes: number, max: number, threshold: number, share: number, low: boolean, empty: boolean, focus: boolean,
  *   findings: Array<{ type: string, id: string, back: number, class: 'simple'|'complex', text: string,
  *   command?: string, option?: Array<{ text: string, command?: string }>, recommendation?: string, dep?: string,
  *   sp?: string }> }}
@@ -226,7 +227,9 @@ function parallelDiagnose(queue, { now = Date.now() } = {}) {
   const activeOnes = use.agents;
   const threshold = thresholdFor(queue);
   const share = max > 0 ? activeOnes / max : 1;
-  const low = max > 0 && activeOnes < threshold * max;
+  // Nothing waiting to run (an empty or finished queue): few tracks is then expected, not an alarm.
+  const empty = !tasks.some((o) => o.status === 'waiting');
+  const low = !empty && max > 0 && activeOnes < threshold * max;
 
   const all = queue?.tasks ?? [];
   const perId = new Map(all.map((o) => [o.id, o]));
@@ -484,13 +487,14 @@ function parallelDiagnose(queue, { now = Date.now() } = {}) {
       y.back - x.back ||
       x.id.localeCompare(y.id),
   );
-  return { activeOnes, max, threshold, share, low, focus: k.applies, findings };
+  return { activeOnes, max, threshold, share, low, empty, focus: k.applies, findings };
 }
 
 const pst = (x) => `${Math.round(x * 100)} %`;
 
 /** The heading: "LOW PARALLELISM: 2 of 6 tracks (33 %, threshold 70 %). Quick diagnosis:". */
 function heading(d) {
+  if (d.empty) return `Parallelism: ${d.activeOnes} of ${d.max} tracks (nothing waiting to run).`;
   return (
     `${d.low ? 'LOW PARALLELISM' : 'Parallelism'}: ${d.activeOnes} of ${d.max} tracks ` +
     `(${pst(d.share)}, threshold ${pst(d.threshold)}).${d.low ? ' Quick diagnosis:' : ''}`
@@ -534,9 +538,11 @@ function diagnoseLines(d, { max = 12 } = {}) {
 function diagnoseFull(d) {
   const out = [heading(d).replace(' Quick diagnosis:', '')];
   out.push(
-    d.low
-      ? 'Below the threshold: the paragraph is shown in fill, receive, orchestrator pulse and state (the field parallel).'
-      : 'Above the threshold: the paragraph is not shown in fill, receive and pulse.',
+    d.empty
+      ? 'Nothing waiting to run: low parallelism is expected, and the paragraph is not shown in fill, receive and pulse.'
+      : d.low
+        ? 'Below the threshold: the paragraph is shown in fill, receive, orchestrator pulse and state (the field parallel).'
+        : 'Above the threshold: the paragraph is not shown in fill, receive and pulse.',
   );
   if (!d.findings.length) {
     out.push('No findings.');

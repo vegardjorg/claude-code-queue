@@ -337,9 +337,29 @@ describe('the threshold and the output', () => {
     const threshold = { limits: { maxConcurrent: 10, parallelThreshold: 0.5 } };
     expect(D.parallelDiagnose({ ...queue([]), tasks: runningOnes(5), ...threshold }).low).toBe(false);
     const picked = up('A-P', { status: 'running', picked_by: 'owner' });
+    // One task waiting, so the queue is not empty (an empty queue is never low, see below).
+    const waiting = up('A-W');
     expect(
-      D.parallelDiagnose({ ...queue([]), tasks: [...runningOnes(4), picked], ...threshold }).low,
+      D.parallelDiagnose({ ...queue([]), tasks: [...runningOnes(4), picked, waiting], ...threshold })
+        .low,
     ).toBe(true);
+  });
+
+  it('an empty queue (nothing waiting) is not low parallelism: no alarm, and diagnose says why', () => {
+    const empty = { ...queue([]), tasks: [], limits: { maxConcurrent: 5 } };
+    const d = D.parallelDiagnose(empty);
+    expect(d.low).toBe(false);
+    expect((d as Diagnose & { empty: boolean }).empty).toBe(true);
+    expect(D.diagnoseLines(d)).toEqual([]);
+    const full = D.diagnoseFull(d).join('\n');
+    expect(full).not.toContain('LOW PARALLELISM');
+    expect(full).toContain('Parallelism: 0 of 5 tracks (nothing waiting to run).');
+    // Only done and proposed tasks: still nothing to run.
+    const finished = {
+      ...empty,
+      tasks: [up('A-1', { status: 'done' }), up('A-2', { status: 'proposed' })],
+    };
+    expect(D.parallelDiagnose(finished).low).toBe(false);
   });
 
   it('parallelThreshold: parsed by limit (0–1 or percentage), 0 turns the guard off, invalid is rejected', () => {
