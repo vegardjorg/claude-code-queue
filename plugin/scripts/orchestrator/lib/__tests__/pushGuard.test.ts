@@ -4,9 +4,14 @@
 // Locks that the expensive/irreversible commands are stopped (forced push, push of branches other than baseBranch,
 // migration push to an environment that is not allowed), and that normal work runs freely. See lib/pushGuard.js.
 // =============================================================
+import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
-import { assess, isCommand, isTrackAgent, readEnvironment, segments } from '../pushGuard';
+import { assess, isCommand, isGuardedAgent, isTrackAgent, readEnvironment, segments } from '../pushGuard';
 
 const MIG = {
   pushCommand: 'npx dbTool migrate push --yes',
@@ -129,8 +134,22 @@ describe('network guard (agent_type track/track-d)', () => {
       expect(decision(k, pluginTrack), k).toBe('deny');
     }
     expect(assess('curl https://x', { ...STD, ...track })?.reason).toMatch(
-      /Network calls are blocked for tracks; ask the orchestrator to fetch it\./,
+      /Network calls are blocked for queue agents; ask the orchestrator to fetch it\./,
     );
+  });
+  it('reviewers and helper agents (builtin and custom, also with the plugin prefix) are guarded too', () => {
+    // The builtin review agents are in the default list (the read guard's), without any config.
+    for (const agentType of ['reviewer', 'cq:reviewer', 'reviewer-security', 'cq:reviewer-security']) {
+      expect(decision('curl https://x', { agentType }), agentType).toBe('deny');
+      expect(decision('cat x.sh | bash', { agentType }), agentType).toBe('deny');
+    }
+    // A custom helper (registered with `cq helpers add`) comes in through the guarded types.
+    const guardedTypes = new Set(['reviewer', 'db-check']);
+    expect(decision('curl https://x', { agentType: 'db-check', guardedTypes })).toBe('deny');
+    expect(decision('iwr https://x', { agentType: 'cq:db-check', guardedTypes })).toBe('deny');
+    expect(decision('npx cowsay', { agentType: 'db-check', guardedTypes, knownPackage: () => false })).toBe('ask');
+    // Not in the list: not guarded.
+    expect(decision('curl https://x', { agentType: 'other-helper', guardedTypes })).toBeNull();
   });
   it('denies a pipe into a shell', () => {
     for (const k of [
@@ -175,7 +194,7 @@ describe('network guard (agent_type track/track-d)', () => {
     expect(assess('npx cowsay', { ...STD, ...track })?.reason).toMatch(/cowsay.*ask the orchestrator to fetch it/);
   });
   it('the orchestrator and the owner (no or another agent_type) are not affected', () => {
-    for (const context of [{}, { agentType: 'general-purpose' }, { agentType: 'reviewer' }]) {
+    for (const context of [{}, { agentType: null }, { agentType: 'general-purpose' }, { agentType: 'Explore' }]) {
       expect(decision('curl https://x', context)).toBeNull();
       expect(decision('cat x | sh', context)).toBeNull();
       expect(decision('npx cowsay', context)).toBeNull();
@@ -203,5 +222,46 @@ describe('segments and helpers', () => {
     expect(isTrackAgent('cq:track-d')).toBe(true);
     expect(isTrackAgent(undefined)).toBe(false);
     expect(isTrackAgent('reviewer-security')).toBe(false);
+  });
+  it('isGuardedAgent', () => {
+    const types = new Set(['reviewer', 'db-check']);
+    expect(isGuardedAgent('track', new Set())).toBe(true);
+    expect(isGuardedAgent('cq:track-d', new Set())).toBe(true);
+    expect(isGuardedAgent('cq:reviewer', types)).toBe(true);
+    expect(isGuardedAgent('db-check', types)).toBe(true);
+    expect(isGuardedAgent('general-purpose', types)).toBe(false);
+    expect(isGuardedAgent(undefined, types)).toBe(false);
+    expect(isGuardedAgent(null)).toBe(false);
+  });
+});
+
+// ---- The hook end to end: a custom helper from queue.json, and the orchestrator ----
+describe('hook-push-guard.mjs (network guard per agent type)', () => {
+  const hook = path.resolve(__dirname, '..', '..', 'hook-push-guard.mjs');
+  const run = (env: NodeJS.ProcessEnv, payload: object) => {
+    const r = spawnSync(process.execPath, [hook], { input: JSON.stringify(payload), encoding: 'utf8', env });
+    return r.stdout ? JSON.parse(r.stdout).hookSpecificOutput.permissionDecision : null;
+  };
+  it('blocks curl for a reviewer and a registered custom helper, never for the orchestrator', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cq-netguard-'));
+    try {
+      const folder = path.join(root, 'q');
+      fs.mkdirSync(folder);
+      fs.writeFileSync(
+        path.join(folder, 'queue.json'),
+        JSON.stringify({ tasks: [], helpers: { 'db-check': { enabled: true, source: 'custom', path: 'x.md' } } }),
+      );
+      const env: NodeJS.ProcessEnv = { ...process.env, QUEUE_ROOT: root, QUEUE_FOLDER: folder };
+      env.QUEUE_CONFIG = path.join(root, 'no-config.json');
+      const curl = (agent_type?: string) =>
+        run(env, { ...(agent_type ? { agent_type } : {}), tool_input: { command: 'curl https://x' }, cwd: root });
+      expect(curl('cq:reviewer')).toBe('deny');
+      expect(curl('db-check')).toBe('deny');
+      expect(curl('cq:db-check')).toBe('deny');
+      expect(curl()).toBeNull(); // the orchestrator: no agent_type
+      expect(curl('general-purpose')).toBeNull();
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 });

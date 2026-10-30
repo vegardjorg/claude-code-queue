@@ -179,6 +179,31 @@ function globToRegex(glob) {
 }
 
 /**
+ * The queue's own agent types: track, track-d, the review agents in the template and every reviewer and helper agent in
+ * the setup (fixed per class, the config's helpers and the custom helpers registered in queue.json with
+ * `cq helpers add`, lib/queueHelpers.js allReviewerTypes). Bare names, without a plugin prefix.
+ * The read guard (readRules) and the network guard (pushGuard.js) use this same list. The main session (the
+ * orchestrator) is never in it: its hook payload has no agent_type.
+ * @returns {Set<string>}
+ */
+function queueAgentTypes() {
+  let reviewerTypes = [];
+  try {
+    const KK = require('./queueConfig.js');
+    let queue = null;
+    try {
+      queue = JSON.parse(fs.readFileSync(path.join(KK.dataFolder(), 'queue.json'), 'utf8'));
+    } catch {
+      // no queue yet: the config's helpers only
+    }
+    reviewerTypes = require('./queueHelpers.js').allReviewerTypes(KK.config(), queue);
+  } catch {
+    reviewerTypes = Object.keys(require('./queueHelpers.js').CATALOG);
+  }
+  return new Set([...READ_TYPES, ...reviewerTypes]);
+}
+
+/**
  * The read guard's rules, merged from the defaults and config().readGuard. Without arguments queue.config.json is read.
  * @param {{ agentTypes?: string[], autoLoaded?: string[], largeFiles?: string[], maxLines?: number,
  *   blockLines?: number } | null} [readGuard]
@@ -194,23 +219,8 @@ function readRules(readGuard, migrations) {
   const list = (x) => (Array.isArray(x) ? x.filter((v) => typeof v === 'string' && v) : []);
   const largeOnes = list(lv.largeFiles);
   if (migrations?.folder) largeOnes.push(`${norm(migrations.folder).replace(/\/+$/, '')}/*.sql`);
-  // The reviewers in the setup (fixed per class and every helper agent, lib/queueHelpers.js) are track agents too,
-  // also the custom helpers registered in queue.json (`cq helpers add`).
-  let reviewerTypes = [];
-  try {
-    const KK = require('./queueConfig.js');
-    let queue = null;
-    try {
-      queue = JSON.parse(fs.readFileSync(path.join(KK.dataFolder(), 'queue.json'), 'utf8'));
-    } catch {
-      // no queue yet: the config's helpers only
-    }
-    reviewerTypes = require('./queueHelpers.js').allReviewerTypes(KK.config(), queue);
-  } catch {
-    reviewerTypes = Object.keys(require('./queueHelpers.js').CATALOG);
-  }
   return {
-    types: new Set([...READ_TYPES, ...reviewerTypes, ...list(lv.agentTypes)]),
+    types: new Set([...queueAgentTypes(), ...list(lv.agentTypes)]),
     autoLoaded: [...AUTO_LOADED, ...list(lv.autoLoaded)],
     largeFiles: largeOnes.map(globToRegex),
     maxLines: Number(lv.maxLines) > 0 ? Number(lv.maxLines) : MAX_LINES,
@@ -291,6 +301,7 @@ module.exports = {
   subagentTranscript,
   assessContext,
   readRules,
+  queueAgentTypes,
   globToRegex,
   isAutoLoaded,
   isLargeFile,

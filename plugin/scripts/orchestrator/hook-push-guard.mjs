@@ -12,8 +12,9 @@
 // The guard must never stop normal work because of a bug in itself. If node is missing on PATH, the hook gets exit 127,
 // which Claude Code treats as non-blocking.
 //
-// For agent_type track/track-d it also assesses network calls (curl, iwr, | sh, an unknown npx package); see
-// lib/pushGuard.js.
+// For the queue's agents (agent_type track/track-d and every reviewer and helper agent, builtin or custom, the same list
+// as the read guard) it also assesses network calls (curl, iwr, | sh, an unknown npx package); see lib/pushGuard.js.
+// The orchestrator (the main session, no agent_type) is not affected.
 //
 // Test: lib/__tests__/pushGuard.test.ts (the logic). Smoke test of the hook itself:
 //   echo '{"tool_input":{"command":"git push --force origin main"},"cwd":"."}' | node scripts/orchestrator/hook-push-guard.mjs
@@ -28,7 +29,7 @@ import path from 'node:path';
 const require = createRequire(import.meta.url);
 // Not a queue project (no queue.config.json): do nothing. A plugin's hooks run in every project the user opens.
 if (!require('./lib/projectRoot.js').queueActive()) process.exit(0);
-const { assess, readEnvironment, isTrackAgent } = require('./lib/pushGuard.js');
+const { assess, readEnvironment, isGuardedAgent } = require('./lib/pushGuard.js');
 const { config } = require('./lib/queueConfig.js');
 
 function read(stdin) {
@@ -96,11 +97,13 @@ process.stdin.on('end', () => {
     const command = p?.tool_input?.command;
     if (!p || typeof command !== 'string') process.exit(0);
     const k = config();
-    // agent_type exists only when the hook fires in a subagent (track/track-d get the network guard).
+    // agent_type exists only when the hook fires in a subagent (tracks, reviewers and helpers get the network guard).
     const agentType = typeof p.agent_type === 'string' ? p.agent_type : null;
-    const track = isTrackAgent(agentType);
+    // The guarded types are read once (config + queue.json), and only in a subagent.
+    const guardedTypes = agentType ? require('./lib/trackGuard.js').queueAgentTypes() : new Set();
+    const guarded = isGuardedAgent(agentType, guardedTypes);
     const gitContext = canHit(command, k);
-    if (!gitContext && !track) process.exit(0);
+    if (!gitContext && !guarded) process.exit(0);
 
     const cwd = typeof p.cwd === 'string' && p.cwd ? p.cwd : process.cwd();
     // The git calls only when the command can be a push or a migration push.
@@ -115,7 +118,8 @@ process.stdin.on('end', () => {
       baseBranch: k.baseBranch,
       migrations: k.migrations,
       agentType,
-      knownPackage: track ? knownPackage(cwd) : undefined,
+      guardedTypes,
+      knownPackage: guarded ? knownPackage(cwd) : undefined,
     });
     if (!answer) process.exit(0);
 

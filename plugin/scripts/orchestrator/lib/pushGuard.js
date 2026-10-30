@@ -15,14 +15,15 @@
 // Push to baseBranch is let through. The rule about pushing in batches (not per commit) is documentation
 // (docs/orchestration.md), not a block.
 //
-// Network guard for tracks (hardening against prompt injection). Applies ONLY when the hook payload has agent_type
-// track or track-d (also "cq:track" from the plugin); the orchestrator (the main session, the field is missing) and
-// the owner are not affected:
+// Network guard for the queue's agents (hardening against prompt injection). Applies ONLY when the hook payload has an
+// agent_type that is a track (track, track-d) or a reviewer or helper agent, builtin or custom (the same list as the read
+// guard, trackGuard.js queueAgentTypes; also with the plugin prefix, "cq:track", "cq:reviewer"). None of them needs the
+// network. The orchestrator (the main session, the field is missing), other agent types and the owner are not affected:
 //   deny  curl, wget, Invoke-WebRequest/iwr, Invoke-RestMethod/irm, Start-BitsTransfer as a command (also inside
 //         `powershell -c "…"`, `bash -c "…"`, `$(…)` and `(…)`), and a pipe into a shell (`| sh`, `| bash`, `| iex` …).
 //   ask   npm install/i/add and npx/npm exec with a package name that is not in package.json (and not in
 //         node_modules/.bin): it fetches and runs code from the network.
-//   The reason points the way: "Network calls are blocked for tracks; ask the orchestrator to fetch it."
+//   The reason points the way: "Network calls are blocked for queue agents; ask the orchestrator to fetch it."
 //   Known gaps (on purpose, lightweight): `node -e "fetch(…)"`, `git clone`, .NET classes in PowerShell. The guard is
 //   an extra layer; the merge guard (mergeGuard.js) and "data, not instructions" in the agent definitions are the others.
 //
@@ -149,14 +150,37 @@ function values(context) {
   return { baseBranch, migrations };
 }
 
-// ---- Network guard for tracks ---------------------------------------------------------------------------------------
+// ---- Network guard for the queue's agents ---------------------------------------------------------------------------
 
-/** The agent types the network guard applies to (the hook payload's agent_type, without a plugin prefix). */
+/** The track agent types (the hook payload's agent_type, without a plugin prefix). Always network guarded. */
 const TRACK_AGENT_TYPES = new Set(['track', 'track-d']);
-const isTrackAgent = (agentType) =>
-  TRACK_AGENT_TYPES.has(String(agentType || '').replace(/^.*:/, ''));
+/** The agent type without a plugin prefix ("cq:reviewer" -> "reviewer"). */
+const bare = (agentType) => String(agentType || '').replace(/^.*:/, '');
+const isTrackAgent = (agentType) => TRACK_AGENT_TYPES.has(bare(agentType));
 
-const NETWORK_REASON = 'Network calls are blocked for tracks; ask the orchestrator to fetch it.';
+/**
+ * Is this agent type network guarded? Tracks, plus every reviewer and helper agent (builtin and custom): the same list
+ * the read guard uses (trackGuard.js queueAgentTypes). None of them ever needs the network, and a custom helper with
+ * Bash could otherwise reach it. The main session (the orchestrator) has no agent_type and is never guarded.
+ * @param {string|null|undefined} agentType  the hook payload's agent_type
+ * @param {Set<string>} [types]  the guarded types; default track/track-d + queueAgentTypes() (reads the config)
+ */
+function isGuardedAgent(agentType, types) {
+  const t = bare(agentType);
+  if (!t) return false;
+  if (TRACK_AGENT_TYPES.has(t)) return true;
+  let set = types;
+  if (!set) {
+    try {
+      set = require('./trackGuard.js').queueAgentTypes();
+    } catch {
+      set = new Set(); // fails open to the tracks only
+    }
+  }
+  return set.has(t);
+}
+
+const NETWORK_REASON = 'Network calls are blocked for queue agents; ask the orchestrator to fetch it.';
 /** Command words (lower case, without path and .exe) that fetch from or send to the network. */
 const NETWORK_COMMANDS = new Set([
   'curl',
@@ -315,7 +339,7 @@ function unknownPackages(t, i0, knownPackage) {
   });
 }
 
-/** Assess the network guard for one command (called only for tracks). Returns a list of findings. */
+/** Assess the network guard for one command (called only for guarded agents, isGuardedAgent). Returns a list of findings. */
 function assessNetwork(command, context, depth = 0) {
   const findings = [];
   for (const seg of segments(command)) {
@@ -367,8 +391,9 @@ function assessNetwork(command, context, depth = 0) {
  *   environment: string|null           the contents of migrations.environmentFile (trimmed), null when the file does not exist,
  *   baseBranch?: string            default config().baseBranch,
  *   migrations?: { pushCommand, environmentFile, allowedEnvironment }   default config().migrations,
- *   agentType?: string|null        the hook payload's agent_type; track/track-d get the network guard,
- *   knownPackage?: (name) => bool  is the npm package known (package.json or node_modules/.bin)? Only for tracks.
+ *   agentType?: string|null        the hook payload's agent_type; tracks, reviewers and helpers get the network guard,
+ *   knownPackage?: (name) => bool  is the npm package known (package.json or node_modules/.bin)? Only for guarded agents,
+ *   guardedTypes?: Set<string>    the guarded agent types beyond track/track-d; default trackGuard.queueAgentTypes().
  * }
  * Returns null (no decision) or { decision: 'ask'|'deny', reason }.
  * With several matches the strictest wins (deny over ask).
@@ -426,8 +451,8 @@ function assess(command, context = {}) {
       }
     }
   }
-  // The network guard applies only to tracks (agent_type track/track-d).
-  if (isTrackAgent(context.agentType)) findings.push(...assessNetwork(command, context));
+  // The network guard applies to the queue's agents: tracks, reviewers and helper agents (never the orchestrator).
+  if (isGuardedAgent(context.agentType, context.guardedTypes)) findings.push(...assessNetwork(command, context));
   if (findings.length === 0) return null;
   return findings.find((f) => f.decision === 'deny') || findings[0];
 }
@@ -450,4 +475,12 @@ function readEnvironment(rotate, environmentFile) {
   return null;
 }
 
-module.exports = { assess, readEnvironment, isCommand, isTrackAgent, segments, TRACK_AGENT_TYPES };
+module.exports = {
+  assess,
+  readEnvironment,
+  isCommand,
+  isTrackAgent,
+  isGuardedAgent,
+  segments,
+  TRACK_AGENT_TYPES,
+};

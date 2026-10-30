@@ -5,6 +5,12 @@ and `package.json`.
 
 ## Unreleased
 
+### Changed
+- **The network guard covers reviewers and helper agents**: `curl`, `wget`, `iwr`, a pipe into a shell and an
+  unknown `npx` package are now blocked (or asked about) for every reviewer and helper agent, builtin or custom, not
+  only for `track` and `track-d`. The list is the read guard's (`queueAgentTypes`), also with the `cq:` prefix. The
+  orchestrator is still not affected.
+
 ### Added
 - **Custom helper agents**: `cq helpers add <file.md> [--name] [--classes/--labels/--paths]` (or **Add a custom
   helper** in the board's Helper agents tab) copies an agent file to `.claude/agents/<name>.md` and registers it in

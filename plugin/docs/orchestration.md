@@ -114,9 +114,9 @@ copied `.claude/agents/<name>.md`. The measurement and the conditions are the sa
 
 **What guards a custom helper:** the selection (`reviewersForTask`) never takes one without a valid approval for the
 file as it is now, also when the config says `enabled` or lists it in `reviewers`. The read guard applies to it like
-to every reviewer (it is in `allReviewerTypes`), and so does the push guard (every session). The network guard
-applies to `track` and `track-d` only, as for the builtin reviewers, so a custom helper with unrestricted Bash can
-still reach the network through it: the scan flags such a `tools` line, and a reviewer needs `Read, Grep, Glob`.
+to every reviewer (it is in `allReviewerTypes`), and so do the push guard (every session) and the network guard
+(every queue agent, see [Hardening](#hardening-against-prompt-injection)), so a custom helper with Bash cannot reach
+the network with `curl` or `| sh` either. The scan still flags a broad `tools` line: a reviewer needs `Read, Grep, Glob`.
 `merge-track` protects the custom helpers' agent files like `.claude/`, also when `protectedPaths` was changed: a
 track cannot rewrite an approved helper without owning its file.
 
@@ -223,9 +223,12 @@ Windows, so there are four layers:
   skills and scripts, `queue.config.json`, `CLAUDE.queue.md`, `settings.queue.json`, `package.json`,
   `package-lock.json`). Read the diff; then add the path to the task's ownership, or run `cq merge <ID> --allow-guard`,
   which is logged as `guard-overridden` in the time log. Other files outside the ownership only give a warning.
-- **Network guard.** For `track` and `track-d`, `hook-push-guard.mjs` denies `curl`, `wget`, `iwr`/`irm`,
+- **Network guard.** For every queue agent, `hook-push-guard.mjs` denies `curl`, `wget`, `iwr`/`irm`,
   `Start-BitsTransfer` and a pipe into a shell (`| sh`, `| iex` …), and asks before `npm install` or `npx` with a
-  package that is not in `package.json`. The orchestrator fetches what a track needs.
+  package that is not in `package.json`. The queue agents are `track`, `track-d` and every reviewer and helper agent,
+  builtin or custom (the same list as the read guard, `queueAgentTypes` in `lib/trackGuard.js`, also with the plugin
+  prefix such as `cq:reviewer`). None of them needs the network. The orchestrator (the main session) is not affected
+  and fetches what an agent needs.
 - **Limits.** `maxTurns` is 400 for `track` and 600 for `track-d`, and `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=1`
   (`env` in `settings.queue.json`, set by `setup --settings`) stops a track from starting agents of its own. A plugin's
   `hooks.json` cannot set environment variables, so this one lives in the project settings.
