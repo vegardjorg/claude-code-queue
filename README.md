@@ -191,6 +191,11 @@ Hooks support the loop: they warn the orchestrator and the tracks when their con
 pushes of branches other than the base branch and migration pushes to the wrong environment, put the queue state back into the chat after compaction, and log the time and
 tokens of every subagent.
 
+**Hardening against prompt injection.** Tracks treat what they read as data, not instructions. The merge stops
+(exit 4) when a branch changes hooks, settings, agents, the orchestrator scripts or the queue config without owning
+them (`protectedPaths` in `queue.config.json`; `cq merge <ID> --allow-guard` overrides), and tracks cannot run `curl`,
+`wget`, `iwr` or a pipe into a shell ([orchestration](plugin/docs/orchestration.md#hardening-against-prompt-injection)).
+
 **Context limit in every chat.** In a project with the queue, every chat gets a notice at 250k tokens of context,
 and at 400k the message is stopped so a long chat does not keep paying for its whole history. Compact the chat
 (`/compact`), or start the message with `continue:` to send it anyway. The limits can be changed with environment

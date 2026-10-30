@@ -26,6 +26,10 @@
 // committed. Otherwise the merge is left in place (git merge --abort to undo), and the script says what must be resolved by
 // hand. The project's own gates (gates.mjs) are run by `queue.mjs merge` after this script, not here.
 //
+// BEFORE the merge: the guard check (lib/mergeGuard.js). If the branch touches a protected path (config().protectedPaths:
+// .claude/, the orchestrator scripts, hooks, agents, queue.config.json, package.json and so on) that the task does not
+// own in queue.json, the merge stops (exit 4). Other files outside the ownership only give a warning.
+//
 // With migrations turned on (config().migrations.folder) it also reports SQL functions that the branch rewrites entirely
 // (create or replace) and that another track in the same wave has also rewritten. Then the one with the highest
 // migration number wins, and the other's change silently disappears.
@@ -35,10 +39,13 @@
 // into exit ≠ 0, and locked, dirty or unmerged worktrees are left alone.
 //
 // USE:
-//   node scripts/orchestrator/merge-track.mjs <branch> [--wave-base <sha>] [--without-commit] [--keep-worktree]
+//   node scripts/orchestrator/merge-track.mjs <branch> [--wave-base <sha>] [--without-commit] [--keep-worktree] [--allow-guard]
 //     --wave-base <sha>  the base branch commit the wave started from (for the check of functions rewritten by several tracks)
 //     --without-commit       resolve and validate, but do not commit (the merge is left in place)
 //     --keep-worktree   do not clean up the track worktree after the merge
+//     --allow-guard     merge even if the branch touches protected paths it does not own (logged as "guard-overridden"
+//                       in the time log). Without it: exit 4 BEFORE the merge, with the list.
+//   Exit: 0 merged, 1 merge or validation failed, 2 usage or no diff, 3 identity guard, 4 merge guard.
 // NB: never use String.replace with a replacement text that may contain "$" (patterns such as $& are interpreted); build with slice.
 // =============================================================
 
@@ -61,9 +68,10 @@ const waveBase = val('--wave-base');
 const branch = args.find((a, i) => !a.startsWith('--') && args[i - 1] !== '--wave-base');
 const WITHOUT_COMMIT = args.includes('--without-commit');
 const KEEP_WORKTREE = args.includes('--keep-worktree');
+const ALLOW_GUARD = args.includes('--allow-guard');
 if (!branch) {
   console.error(
-    `Use: ${CQ} merge-track <branch> [--wave-base <sha>] [--without-commit] [--keep-worktree]`,
+    `Use: ${CQ} merge-track <branch> [--wave-base <sha>] [--without-commit] [--keep-worktree] [--allow-guard]`,
   );
   process.exit(2);
 }
@@ -114,6 +122,76 @@ function writeWithNewAttempt(file, text) {
     }
   }
 }
+// ---- 0) Guard check: protected paths need ownership ---------------------------------------------------------------
+// Hooks, settings, agent definitions, orchestrator scripts, the queue config and package.json can only be changed by a
+// task that owns the path (owned_files/shared_patch in queue.json). Otherwise the merge stops BEFORE it starts;
+// --allow-guard overrides and is logged. The logic and the rules are in lib/mergeGuard.js, the list in
+// config().protectedPaths. The diff is HEAD...<branch> (the branch's own changes since the fork point), so base branch
+// commits merged into the branch are not counted as the track's.
+{
+  const G = require('./lib/mergeGuard.js');
+  const { dataFolder, timeLog } = require('./lib/queueConfig.js');
+  const id = G.taskIdFromBranch(branch, K.branchPrefix);
+  let task = null;
+  try {
+    const queue = JSON.parse(fs.readFileSync(path.join(dataFolder(), 'queue.json'), 'utf8'));
+    const tasks = queue.tasks || [];
+    task = tasks.find((o) => o.branch === branch) ?? (id ? tasks.find((o) => o.id === id) : null) ?? null;
+  } catch {
+    // no queue here (a wave track or a test): empty ownership, so every protected path stops
+  }
+  const taskName = task?.id ?? id;
+  const diff = gitOk('diff', '--name-status', '-M', `HEAD...${branch}`);
+  if (diff.status !== 0) {
+    console.error(`Guard check: could not get the diff HEAD...${branch}:\n${diff.stderr}`);
+    process.exit(2);
+  }
+  const guard = G.assessGuard({
+    changes: G.readDiff(diff.stdout),
+    ownedFiles: task?.owned_files ?? [],
+    sharedPatch: task?.shared_patch ?? [],
+    migrBlock: task?.migr_block ?? null,
+    migrations: K.migrations,
+    protectedPaths: Array.isArray(K.protectedPaths) ? K.protectedPaths : undefined,
+    allowGuard: ALLOW_GUARD,
+  });
+  if (guard.drift.length > 0) {
+    console.log(
+      `WARNING ownership drift (${taskName ?? branch}): ${guard.drift.length} file(s) outside owned_files + shared_patch:`,
+    );
+    for (const f of guard.drift.slice(0, 30)) console.log(`  ${f}`);
+    if (guard.drift.length > 30) console.log(`  … and ${guard.drift.length - 30} more`);
+  }
+  if (guard.violations.length > 0) {
+    const list = guard.violations.map((b) => `  ${b.path}  (${b.reason})`).join('\n');
+    if (guard.stop) {
+      console.error(
+        `\nGUARD: ${branch} changes protected paths that the task${taskName ? ` ${taskName}` : ''} does not own:\n${list}\n\n` +
+          'Hooks, settings, agents, orchestrator scripts, the queue config and package.json can run code with the owner\'s rights.\n' +
+          `Read the diff (git diff HEAD...${branch} -- <path>). If the change is intended: add the path to the task's\n` +
+          'owned_files/shared_patch, or merge with --allow-guard (logged as "guard-overridden"). Nothing was merged.',
+      );
+      process.exit(4);
+    }
+    console.log(`GUARD OVERRIDDEN (--allow-guard) for ${branch}:\n${list}`);
+    try {
+      fs.appendFileSync(
+        timeLog(),
+        `${JSON.stringify({
+          time: new Date().toISOString(),
+          wave: task ? 'queue' : null,
+          track: taskName ?? branch,
+          event: 'guard-overridden',
+          branch,
+          paths: guard.violations.map((b) => b.path),
+        })}\n`,
+      );
+    } catch (e) {
+      console.error(`  (could not log guard-overridden: ${e.message})`);
+    }
+  }
+}
+
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'merge-track-'));
 
 // ---- 1) Merge ------------------------------------------------------------------------

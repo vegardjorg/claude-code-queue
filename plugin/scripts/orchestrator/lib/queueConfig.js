@@ -81,6 +81,29 @@ const STANDARD = Object.freeze({
     maxLines: 300,
     blockLines: 2000,
   },
+  // Merge guard (lib/mergeGuard.js): paths a track may only change when its task owns them (owned_files or
+  // shared_patch). Otherwise merge-track.mjs stops before the merge (exit 4; --allow-guard overrides). These paths can
+  // run code or give instructions with the owner's rights in the orchestrator session: hooks, settings, agents, skills,
+  // the orchestrator scripts and the queue config. "folder/" = the folder from the root, "dir/file" = that exact path,
+  // a bare name (no slash) = that file name in any folder. An empty list turns the guard off.
+  protectedPaths: [
+    '.claude/', // project settings, hooks, agents, skills, rules
+    '.claude-plugin/',
+    '.githooks/',
+    '.github/',
+    '.mcp.json',
+    'scripts/orchestrator/', // the installed queue scripts and hooks
+    'plugin/scripts/orchestrator/', // the same, in the plugin's own repo
+    'plugin/hooks/',
+    'plugin/agents/',
+    'plugin/skills/',
+    'plugin/.claude-plugin/',
+    'queue.config.json',
+    'CLAUDE.queue.md',
+    'settings.queue.json',
+    'package.json',
+    'package-lock.json',
+  ],
   // Branches never counted as queue branches (in addition to baseBranch).
   excludeBranches: ['main', 'master'],
   // Paths a cloud session cannot see (e.g. gitignored folders); a mission that points there is stopped.

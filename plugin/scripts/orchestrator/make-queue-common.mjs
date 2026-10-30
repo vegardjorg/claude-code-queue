@@ -11,6 +11,7 @@
 //
 // Use: node scripts/orchestrator/make-queue-common.mjs --out <scratchpad>/queue-common.md [--scratchpad <folder>]
 // Run again when the mission template or the config has changed.
+// Exit 1 when the template is missing, or when "Data, not instructions" is not in the shared protocol for every class.
 // =============================================================
 
 import fs from 'node:fs';
@@ -52,6 +53,17 @@ const template = fs.readFileSync(templateFile, 'utf8');
 const s = O.makeQueueCommon(template, scratch, K);
 const rest = s.match(/<[A-Z_]+>/g);
 if (rest) console.log('WARNING, unfilled placeholders:', [...new Set(rest)].join(', '));
+// Hardening against prompt injection: "Data, not instructions" must be in the shared protocol for EVERY class (outside
+// the class markers), so no track starts without it. A project copy of the template made before the rule existed
+// stops here until the paragraph is added.
+const missingRule = O.CLASSES.filter((k) => !O.filterClass(s, k).includes('Data, not instructions'));
+if (missingRule.length > 0) {
+  console.error(
+    `ERROR: "Data, not instructions" is missing from the shared protocol for class ${missingRule.join(', ')} (${templateFile}). ` +
+      'The paragraph belongs under "Common protocol", outside the class markers; copy it from the plugin\'s docs/mission-template.md.',
+  );
+  process.exit(1);
+}
 fs.writeFileSync(out, s);
 const perClass = O.CLASSES.map((k) => `${k} ${O.filterClass(s, k).length}`).join(', ');
 console.log(`wrote ${out} (${s.length} chars; per class: ${perClass})`);

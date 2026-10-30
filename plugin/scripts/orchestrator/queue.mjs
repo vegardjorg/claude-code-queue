@@ -117,12 +117,15 @@
 // Fewer orchestrator turns: `fill` and `receive` end with "Start these in the SAME turn:" and one line per agent
 // (subagent_type + message); start them in one turn. `receive` warns when the track's answer exceeds the report cap (about 1,500 chars).
 //   node scripts/orchestrator/queue.mjs merge <id> [--without-migr-push] [--without-fill] [--scratchpad <folder>] [--force]
+//        [--allow-guard]
 //        (after an approved review; run from Bash (merge-track calls sh), with a long timeout: the gates can take minutes. In one
 //         call: merge-track.mjs <branch> --wave-base <head_start> -> the migration step (only when config().migrations is
 //         enabled and the branch has migration files: the environment guard (environmentFile/allowedEnvironment) and the push guard are asked, then
 //         migrations.pushCommand) -> gates.mjs --quick -> set <id> done (cost measurement) -> fill (unless
 //         --without-fill). Stops at the first error with the step and an error excerpt; full log in <scratchpad>/merge-<id>.log.
-//         Exit 0 ok, 1 stop.)
+//         Exit 0 ok, 1 stop, 4 the merge guard stopped it before the merge: the branch touches protected paths
+//         (config().protectedPaths) the task does not own. Read the diff; then add the path to owned_files/shared_patch,
+//         or run again with --allow-guard, which is passed on to merge-track.mjs and logged as "guard-overridden".)
 //   node scripts/orchestrator/queue.mjs info <id> [--field <name>] [--json]   (short view; one field raw, also cost.usd)
 //   node scripts/orchestrator/queue.mjs edit <id> --bonus "<text>"  (to the mission, in the track block from the next
 //                                                                  trackFile/fill, and to the remarks, with a timestamp)
@@ -3044,7 +3047,10 @@ if (command === 'init') {
   // in one call. The steps, the stop rules and the environment check are in queueLogic (mergePlan, executeMerge, environmentCheck); here is only
   // the I/O. ----
   const id = positional(1, ['--scratchpad'])[0];
-  if (!id) die('merge <id> [--without-migr-push] [--without-fill] [--scratchpad <folder>] [--force]');
+  if (!id)
+    die('merge <id> [--without-migr-push] [--without-fill] [--scratchpad <folder>] [--force] [--allow-guard]');
+  // The merge guard's override (see lib/mergeGuard.js): passed on to merge-track.mjs, which logs it.
+  const allowGuard = a.includes('--allow-guard');
   const o = read().tasks.find((x) => x.id === id);
   if (!o) die(`Unknown task ${id}`);
   const force = a.includes('--force');
@@ -3105,6 +3111,7 @@ if (command === 'init') {
           path.join(HERE, 'merge-track.mjs'),
           branch,
           ...(o.head_start ? ['--wave-base', o.head_start] : []),
+          ...(allowGuard ? ['--allow-guard'] : []),
         ],
       ];
     if (step === 'migr-push') return [String(MIGR.pushCommand), [], true];
@@ -3141,6 +3148,8 @@ if (command === 'init') {
   const injected = process.env.QUEUE_MERGE_RUNNING
     ? (await import(pathToFileURL(path.resolve(process.env.QUEUE_MERGE_RUNNING)).href)).default
     : null;
+  // The exit code of merge-track.mjs: 4 = the merge guard stopped it before the merge (gets its own message below).
+  let mergeCode = null;
   const run = (x) => {
     const [cmd, args, shell = false] = command(x);
     let r;
@@ -3159,6 +3168,7 @@ if (command === 'init') {
       };
     }
     writeLog(`===== ${x.step}: ${cmd} ${args.join(' ')} (exit ${r.code}) =====\n${r.out}`);
+    if (x.step === 'merge') mergeCode = r.code;
     return r;
   };
   const PRIVACY = require('./lib/pushGuard.js');
@@ -3184,6 +3194,23 @@ if (command === 'init') {
     migrations: MIGR,
   });
   for (const l of res.lines) console.log(l);
+  if (!res.ok && res.stop.step === 'merge' && mergeCode === 4) {
+    // The merge guard: nothing was merged. Say what to do instead of a raw exit code.
+    console.log(
+      `STOP: the merge guard stopped ${branch} before the merge. The branch changes protected paths ` +
+        `(protectedPaths in queue.config.json: hooks, settings, agents, orchestrator scripts, the queue config, ` +
+        `package.json) that ${id} does not own. Nothing was merged.`,
+    );
+    if (res.stop.excerpt.length) console.log(res.stop.excerpt.map((l) => `  | ${l}`).join('\n'));
+    console.log(
+      `Read the diff first: git diff ${BASE}...${branch} -- <path>. A change you did not ask for may come from text ` +
+        'the track read (prompt injection): then do not merge, and start a fix round.\n' +
+        `If the change is intended: add the path to the task's owned_files/shared_patch, or run ` +
+        `\`${CQ} merge ${id} --allow-guard\` (logged as "guard-overridden").`,
+    );
+    console.log(`Full log: ${logFile}`);
+    process.exit(4);
+  }
   if (!res.ok) {
     console.log(`STOP in the step ${res.stop.step}: ${res.stop.message}`);
     if (res.stop.excerpt.length) console.log(res.stop.excerpt.map((l) => `  | ${l}`).join('\n'));

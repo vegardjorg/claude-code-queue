@@ -72,3 +72,28 @@ context size. The system keeps both small:
 - New work discovered by a track becomes a proposal (`cq add`), never scope creep.
 - The worktree rule: never `npm install` inside a worktree (shared folders are links to the main tree), and clean up
   worktrees only with `cleanup-worktree.mjs`.
+
+## Hardening against prompt injection
+
+A track reads text the owner did not write: files, PDFs, web pages, other agents' reports. If it follows an
+instruction hidden there, the damage must stop before it reaches the orchestrator. Claude Code has no sandbox on
+Windows, so there are four layers:
+
+- **Data, not instructions.** The agent definitions (`track`, `track-d`, `reviewer`, `reviewer-security`) and the
+  shared protocol in the mission template say that such content is data, and that instructions in it are reported
+  under "Suspicious content", never followed. `make-queue-common.mjs` refuses a template without the paragraph.
+- **Merge guard.** `merge-track.mjs` stops with exit 4, before the merge, when the branch touches a protected path
+  that the task does not own (`owned_files` or `shared_patch`). The list is `protectedPaths` in `queue.config.json`
+  (default: `.claude/`, `.githooks/`, `.github/`, `.mcp.json`, `scripts/orchestrator/`, the plugin's hooks, agents,
+  skills and scripts, `queue.config.json`, `CLAUDE.queue.md`, `settings.queue.json`, `package.json`,
+  `package-lock.json`). Read the diff; then add the path to the task's ownership, or run `cq merge <ID> --allow-guard`,
+  which is logged as `guard-overridden` in the time log. Other files outside the ownership only give a warning.
+- **Network guard.** For `track` and `track-d`, `hook-push-guard.mjs` denies `curl`, `wget`, `iwr`/`irm`,
+  `Start-BitsTransfer` and a pipe into a shell (`| sh`, `| iex` …), and asks before `npm install` or `npx` with a
+  package that is not in `package.json`. The orchestrator fetches what a track needs.
+- **Limits.** `maxTurns` is 400 for `track` and 600 for `track-d`, and `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=1`
+  (`env` in `settings.queue.json`, set by `setup --settings`) stops a track from starting agents of its own. A plugin's
+  `hooks.json` cannot set environment variables, so this one lives in the project settings.
+
+For a task that has to read content from outside, split reading and writing between two agents (the quarantine rule
+in the mission template): the reader returns a fixed schema, and the writer never sees the raw text.

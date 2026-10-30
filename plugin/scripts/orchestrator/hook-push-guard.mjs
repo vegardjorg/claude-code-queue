@@ -12,17 +12,23 @@
 // The guard must never stop normal work because of a bug in itself. If node is missing on PATH, the hook gets exit 127,
 // which Claude Code treats as non-blocking.
 //
+// For agent_type track/track-d it also assesses network calls (curl, iwr, | sh, an unknown npx package); see
+// lib/pushGuard.js.
+//
 // Test: lib/__tests__/pushGuard.test.ts (the logic). Smoke test of the hook itself:
 //   echo '{"tool_input":{"command":"git push --force origin main"},"cwd":"."}' | node scripts/orchestrator/hook-push-guard.mjs
+//   echo '{"agent_type":"track","tool_input":{"command":"curl https://x"},"cwd":"."}' | node scripts/orchestrator/hook-push-guard.mjs
 // =============================================================
 
 import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
 import { createRequire } from 'node:module';
+import path from 'node:path';
 
 const require = createRequire(import.meta.url);
 // Not a queue project (no queue.config.json): do nothing. A plugin's hooks run in every project the user opens.
 if (!require('./lib/projectRoot.js').queueActive()) process.exit(0);
-const { assess, readEnvironment } = require('./lib/pushGuard.js');
+const { assess, readEnvironment, isTrackAgent } = require('./lib/pushGuard.js');
 const { config } = require('./lib/queueConfig.js');
 
 function read(stdin) {
@@ -58,6 +64,29 @@ function canHit(command, k) {
   return word.length > 0 && command.includes(word[0]);
 }
 
+/**
+ * Does the project know the package? It is in package.json (all dependency fields) or has a bin in node_modules/.bin
+ * (npx then does not fetch from the network). Read lazily, the first time npm/npx is actually assessed.
+ */
+function knownPackage(cwd) {
+  let names = null;
+  return (pkg) => {
+    if (!names) {
+      names = new Set();
+      try {
+        const pj = JSON.parse(fs.readFileSync(path.join(cwd, 'package.json'), 'utf8'));
+        for (const field of ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'])
+          for (const n of Object.keys(pj[field] || {})) names.add(n);
+      } catch {
+        // no package.json here: every package is unknown (gives "ask", never deny)
+      }
+    }
+    if (names.has(pkg)) return true;
+    const bin = path.join(cwd, 'node_modules', '.bin', pkg);
+    return [bin, `${bin}.cmd`].some((f) => fs.existsSync(f));
+  };
+}
+
 let input = '';
 process.stdin.setEncoding('utf8');
 process.stdin.on('data', (d) => (input += d));
@@ -67,17 +96,26 @@ process.stdin.on('end', () => {
     const command = p?.tool_input?.command;
     if (!p || typeof command !== 'string') process.exit(0);
     const k = config();
-    if (!canHit(command, k)) process.exit(0);
+    // agent_type exists only when the hook fires in a subagent (track/track-d get the network guard).
+    const agentType = typeof p.agent_type === 'string' ? p.agent_type : null;
+    const track = isTrackAgent(agentType);
+    const gitContext = canHit(command, k);
+    if (!gitContext && !track) process.exit(0);
 
     const cwd = typeof p.cwd === 'string' && p.cwd ? p.cwd : process.cwd();
-    const branch = git(cwd, ['rev-parse', '--abbrev-ref', 'HEAD']);
-    const top = git(cwd, ['rev-parse', '--show-toplevel']);
-    const environment = readEnvironment([top, top && mainTree(top), k.root], k.migrations?.environmentFile);
+    // The git calls only when the command can be a push or a migration push.
+    const branch = gitContext ? git(cwd, ['rev-parse', '--abbrev-ref', 'HEAD']) : null;
+    const top = gitContext ? git(cwd, ['rev-parse', '--show-toplevel']) : null;
+    const environment = gitContext
+      ? readEnvironment([top, top && mainTree(top), k.root], k.migrations?.environmentFile)
+      : null;
     const answer = assess(command, {
       branch: branch === 'HEAD' ? null : branch,
       environment,
       baseBranch: k.baseBranch,
       migrations: k.migrations,
+      agentType,
+      knownPackage: track ? knownPackage(cwd) : undefined,
     });
     if (!answer) process.exit(0);
 

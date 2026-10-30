@@ -59,7 +59,7 @@ or `cancelled` (cancelled). Tasks added by an agent start as `proposed` and need
 | `next` | What can start now, without changing anything |
 | `fill --scratchpad <dir>` | Starts as many tasks as the limits allow and writes the mission prompts |
 | `receive <id>` | Receives a finished track: reads the RESULT line, builds the review package |
-| `merge <id>` | Merges the track branch into the base branch (after review) |
+| `merge <id>` | Merges the track branch into the base branch (after review). Exit 4: the merge guard stopped it (protected paths the task does not own); `--allow-guard` overrides |
 | `set <id> <status>` | Sets status by hand |
 | `edit <id> --json '{…}'` | Changes fields |
 | `info <id>` | Short view of one task |
@@ -105,5 +105,6 @@ reviewer agents per class. Missing values fall back to safe defaults.
 | `cloudHidden` | `[]` | Paths a cloud session cannot see (missions pointing there are stopped) |
 | `capacity` | Tuesday 19:00 local time | Weekly quota reset for `cq capacity` |
 | `excludeBranches` | `["main","master"]` | Branches never treated as external work |
+| `protectedPaths` | `.claude/`, `scripts/orchestrator/`, plugin hooks/agents/skills, `queue.config.json`, `CLAUDE.queue.md`, `package.json` … | Merge guard: a track may only change these when its task owns them; `[]` turns it off |
 | `modules`, `projectModuleSuggestion`, `priorityRules`, `documentFolders`, `indexFile`, `documents`, `planBackup` | see `queue.config.example.json` | Plan register (see `plan-register.md`) |
 | `board.port`, `board.title` | `2000`, `Queue board` | Board |

@@ -5,6 +5,10 @@
   },
   "subagentPromptCacheTtl": "1h",
   "autoCompactWindow": 300000,
+  "_env": "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=1: a track or reviewer cannot start subagents of its own (hardening against prompt injection; only the orchestrator starts agents). The plugin's hooks.json has no env field, so this is set through project settings (setup --settings).",
+  "env": {
+    "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH": "1"
+  },
   "hooks": {
     "PreToolUse": [
       { "matcher": "Bash|PowerShell", "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/scripts/orchestrator/hook-push-guard.mjs\"", "timeout": 10 }] },

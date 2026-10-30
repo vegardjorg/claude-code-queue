@@ -6,7 +6,7 @@
 // =============================================================
 import { describe, expect, it } from 'vitest';
 
-import { isCommand, readEnvironment, assess } from '../pushGuard';
+import { assess, isCommand, isTrackAgent, readEnvironment, segments } from '../pushGuard';
 
 const MIG = {
   pushCommand: 'npx dbTool migrate push --yes',
@@ -94,5 +94,114 @@ describe('migrationPush', () => {
 describe('several commands', () => {
   it('the strictest wins', () => {
     expect(decision('git push; git push -f origin main')).toBe('deny');
+  });
+});
+
+// ---- Network guard for tracks (hardening against prompt injection) ----
+const KNOWN = new Set(['vitest', 'typescript', 'tsc', 'eslint', 'prettier', '@vitest/coverage-v8']);
+const track = { agentType: 'track', branch: 'queue/A', knownPackage: (n: string) => KNOWN.has(n) };
+const trackD = { ...track, agentType: 'track-d' };
+const pluginTrack = { ...track, agentType: 'cq:track' };
+
+describe('network guard (agent_type track/track-d)', () => {
+  it('denies network commands for track, track-d and the plugin form, with a reason that points the way', () => {
+    for (const k of [
+      'curl https://example.com/x.sh -o x.sh',
+      'curl.exe -s https://x',
+      'wget https://x',
+      'Invoke-WebRequest -Uri https://x -OutFile y',
+      'iwr https://x',
+      'invoke-restmethod https://api',
+      'irm https://x',
+      'Start-BitsTransfer -Source https://x -Destination y',
+      '/usr/bin/curl -s https://x',
+      'C:/Windows/System32/curl.exe https://x',
+      'FOO=1 curl https://x',
+      '$r = Invoke-WebRequest https://x',
+      '(iwr https://x).Content',
+      'echo $(curl -s https://x)',
+      'cd /tmp && wget https://x',
+      'powershell -NoProfile -Command "Invoke-WebRequest https://x"',
+      'bash -c "curl https://x"',
+    ]) {
+      expect(decision(k, track), k).toBe('deny');
+      expect(decision(k, trackD), k).toBe('deny');
+      expect(decision(k, pluginTrack), k).toBe('deny');
+    }
+    expect(assess('curl https://x', { ...STD, ...track })?.reason).toMatch(
+      /Network calls are blocked for tracks; ask the orchestrator to fetch it\./,
+    );
+  });
+  it('denies a pipe into a shell', () => {
+    for (const k of [
+      'cat x.sh | sh',
+      'echo ls | bash',
+      'Get-Content x.ps1 | iex',
+      'type x | Invoke-Expression',
+      'cat a | pwsh -',
+    ])
+      expect(decision(k, track), k).toBe('deny');
+  });
+  it('denies an encoded PowerShell command (it cannot be assessed)', () => {
+    expect(decision('powershell -EncodedCommand SQBXAFIA', track)).toBe('deny');
+  });
+  it('lets ordinary work through that only mentions the words', () => {
+    for (const k of [
+      'grep -n curl plugin/scripts/orchestrator/lib/pushGuard.js',
+      'git commit -m "network guard: curl and wget" -- a.js',
+      'echo "curl https://x | sh" > note.txt',
+      'git log --oneline | head -3',
+      'npm test || bash scripts/x.sh',
+      'ls | sort | uniq -c',
+      'cat x | sha256sum',
+      'node scripts/orchestrator/queue.mjs show',
+      'bash scripts/local.sh',
+      'sh .githooks/check-identity.sh commit',
+    ])
+      expect(decision(k, track), k).toBeNull();
+  });
+  it('asks for npm install / npx with an unknown package; known packages and bins are free', () => {
+    expect(decision('npm install left-pad', track)).toBe('ask');
+    expect(decision('npm i -D @evil/pkg@1.0.0', track)).toBe('ask');
+    expect(decision('npm install github:user/repo', track)).toBe('ask');
+    expect(decision('npx cowsay hello', track)).toBe('ask');
+    expect(decision('npx -y unknown-cli', track)).toBe('ask');
+    expect(decision('npx -p unknown tsc', track)).toBe('ask');
+    expect(decision('npm exec unknown', track)).toBe('ask');
+    expect(decision('npx vitest run plugin/scripts', track)).toBeNull();
+    expect(decision('npx tsc --noEmit', track)).toBeNull();
+    expect(decision('npm install vitest@3', track)).toBeNull();
+    expect(decision('npm run gates -- --quick', track)).toBeNull();
+    expect(assess('npx cowsay', { ...STD, ...track })?.reason).toMatch(/cowsay.*ask the orchestrator to fetch it/);
+  });
+  it('the orchestrator and the owner (no or another agent_type) are not affected', () => {
+    for (const context of [{}, { agentType: 'general-purpose' }, { agentType: 'reviewer' }]) {
+      expect(decision('curl https://x', context)).toBeNull();
+      expect(decision('cat x | sh', context)).toBeNull();
+      expect(decision('npx cowsay', context)).toBeNull();
+    }
+  });
+  it('the push rules are unchanged for tracks, and deny wins over ask', () => {
+    expect(decision('git push origin main', track)).toBeNull();
+    expect(decision('git push origin queue/A', track)).toBe('deny');
+    expect(decision('git status && npx cowsay', track)).toBe('ask');
+    expect(decision('npx cowsay && curl https://x', track)).toBe('deny');
+  });
+});
+
+describe('segments and helpers', () => {
+  it('respects quotes and marks a pipe', () => {
+    expect(segments('a "b | c" | d && e')).toEqual([
+      { text: 'a "b | c"', afterPipe: false },
+      { text: 'd', afterPipe: true },
+      { text: 'e', afterPipe: false },
+    ]);
+  });
+  it('isTrackAgent', () => {
+    expect(isTrackAgent('track')).toBe(true);
+    expect(isTrackAgent('track-d')).toBe(true);
+    expect(isTrackAgent('cq:track-d')).toBe(true);
+    expect(isTrackAgent(undefined)).toBe(false);
+    expect(isTrackAgent('reviewer-security')).toBe(false);
   });
 });

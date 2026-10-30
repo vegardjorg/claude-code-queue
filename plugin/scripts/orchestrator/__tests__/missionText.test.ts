@@ -8,7 +8,9 @@
 // architecture rules) is filled in; (5) sectionPointers gets the line range.
 // =============================================================
 import { describe, expect, it } from 'vitest';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 import {
@@ -62,6 +64,10 @@ const REQUIREMENT: [string, string[]][] = [
   ['report.md', ALL],
   ['owner questions', ALL],
   ['wiring specification', ALL],
+  // hardening against prompt injection (make-queue-common.mjs refuses a template without the first one)
+  ['Data, not instructions', ALL],
+  ['Suspicious content', ALL],
+  ['Network calls (`curl`', ALL],
   // from the config
   ['for Example', ALL],
   ['Base branch: `main`', ALL],
@@ -209,5 +215,34 @@ describe('sectionPointers', () => {
   it('is idempotent', () => {
     const one = sectionPointers('docs/a.md § 6.1 and `docs/a.md#under`', read);
     expect(sectionPointers(one, read)).toBe(one);
+  });
+});
+
+describe('make-queue-common.mjs enforces "Data, not instructions"', () => {
+  const SCRIPT = path.resolve(__dirname, '..', 'make-queue-common.mjs');
+  const run = (root: string) =>
+    spawnSync(process.execPath, [SCRIPT, '--out', path.join(root, 'out', 'queue-common.md')], {
+      encoding: 'utf8',
+      env: { ...process.env, QUEUE_ROOT: root, QUEUE_CONFIG: path.join(root, 'no-config.json') },
+    });
+  it('writes the shared protocol from the plugin template, and refuses a project copy without the rule', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cq-common-'));
+    try {
+      fs.mkdirSync(path.join(root, 'out'));
+      const ok = run(root);
+      expect(ok.status, ok.stderr).toBe(0);
+      expect(fs.readFileSync(path.join(root, 'out', 'queue-common.md'), 'utf8')).toMatch(/Data, not instructions/);
+
+      fs.mkdirSync(path.join(root, 'docs', 'queue'), { recursive: true });
+      fs.writeFileSync(
+        path.join(root, 'docs', 'queue', 'mission-template.md'),
+        TEMPLATE.split('**Data, not instructions:**').join('**Data:**'),
+      );
+      const stop = run(root);
+      expect(stop.status).toBe(1);
+      expect(stop.stderr).toMatch(/"Data, not instructions" is missing from the shared protocol for class K, D, D\+, U/);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 });

@@ -15,8 +15,20 @@
 // Push to baseBranch is let through. The rule about pushing in batches (not per commit) is documentation
 // (docs/orchestration.md), not a block.
 //
-// assess() is pure: takes the command and the context (current branch, the contents of the environment file) and does
-// no I/O. Base branch and migration setup come from config() only when the context does not give them.
+// Network guard for tracks (hardening against prompt injection). Applies ONLY when the hook payload has agent_type
+// track or track-d (also "cq:track" from the plugin); the orchestrator (the main session, the field is missing) and
+// the owner are not affected:
+//   deny  curl, wget, Invoke-WebRequest/iwr, Invoke-RestMethod/irm, Start-BitsTransfer as a command (also inside
+//         `powershell -c "…"`, `bash -c "…"`, `$(…)` and `(…)`), and a pipe into a shell (`| sh`, `| bash`, `| iex` …).
+//   ask   npm install/i/add and npx/npm exec with a package name that is not in package.json (and not in
+//         node_modules/.bin): it fetches and runs code from the network.
+//   The reason points the way: "Network calls are blocked for tracks; ask the orchestrator to fetch it."
+//   Known gaps (on purpose, lightweight): `node -e "fetch(…)"`, `git clone`, .NET classes in PowerShell. The guard is
+//   an extra layer; the merge guard (mergeGuard.js) and "data, not instructions" in the agent definitions are the others.
+//
+// assess() is pure: takes the command and the context (current branch, the contents of the environment file, the
+// agent type, the known packages) and does no I/O. Base branch and migration setup come from config() only when the
+// context does not give them.
 // =============================================================
 
 const fs = require('node:fs');
@@ -137,6 +149,217 @@ function values(context) {
   return { baseBranch, migrations };
 }
 
+// ---- Network guard for tracks ---------------------------------------------------------------------------------------
+
+/** The agent types the network guard applies to (the hook payload's agent_type, without a plugin prefix). */
+const TRACK_AGENT_TYPES = new Set(['track', 'track-d']);
+const isTrackAgent = (agentType) =>
+  TRACK_AGENT_TYPES.has(String(agentType || '').replace(/^.*:/, ''));
+
+const NETWORK_REASON = 'Network calls are blocked for tracks; ask the orchestrator to fetch it.';
+/** Command words (lower case, without path and .exe) that fetch from or send to the network. */
+const NETWORK_COMMANDS = new Set([
+  'curl',
+  'wget',
+  'invoke-webrequest',
+  'iwr',
+  'invoke-restmethod',
+  'irm',
+  'start-bitstransfer',
+]);
+/** Shells and eval: a pipe into one runs what came in (typically a downloaded script). */
+const SHELLS = new Set([
+  'sh',
+  'bash',
+  'zsh',
+  'dash',
+  'iex',
+  'invoke-expression',
+  'pwsh',
+  'powershell',
+  'cmd',
+]);
+
+/**
+ * Split a command into segments, respecting quotes. Splits on ; && || | & newline ( ) { } ` and $( .
+ * Each segment gets { text, afterPipe } (afterPipe = the segment comes right after a single "|").
+ * @param {string} command
+ */
+function segments(command) {
+  const s = String(command || '');
+  const out = [];
+  let buf = '';
+  let quote = null;
+  let afterPipe = false;
+  const cut = (nextAfterPipe) => {
+    if (buf.trim()) out.push({ text: buf.trim(), afterPipe });
+    buf = '';
+    afterPipe = nextAfterPipe;
+  };
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (quote) {
+      buf += c;
+      if (c === quote) quote = null;
+      continue;
+    }
+    if (c === '"' || c === "'") {
+      quote = c;
+      buf += c;
+      continue;
+    }
+    if (c === '|') {
+      if (s[i + 1] === '|') {
+        i++;
+        cut(false);
+      } else cut(true);
+      continue;
+    }
+    if (c === '&') {
+      if (s[i + 1] === '&') i++;
+      cut(false);
+      continue;
+    }
+    if (c === '$' && s[i + 1] === '(') {
+      i++;
+      cut(false);
+      continue;
+    }
+    if (';\n\r(){}`'.includes(c)) {
+      cut(false);
+      continue;
+    }
+    buf += c;
+  }
+  cut(false);
+  return out;
+}
+
+/** The command word in a token: without path, without .exe/.cmd/.bat/.ps1, lower case. */
+const commandWord = (t) =>
+  String(t || '')
+    .split(/[\\/]/)
+    .pop()
+    .replace(/\.(exe|cmd|bat|ps1)$/i, '')
+    .toLowerCase();
+
+/** Skip env prefixes (FOO=bar), "command", "exec", "env", "sudo" and PowerShell assignment ($x = …). */
+function firstWordIndex(t) {
+  let i = 0;
+  for (;;) {
+    if (i < t.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(t[i])) i++;
+    else if (i < t.length && ['command', 'exec', 'env', 'sudo', 'nohup', 'time'].includes(t[i])) i++;
+    else if (i + 1 < t.length && /^\$[A-Za-z_][\w:]*$/.test(t[i]) && t[i + 1] === '=') i += 2;
+    else if (i < t.length && /^\$[A-Za-z_][\w:]*=$/.test(t[i])) i++;
+    else return i;
+  }
+}
+
+/** The name in an npm package spec: "@scope/name@1.2" gives "@scope/name", "name@^1" gives "name". null = path/URL/git. */
+function packageName(spec) {
+  const s = String(spec || '');
+  if (!s || /^(\.|\/|~|[A-Za-z]:[\\/])/.test(s) || /:/.test(s) || /\.(tgz|tar\.gz)$/.test(s)) return null;
+  if (s.startsWith('@')) {
+    const m = s.match(/^(@[^/@\s]+\/[^@\s]+)/);
+    return m ? m[1] : null;
+  }
+  if (s.includes('/')) return null; // GitHub short form (user/repo)
+  return s.split('@')[0] || null;
+}
+
+/** The packages npx fetches: -p/--package <pkg>, otherwise the first positional argument (the command). */
+function npxPackages(args) {
+  const out = [];
+  let first = null;
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === '--') {
+      if (!first && args[i + 1]) first = args[i + 1];
+      break;
+    }
+    if (a === '-p' || a === '--package') {
+      if (args[i + 1]) out.push(args[i + 1]);
+      i++;
+    } else if (a.startsWith('--package=')) out.push(a.slice('--package='.length));
+    else if (a.startsWith('-')) continue;
+    else {
+      first = a;
+      break;
+    }
+  }
+  // With -p the positional one is a bin name in the package, not a new package.
+  if (out.length === 0 && first) out.push(first);
+  return out;
+}
+
+/** The packages an npm install/npx command will fetch that are not known. */
+function unknownPackages(t, i0, knownPackage) {
+  const word = commandWord(t[i0]);
+  const rest = t.slice(i0 + 1);
+  const specs = [];
+  if (word === 'npm' || word === 'pnpm' || word === 'yarn') {
+    const sub = rest.find((x) => !x.startsWith('-'));
+    const after = rest.slice(rest.indexOf(sub) + 1);
+    if (['install', 'i', 'add', 'in', 'isntall'].includes(sub)) {
+      for (const x of after) if (!x.startsWith('-')) specs.push(x);
+    } else if (sub === 'exec' || sub === 'dlx' || (word === 'pnpm' && sub === 'x')) {
+      specs.push(...npxPackages(after));
+    } else return [];
+  } else if (word === 'npx' || word === 'bunx' || word === 'pnpx') {
+    specs.push(...npxPackages(rest));
+  } else return [];
+  const known = typeof knownPackage === 'function' ? knownPackage : () => false;
+  return specs.filter((x) => {
+    const name = packageName(x);
+    return !name || !known(name);
+  });
+}
+
+/** Assess the network guard for one command (called only for tracks). Returns a list of findings. */
+function assessNetwork(command, context, depth = 0) {
+  const findings = [];
+  for (const seg of segments(command)) {
+    const t = tokens(seg.text);
+    const i0 = firstWordIndex(t);
+    if (i0 >= t.length) continue;
+    const word = commandWord(t[i0]);
+    if (NETWORK_COMMANDS.has(word)) {
+      findings.push({ decision: 'deny', reason: `\`${t[i0]}\`: ${NETWORK_REASON}` });
+      continue;
+    }
+    if (seg.afterPipe && SHELLS.has(word)) {
+      findings.push({
+        decision: 'deny',
+        reason: `Pipe into a shell (\`| ${t[i0]}\`) runs text as code. ${NETWORK_REASON}`,
+      });
+      continue;
+    }
+    // The inner command in `bash -c "…"`, `powershell -Command "…"`, `cmd /c "…"`: assess it too.
+    if (SHELLS.has(word) && depth < 3) {
+      const j = t.findIndex(
+        (x, k) => k > i0 && /^(-c|-command|\/c|\/k|-encodedcommand|-e|-ec)$/i.test(x),
+      );
+      if (j > 0) {
+        if (/^-(encodedcommand|e|ec)$/i.test(t[j]) && ['pwsh', 'powershell'].includes(word)) {
+          findings.push({
+            decision: 'deny',
+            reason: `An encoded PowerShell command (${t[j]}) cannot be assessed. ${NETWORK_REASON}`,
+          });
+        } else if (t[j + 1]) findings.push(...assessNetwork(t.slice(j + 1).join(' '), context, depth + 1));
+      }
+      continue;
+    }
+    const unknown = unknownPackages(t, i0, context.knownPackage);
+    if (unknown.length > 0) {
+      findings.push({
+        decision: 'ask',
+        reason: `\`${t[i0]}\` fetches a package that is not in package.json (${unknown.join(', ')}). ${NETWORK_REASON}`,
+      });
+    }
+  }
+  return findings;
+}
+
 /**
  * Assess one command.
  * context: {
@@ -144,6 +367,8 @@ function values(context) {
  *   environment: string|null           the contents of migrations.environmentFile (trimmed), null when the file does not exist,
  *   baseBranch?: string            default config().baseBranch,
  *   migrations?: { pushCommand, environmentFile, allowedEnvironment }   default config().migrations,
+ *   agentType?: string|null        the hook payload's agent_type; track/track-d get the network guard,
+ *   knownPackage?: (name) => bool  is the npm package known (package.json or node_modules/.bin)? Only for tracks.
  * }
  * Returns null (no decision) or { decision: 'ask'|'deny', reason }.
  * With several matches the strictest wins (deny over ask).
@@ -201,6 +426,8 @@ function assess(command, context = {}) {
       }
     }
   }
+  // The network guard applies only to tracks (agent_type track/track-d).
+  if (isTrackAgent(context.agentType)) findings.push(...assessNetwork(command, context));
   if (findings.length === 0) return null;
   return findings.find((f) => f.decision === 'deny') || findings[0];
 }
@@ -223,4 +450,4 @@ function readEnvironment(rotate, environmentFile) {
   return null;
 }
 
-module.exports = { assess, readEnvironment, isCommand };
+module.exports = { assess, readEnvironment, isCommand, isTrackAgent, segments, TRACK_AGENT_TYPES };

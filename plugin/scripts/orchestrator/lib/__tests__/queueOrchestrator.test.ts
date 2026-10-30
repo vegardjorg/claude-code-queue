@@ -1325,6 +1325,25 @@ describe('queue.mjs merge, info, activeOnes, edit --bonus and next-migr (against
     // Wrong status: waiting cannot be merged.
     expect(run('merge', 'V').error).toMatch(/merge applies to review/);
 
+    // The merge guard: merge-track exit 4 gives a readable message and exit 4, nothing after the merge runs, and
+    // --allow-guard is passed on to merge-track.
+    const sc = JSON.parse(fs.readFileSync(scenarioFile, 'utf8'));
+    fs.writeFileSync(
+      scenarioFile,
+      JSON.stringify({ ...sc, merge: { code: 4, out: 'GUARD: queue/K changes protected paths\n  .claude/settings.json' } }),
+    );
+    const vg = run('merge', 'K', '--without-fill');
+    expect(vg.code).toBe(4);
+    expect(vg.out).toMatch(/STOP: the merge guard stopped queue\/K before the merge/);
+    expect(vg.out).toMatch(/\.claude\/settings\.json/);
+    expect(vg.out).toMatch(/merge K --allow-guard/);
+    const kg = call();
+    expect(kg.map((x) => x.step)).toEqual(['merge']);
+    expect(kg[0].args).not.toContain('--allow-guard');
+    fs.writeFileSync(scenarioFile, JSON.stringify(sc));
+    expect(run('merge', 'K', '--without-fill', '--allow-guard').code).toBe(0);
+    expect(call()[0].args).toContain('--allow-guard');
+
     // info, activeOnes, edit --bonus and next-migr.
     expect(run('info', 'M', '--field', 'branch').out.trim()).toBe('queue/M');
     expect(run('info', 'M').out).toMatch(/^migr_block: 3600–3609$/m);
