@@ -723,4 +723,45 @@ describe('the wiring (index.html, queue-board.mjs and the new files)', () => {
     expect(code(css)).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(css).toMatch(/prefers-reduced-motion: reduce\)\s*\{\s*\.pulse/);
   });
+  it('the warning counts on a module card: only over 0, and no red rule shared with the capacity warning', () => {
+    // One base rule for the counters (neutral); the red background belongs to .has.v-legal and the capacity warning.
+    expect(code(css).match(/^\.overview-warning \{/gm)?.length).toBe(1);
+    expect(css).toMatch(/\.overview-capacity-warning \{/);
+    // Run moduleCard's counters with a minimal h.el: a 0 gives no element.
+    const made: string[] = [];
+    const h = {
+      el: (_tag: string, attr: Record<string, string> | null, ...children: unknown[]) => {
+        if (attr?.class) made.push(attr.class);
+        return { attr, children };
+      },
+      goToList: () => {},
+    };
+    const card = {
+      oid: 'm',
+      title: 'M',
+      count: 2,
+      dropped: 0,
+      share: 0.5,
+      built: 1,
+      priority: [],
+      maturity: [],
+      ownerQuestions: 0,
+      legal: 2,
+      stale: 0,
+      active: 0,
+    };
+    const w: any = {
+      QueuePlanView: { emptyFilter: () => ({}), workingNow: () => [], moduleSummary: () => [card] },
+    };
+    // The file is the repo's own overview.js, run with a stub window (as the browser does with the real one).
+    new Function('window', overview)(w);
+    const d = { exists: true };
+    try {
+      w.QueuePlanOverview.side(h, d);
+    } catch {
+      // side() draws more than the cards; the counters are what this test looks at.
+    }
+    const warnings = made.filter((c) => c.startsWith('overview-warning '));
+    expect(warnings).toEqual(['overview-warning has v-legal']);
+  });
 });

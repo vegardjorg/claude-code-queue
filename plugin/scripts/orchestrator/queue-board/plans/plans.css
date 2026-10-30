@@ -2309,7 +2309,8 @@ ol.overview-list > .overview-row > * {
   font-weight: 600;
 }
 
-.overview-warning {
+/* Its own class: sharing .overview-warning with the module card counters made every counter red, also at 0. */
+.overview-capacity-warning {
   margin: var(--distance-sm) 0 0;
   padding: var(--distance-xs) var(--distance-sm);
   border-radius: var(--radius);

@@ -4,8 +4,8 @@
 //
 // One screen that answers "where are we":
 //   - "Working now" at the top: entries a /plans session is working on (active_session, pulse marker, gone after 2 hours),
-//   - eight module cards (count, bar by priority and by maturity, how much is built, and three warning counts:
-//     owner questions, legal and stale); a click opens the list filtered on the module,
+//   - eight module cards (count, bar by priority and by maturity, how much is built, and up to three warning counts:
+//     owner questions, legal and stale, each only when it is over 0); a click opens the list filtered on the module,
 //   - "Waiting on you": the five owner questions and legal points that block the most, with an answer button,
 //   - the capacity in Now, with a notice when Now grows faster than the queue drains,
 //   - recently changed and recently registered.
@@ -46,13 +46,16 @@
 
   function moduleCard(h, k) {
     const pst = Math.round(k.share * 100);
+    // A warning count is shown only when there is something to act on: "0 owner questions" is not a warning.
     const notice = (draw, n, one, more, cls) =>
-      h.el(
-        'span',
-        { class: `overview-warning${n ? ` has ${cls}` : ''}` },
-        h.el('span', { 'aria-hidden': 'true', text: draw }),
-        ` ${n} ${n === 1 ? one : more}`,
-      );
+      n
+        ? h.el(
+            'span',
+            { class: `overview-warning has ${cls}` },
+            h.el('span', { 'aria-hidden': 'true', text: draw }),
+            ` ${n} ${n === 1 ? one : more}`,
+          )
+        : null;
     return h.el(
       'li',
       { class: 'overview-summary-space' },
@@ -210,7 +213,7 @@
       k.notice
         ? h.el(
             'p',
-            { class: 'overview-warning' },
+            { class: 'overview-capacity-warning' },
             h.el('span', { 'aria-hidden': 'true', text: '⚠ ' }),
             h.el('span', { class: 'hidden-for-eye', text: 'Warning: ' }),
             k.warning_text,
