@@ -15,7 +15,7 @@ branch (`queue/<ID>`), with a self-contained mission file.
    `report.md` in its scratch folder.
 4. `cq receive <ID>`: reads the result line and builds a review package (diff, changed files in full, the track's
    report). The orchestrator starts the reviewer agents configured for the class (`reviewers` in `queue.config.json`;
-   by default none for K and U, `reviewer` for D, `reviewer` and `reviewer-security` for D+).
+   by default none for K, `reviewer-challenger` for U (tries to prove the investigation wrong), `reviewer` for D, `reviewer` and `reviewer-security` for D+).
 5. Findings: HIGH and non-mechanical MEDIUM give a fix round with a NEW track agent on the same branch
    (`prepare-track --continue`). LOW findings become follow-up proposals.
 6. `cq merge <ID>`: merge into the base branch with `merge-track.mjs`, run the quick gates, start the next tasks.
