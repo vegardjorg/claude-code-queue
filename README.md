@@ -360,7 +360,9 @@ npm test        # vitest; runs the unit tests under plugin/scripts/orchestrator
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE). The helper agents `reviewer-design`, `reviewer-tests`, `reviewer-gap` and
+`reviewer-docs` are adapted from [testdouble/han](https://github.com/testdouble/han) (MIT, Copyright 2026 Test
+Double, Inc.); the license text is in [NOTICE](NOTICE).
 
 ## About the logo
 
