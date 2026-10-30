@@ -1566,7 +1566,7 @@
               {
                 class: 'area-heading',
                 role: 'presentation',
-                title: `Area ${o.title}: the project lanes below belong to it. Edit areas in Plan → "Areas …".`,
+                title: `Area ${o.title}: the project lanes below belong to it. Edit areas with "Areas …" in Queue → Focus.`,
               },
               el('h2', { text: o.title }),
             ),
@@ -2245,12 +2245,12 @@
     if (!filePath.includes(viewMenu) && !filePath.includes(viewButton)) closeViews(false);
   });
 
-  // "How to use the panel" (the ? button): short help in the side panel.
+  // "How to use the board" (in the gear): short help in the side panel.
   const HELP = [
     [
       'Areas',
       'An area groups projects that belong together, for example Auth or Payments and invoicing. ' +
-        'You prioritize areas instead of many projects. Create and edit them in Plan → "Areas …". A project ' +
+        'You prioritize areas instead of many projects. Create and edit them with "Areas …" in Queue → Focus. A project ' +
         'belongs to one area.',
     ],
     [
@@ -2271,9 +2271,11 @@
     ],
     [
       'Plans and Queue',
-      'The switch at the top left changes workspace. Plans shows the plan register: filters with counts on the left, ' +
-        'module › project › entry in the middle (click to fold) and the details on the right. The copy buttons give the start line ' +
-        'for /plans. A badge like PL-ALONE-1 on a card opens the entry in Plans; the Queue tab in Plans shows the card here.',
+      'The switch at the top left changes workspace. Plans opens on the Overview, with one card per area. "Plan entries" ' +
+        'is the plan register: area › project › entry in the list (click to fold), the details on the right, and the filters ' +
+        'with counts on the left (on a narrower screen behind the "Filters" button). The copy buttons give the start line for ' +
+        '/plans. A badge like PL-ALONE-1 on a card opens the entry in Plans; the Queue tab in the entry\'s ' +
+        'details lists its tasks, and a click shows the card here.',
     ],
     [
       'Waiting on you',
@@ -2389,7 +2391,7 @@
       el(
         'div',
         { class: 'panel-header' },
-        el('div', null, el('h2', { id: 'panel-title', text: 'How to use the panel' })),
+        el('div', null, el('h2', { id: 'panel-title', text: 'How to use the board' })),
         el(
           'button',
           { type: 'button', class: 'button-icon', 'aria-label': 'Close', onclick: closePanel },
@@ -2408,7 +2410,7 @@
       el('p', {
         class: 'inbox-info',
         text:
-          'Everything the panel writes goes via cq with a lock, and nothing changes before you have seen the explanation and confirmed.',
+          'Everything the board writes goes via cq with a lock, and nothing changes before you have seen the explanation and confirmed.',
       }),
     );
     panel.querySelector('.button-icon')?.focus();
