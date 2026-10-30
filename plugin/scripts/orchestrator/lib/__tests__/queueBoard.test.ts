@@ -540,6 +540,7 @@ const V = require('../queueBoard') as {
   SETTINGS: { name: string }[];
   settings: (
     queue: Queue2,
+    option?: { migrations?: boolean },
   ) => { name: string; val: string; standard: string; saverMode: string | null }[];
   SKILL_RULES: { text: string }[];
   QUEUE_HOOKS: { file: string; events: string[]; allMatchers?: boolean }[];
@@ -876,6 +877,15 @@ describe('settings and setup', () => {
     expect(f('dailyBudget')).toMatchObject({ val: 'off', standard: 'off' });
     expect(f('nightRun')).toMatchObject({ val: 'off', standard: 'on' });
     expect(f('nightWindow')).toMatchObject({ val: '23-06', standard: '23-06' });
+  });
+
+  it('the panel leaves out maxDb (Tracks with migrations) when the migration flow is off', () => {
+    const queue = { tasks: [], limits: {} };
+    expect(V.settings(queue).map((f) => f.name)).toContain('maxDb');
+    expect(V.settings(queue, { migrations: true }).map((f) => f.name)).toContain('maxDb');
+    const off = V.settings(queue, { migrations: false }).map((f) => f.name);
+    expect(off).not.toContain('maxDb');
+    expect(off).toEqual(L2.LIMIT_NAME.filter((n: string) => n !== 'maxDb'));
   });
 
   it('the working rules in the panel: the saver mode text follows SAVER_MODE', () => {

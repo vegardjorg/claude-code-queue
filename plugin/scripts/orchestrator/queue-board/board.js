@@ -696,7 +696,7 @@
         );
       }
     } else if (col === 'proposed') {
-      footer.push(el('span', { text: `proposed by ${k.added_by ?? '?'}` }));
+      footer.push(el('span', { text: k.added_by ? `proposed by ${k.added_by}` : 'proposed' }));
     } else if (col === 'batch') {
       // Not started alone; the orchestrator packs the group into a track (queue.mjs batch pack).
       footer.push(
@@ -1762,7 +1762,7 @@
           el('span', { class: 'stripe-name', text: 'Focus' }),
           el('span', {
             class: 'focus-text',
-            text: 'No focus: the queue goes by score and projectBonus.',
+            text: 'No focus: the queue starts the most valuable work per minute first.',
             title:
               'With a focus you decide the order: "Auth first, then Payments" makes everything in Auth start before anything in Payments, ' +
               'regardless of score.',
@@ -3308,7 +3308,8 @@
     const meta = [
       `now: ${f.val}`,
       `default: ${f.standard}`,
-      f.saverMode ? `saver mode: ${f.saverMode}` : null,
+      // SAVER_MODE: the recommended ceiling that keeps the weekly quota from running out early.
+      f.saverMode ? `recommended: at most ${f.saverMode}` : null,
       f.name === 'dailyBudget' ? `used today: ${usd(d.usageToday)}` : null,
       f.name === 'nightRun' && d.night?.stop ? 'night pause now' : null,
     ]
@@ -3868,7 +3869,8 @@
                   el('span', { class: 'row-title', text: f.title }),
                   el('span', {
                     class: 'sp-meta',
-                    text: `${f.class ?? '?'} · ${f.estimate} min · value ${f.value} · from ${f.added_by ?? '?'}`,
+                    // Who proposed it, only when known (no "from ?").
+                    text: `${f.class ?? '?'} · ${f.estimate} min · value ${f.value}${f.added_by ? ` · from ${f.added_by}` : ''}`,
                   }),
                 ),
                 el('button', {

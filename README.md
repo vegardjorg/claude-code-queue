@@ -135,7 +135,8 @@ the keyboard); changes are collected in a draft you review before anything is sa
 
 The gear holds the help, the theme, the mascot and the queue's limits (how many tracks run at once, how many heavy
 D+ tracks, tracks per domain, daily budget, night pause, automatic compaction). Each setting shows its current
-value, the default and the value in saver mode.
+value, the default and, for the track limits, the recommended ceiling that keeps the weekly quota from running out
+early.
 
 ## Install
 

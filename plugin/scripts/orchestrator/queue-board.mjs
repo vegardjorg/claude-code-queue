@@ -1957,7 +1957,7 @@ const server = http.createServer(async (req, res) => {
         const stat = statistics().data;
         return json(res, 200, {
           ok: true,
-          field: T.settings(queue),
+          field: T.settings(queue, { migrations: !!CONFIG.migrations?.folder }),
           usageToday: stat.keyFigures.usageToday,
           night: L.nightGuard(queue),
           setup: setup(queue, stat),

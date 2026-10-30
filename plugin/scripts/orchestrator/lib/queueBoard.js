@@ -1273,7 +1273,7 @@ function assess(queue, action = {}, context = {}) {
     )
       add(
         'warning',
-        `Above saver mode (at most ${SAVER_MODE.maxConcurrent} concurrent and ${SAVER_MODE.maxDPlus} D+): the quota is used faster.`,
+        `Above the recommended limit (at most ${SAVER_MODE.maxConcurrent} concurrent and ${SAVER_MODE.maxDPlus} D+): the quota is used faster.`,
       );
     // 11. maxDb is raised.
     if (name === 'maxDb' && v > Number(g.maxDb))
@@ -1737,10 +1737,13 @@ const SETTINGS = [
   },
 ];
 
-/** The settings panel: each field with current value, default and saverMode (all as text, as queue.mjs shows them). */
-function settings(queue) {
+/**
+ * The settings panel: each field with current value, default and saverMode (all as text, as queue.mjs shows them).
+ * `migrations: false` (no migrations.folder in queue.config.json) leaves out maxDb, which only matters for the migration flow.
+ */
+function settings(queue, { migrations = true } = {}) {
   const g = { ...L.DEFAULT_LIMITS, ...(queue.limits ?? {}) };
-  return SETTINGS.map((f) => ({
+  return SETTINGS.filter((f) => migrations || f.name !== 'maxDb').map((f) => ({
     ...f,
     val: L.limitText(f.name, g[f.name]),
     standard: L.limitText(f.name, L.DEFAULT_LIMITS[f.name]),
@@ -1754,7 +1757,7 @@ function settings(queue) {
  */
 const SKILL_RULES = [
   {
-    text: `Saver mode: at most ${SAVER_MODE.maxConcurrent} concurrent tracks and ${SAVER_MODE.maxDPlus} D+.`,
+    text: `Recommended to save quota: at most ${SAVER_MODE.maxConcurrent} concurrent tracks and ${SAVER_MODE.maxDPlus} D+.`,
   },
   { text: 'Review by class: K and U none, D one reviewer, D+ two.' },
   {
