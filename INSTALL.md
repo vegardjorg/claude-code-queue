@@ -35,6 +35,7 @@ It copies:
 | `plugin/docs/*.md` | `docs/queue/` |
 | `plugin/CLAUDE.queue.md` | `CLAUDE.queue.md` |
 | `plugin/queue.config.example.json` | `queue.config.json` (only if missing) |
+| `plugin/.claude-plugin/plugin.json` (the version) | `scripts/orchestrator/cq-version.json` (the board's update banner compares it) |
 
 In the copied Markdown, `cq <...>` becomes `node scripts/orchestrator/cq.mjs <...>` (there is no `cq` on PATH without
 the plugin). It merges `plugin/settings.queue.json` into `.claude/settings.json` (adds missing keys and hooks, keeps every

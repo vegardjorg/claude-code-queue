@@ -156,7 +156,8 @@ Then open your own project and run `/cq:setup`. It:
 
 The plugin's hooks do nothing in projects without a `queue.config.json`, so it is safe to keep installed.
 
-Update with `/plugin update`. To try it without installing: `claude --plugin-dir <path-to-this-repo>/plugin`.
+Update with `/plugin update`; the board shows a banner when a new version is out, with the steps (turn the check off
+with `"board": { "updateCheck": false }`, see [board](plugin/docs/board.md#update-banner)). To try it without installing: `claude --plugin-dir <path-to-this-repo>/plugin`.
 
 Without the plugin system you can copy everything into the project instead ("vendored" install): open Claude Code in
 your project and say *Install claude-code-queue from `<path-to-this-repo>`; follow its INSTALL.md*. See

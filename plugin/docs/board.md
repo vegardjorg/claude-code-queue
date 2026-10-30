@@ -45,6 +45,25 @@ show the documents, the legal points, the owner decisions and what stands betwee
 
 The gear holds the settings (theme, mascot, the queue's limits and the read-only setup) and the help.
 
+## Update banner
+
+When a newer cq is out, a banner below the top says "cq X is out (you have Y)", links to the CHANGELOG and lists the
+steps with a Copy button each: `claude plugin update cq@claude-code-queue`, then `/reload-plugins` (or a new session),
+then `cq setup --settings`. A vendored install gets `git pull` in your claude-code-queue folder and
+`node scripts/install.mjs <project> --overwrite` instead. Close it with the X: it stays away until a newer version is out
+(remembered in this browser).
+
+How it checks: the board server (not the browser) fetches the published `plugin.json` from GitHub at start, at most
+once per 24 hours (cached in `<dataFolder>/update-check.json`). It is a plain GET with a 3 second timeout that sends
+nothing about you or the project; any error just means no banner. Turn it off with `"board": { "updateCheck": false }`
+in `queue.config.json`; it is also off when `DISABLE_UPDATES`, `DISABLE_AUTOUPDATER` or
+`CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` is set.
+
+Setup after an update (local, no network, also with the check off): `cq setup --settings` records the plugin version
+it set up in `<dataFolder>/setup.json`. When the installed plugin differs from that record, the banner says to run
+`cq setup --settings` again (the status line path holds the plugin version). This notice cannot be closed; it goes
+away once setup has run. If setup was run for a newer plugin than the running board, it says to restart the board.
+
 ## Logo
 
 The picture in the upper-left corner is loaded from `<dataFolder>/logo.webp` if it exists, otherwise from

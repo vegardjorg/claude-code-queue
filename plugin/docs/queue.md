@@ -147,3 +147,4 @@ reviewer agents per class. Missing values fall back to safe defaults.
 | `protectedPaths` | `.claude/`, `scripts/orchestrator/`, plugin hooks/agents/skills, `queue.config.json`, `CLAUDE.queue.md`, `package.json` … | Merge guard: a track may only change these when its task owns them; `[]` turns it off |
 | `modules`, `projectModuleSuggestion`, `priorityRules`, `documentFolders`, `indexFile`, `documents`, `planBackup` | see `queue.config.example.json` | Plan register (see `plan-register.md`) |
 | `board.port`, `board.title` | `2000`, `Queue board` | Board |
+| `board.updateCheck` | `true` | Board: look for a newer cq on GitHub at most once per 24 hours (see board.md, Update banner) |
