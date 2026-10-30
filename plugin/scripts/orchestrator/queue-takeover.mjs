@@ -11,6 +11,10 @@
 //      config().migrations.environmentFile is set, which environment the migrations are linked to.
 //   3. Each active task (running/review): commits on the branch ahead of baseBranch, age of the last commit, uncommitted in
 //      the worktree, and a classification: DELIVERED (ready for intake), EMPTY (nothing completed) or UNCERTAIN.
+//      Adoption: report.md in the track folder with the RESULT line on top is the safe signal (DELIVERED with the status
+//      from the line); the heuristic is the fallback. Running tracks are adopted: `queue.mjs orchestrator pulse` reports
+//      new reports, and `queue.mjs resume <id>` makes the mission for a new agent on the same branch (fix round or
+//      continuation).
 //   4. How many slots can be filled now, and the owner questions that unlock the most tasks.
 //   5. Picked tasks (a person or session is doing them): who, age, commits on the branch, and "OLD" when it has been
 //      picked for over 72 h without commits (never released automatically; ask the owner). Plus the count in the QA list.
@@ -117,27 +121,23 @@ const activeOnes = tasks
       ? (git(['status', '--porcelain'], wtPath) ?? '').split('\n').filter(Boolean).length
       : null;
     const startedMs = o.started ? NOW - Date.parse(o.started) : null;
-    // DELIVERED: commits ahead of baseBranch, a clean worktree, and no new commit in 20 min (the agent has finished).
-    // EMPTY: no commits and started over an hour ago (the agent died before it did anything).
-    let assessment = 'UNCERTAIN';
-    if (o.status === 'review')
-      assessment = commits > 0 ? 'DELIVERED (review)' : 'UNCERTAIN (review without commits)';
-    else if (commits > 0 && (uncommitted ?? 0) === 0 && (lastMs ?? 0) > 20 * 60_000)
-      assessment = 'DELIVERED';
-    else if (commits === 0 && (startedMs ?? 0) > 60 * 60_000) {
+    // Adoption: the safe signal first (report.md with the RESULT line on top, newer than the start and the last receive,
+    // in the task's or the QUEUE_SCRATCHPAD scratchpad); the heuristic (commits, clean worktree, 20 min) is the fallback.
+    const delivery = L.assessDelivery(
+      o,
+      L.findTrackReport(o.id, [process.env.QUEUE_SCRATCHPAD, o.scratchpad]).report,
+    );
+    const assessment = L.assessActive({
+      status: o.status,
+      commits,
+      uncommitted,
+      lastMs,
+      startedMs,
+      delivery,
       // The work may be on another branch (e.g. hotfix/<id>): look for commits that mention the id.
-      const another = git([
-        'log',
-        '--all',
-        '-1',
-        '--format=%h %D',
-        `--grep=${o.id}\\b`,
-        '--extended-regexp',
-      ]);
-      assessment = another
-        ? `UNCERTAIN (commit ${another.split(' ')[0]} mentions ${o.id} on another branch)`
-        : 'EMPTY';
-    } else if ((uncommitted ?? 0) > 0) assessment = 'UNCERTAIN (uncommitted in worktree)';
+      anotherBranch: () =>
+        git(['log', '--all', '-1', '--format=%h', `--grep=${o.id}\\b`, '--extended-regexp']) || null,
+    });
     return {
       id: o.id,
       status: o.status,
@@ -150,6 +150,7 @@ const activeOnes = tasks
       uncommitted,
       worktree: wtPath ?? null,
       assessment,
+      report: delivery ? { line: delivery.line, path: delivery.path } : null,
     };
   });
 

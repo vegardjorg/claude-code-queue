@@ -97,6 +97,9 @@ word.
 - The branch must be free (`git worktree list`; `git -C <old worktree> switch --detach`).
 - The new agent starts with `cq prepare-track <ID>-r<N> --branch queue/<ID> --continue …`: takes the branch over with
   `git switch`, no reset. Never `prepare-track` without `--continue` for a fix round.
+- In the queue, `cq resume <id> --reason fix|context [--findings-file <file>]` writes that mission
+  (`prompt-<id>-r<N>.md`, N = the next free round) and prints the agent message. The fix round writes its report.md
+  in `<scratch>/<id>-r<N>/`, where `cq deliveries`, the pulse and `cq receive` find it.
 
 ## Compact, do not rotate
 
@@ -106,6 +109,11 @@ offers a ready `/compact keep: …` line. Finish the current step first. After c
 injects a resume instruction and the queue state; resume without waiting. Keep `scripts/.queue/handover-ongoing.md`
 updated after every merge and decision: decisions go to a file at once, that is the quality guard for compaction. At
 about 350k the hook sets wind-down (no new starts, exit 6) until the owner compacts.
+
+**Emergency rotation** (the session has hung or is broken) needs no quiet window. The new session adopts the tracks
+that run: report.md with the RESULT line on top is the delivery signal, `cq orchestrator pulse` prints
+`NEW DELIVERY (report.md)` for it without a `<task-notification>`, and `cq resume` starts fix rounds with a new agent
+on the same branch. Stop the old session first, so two orchestrators do not receive and merge the same track.
 
 ## Projects, picking and visual QA
 

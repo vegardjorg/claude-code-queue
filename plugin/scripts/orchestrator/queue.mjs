@@ -106,7 +106,20 @@
 //         (resultLine, changed DB objects if any, diff statistics), diff.patch, files/ (changed files in full version
 //         from the branch), trackReply.md (the track's last answer from the transcript), trackReport.md and handover.md (from
 //         <folder>/<id>/), and reviewer-<type>.md (the short prompt) per reviewer by class (config().reviewers).
-//         Saves the RESULT line. Does NOT merge; prints the merge command.)
+//         Saves the RESULT line. Does NOT merge; prints the merge command. Adoption: the report is the newest in
+//         <folder>/<id>/ or a fix round <folder>/<id>-r<N>/, in the orchestrator's and the task's scratchpad; saves
+//         report_received.)
+//   node scripts/orchestrator/queue.mjs deliveries [--json]
+//        (adoption: active tasks with a report.md that has not been received: first line RESULT status=DONE|PARTIAL and
+//         newer than the start, the delivery and the last receive. `orchestrator pulse` prints the new ones every round (and
+//         remembers them in report_seen), so a new session that has adopted the tracks sees the delivery without
+//         <task-notification>.)
+//   node scripts/orchestrator/queue.mjs resume <id> [--reason fix|context] [--round N] [--findings-file <file>]
+//                                                [--scratchpad <folder>]
+//        (adoption: prompt-<id>-r<N>.md for a NEW agent on the same branch, fix round (default) or continuation after the
+//         context guard: the same template as fill, with prepare-track --continue, the paths to report.md, handover.md,
+//         the review package and the findings, and the original mission. N is the next free round. Not `continue`,
+//         which takes tasks off hold.)
 //   node scripts/orchestrator/queue.mjs set <id> done [--findings "FINDINGS H=0 M=1 L=3 …"] [--result "…"] [--without-cost]
 //        (measures the cost: the agents in the time log that belong to the task (the track label, fix rounds, and reviewers without
 //         a label when their mission mentions the id), usage from the transcripts; saves cost {usd, tokens, turns,
@@ -181,8 +194,10 @@
 //   node scripts/orchestrator/queue.mjs orchestrator pulse [--session "<name>"]   (orchestrator, every loop round; start and set
 //                                                                  do it themselves for the queue's own tasks; a NEW
 //                                                                  --session name = new session (emergency rotation), resets
-//                                                                  the wind-down; the usual path is compaction)
-//   node scripts/orchestrator/queue.mjs orchestrator stop             (the loop is stopped or handed over; also removes
+//                                                                  the wind-down; the usual path is compaction; also
+//                                                                  prints NEW DELIVERY for report.md files that came since
+//                                                                  the last pulse, see `deliveries`)
+//   node scripts/orchestrator/queue.mjs orchestrator stop            (the loop is stopped or handed over; also removes
 //                                                                  the wind-down flag)
 //
 // Cloud: K/U tasks without migrations and DB can run in a cloud session on claude.ai (the owner pastes the package from the board, or
@@ -1935,6 +1950,41 @@ function scratchpadFor(reserve = null) {
   return s ? path.resolve(s) : null;
 }
 
+// ---- Adoption: deliveries without <task-notification> (a new session has adopted the tracks) ----
+/** The scratchpad roots where the track folder can lie: the orchestrator's (--scratchpad/env) and the one saved on the task. */
+const trackRoots = (o) => [scratchpadFor(), o?.scratchpad ?? null].filter(Boolean);
+
+/** Active tasks (running, review; not picked) with a report.md that has not been received (queueLogic.assessDelivery). */
+function findDeliveries(queue) {
+  return queue.tasks
+    .filter((o) => ['running', 'review'].includes(o.status) && !o.picked_by)
+    .map((o) => L.assessDelivery(o, L.findTrackReport(o.id, trackRoots(o)).report))
+    .filter(Boolean);
+}
+
+/**
+ * Prints the delivery lines. With `update` (pulse) report_seen is saved for the new ones under the lock, so the same
+ * report is only reported as new once. An error never stops the pulse.
+ */
+function deliveryWarning({ update = false } = {}) {
+  try {
+    const found = findDeliveries(read());
+    for (const l of L.deliveryLines(found)) console.log(l);
+    const fresh = found.filter((l) => l.new);
+    if (update && fresh.length)
+      edit((queue) => {
+        for (const l of fresh) {
+          const o = queue.tasks.find((x) => x.id === l.id);
+          if (o) o.report_seen = Math.max(Number(o.report_seen ?? 0), l.mtimeMs);
+        }
+      });
+    return found;
+  } catch (e) {
+    console.error(`(The delivery check failed: ${e?.message ?? e}; ${CQ} deliveries)`);
+    return [];
+  }
+}
+
 /** The fields `start` and `fill` set (under the lock): status, branch and, if any, migration block. */
 function markStarted(queue, o, { agent = null, head = null, scratchpad = null } = {}) {
   const b = L.assignMigrBlock(queue.next_migr, L.migrTens(o, MIGR), MIGR.blockSize);
@@ -2980,12 +3030,13 @@ if (command === 'init') {
     fs.writeFileSync(path.join(folder, 'trackReply.md'), trackReply);
     files.trackReply = true;
   }
-  for (const [source, measure, n] of [
-    ['report.md', 'trackReport.md', 'report'],
-    ['handover.md', 'handover.md', 'handover'],
+  // Adoption: the newest report in the orchestrator's and the task's scratchpad, also from a fix round (<id>-r<N>/).
+  const trackFound = L.findTrackReport(id, [scratch, o0.scratchpad ?? null]);
+  for (const [k, measure, n] of [
+    [trackFound.report?.path, 'trackReport.md', 'report'],
+    [trackFound.handover?.path, 'handover.md', 'handover'],
   ]) {
-    const k = path.join(scratch, id, source);
-    if (fs.existsSync(k)) {
+    if (k && fs.existsSync(k)) {
       fs.copyFileSync(k, path.join(folder, measure));
       files[n] = true;
     }
@@ -3027,6 +3078,11 @@ if (command === 'init') {
     }
     if (result) o.result = result;
     o.review_package = folder;
+    // Adoption: the report that has been read is no longer a new delivery (pulse and deliveries skip it).
+    if (trackFound.report) {
+      o.report_received = trackFound.report.mtimeMs;
+      o.report_seen = Math.max(Number(o.report_seen ?? 0), trackFound.report.mtimeMs);
+    }
     // First delivery to review (a new round after a fix keeps the first time).
     o.t_receive ??= new Date().toISOString();
     return o;
@@ -3780,6 +3836,8 @@ if (command === 'init') {
         `${by.message}\n(The usual path is compaction, which lifts the wind-down. If this is still a NEW session ` +
           `(emergency rotation), run pulse with a --session name other than "${m.session}".)`,
       );
+    // Adoption: report.md files that came since the last pulse (an adopted track does not notify this session).
+    deliveryWarning({ update: true });
     // The pulse runs every loop round, so low parallelism is checked now and then even without fill and receive.
     parallelWarning();
   } else if (under === 'stop') {
@@ -3803,6 +3861,125 @@ if (command === 'init') {
       );
   } else {
     die('orchestrator [pulse [--session "<name>"] | stop]');
+  }
+} else if (command === 'deliveries') {
+  // ---- Adoption: report.md files that have not been received (read-only; pulse does the same and remembers what it reported) ----
+  const found = findDeliveries(read());
+  if (a.includes('--json')) console.log(JSON.stringify(found, null, 2));
+  else if (!found.length)
+    console.log('No deliveries waiting (no report.md newer than the start or the last receive).');
+  else
+    for (const l of found)
+      console.log(
+        `${l.id} (${l.taskStatus})  ${l.line}\n  ${l.path}  ${l.new ? 'NEW' : 'reported before'}  → ${CQ} receive ${l.id}`,
+      );
+} else if (command === 'resume') {
+  // ---- Adoption: the mission for a NEW agent that continues a track on the same branch (fix round or continuation) ----
+  // The same template as fill (make-queue-common + make-mission), with the track block from queueLogic.resumeBlock and
+  // --continue in the setup. The track id is <id>-r<N>, so the agent's report lands in <scratchpad>/<id>-r<N>/ (receive
+  // finds it).
+  const id = positional(1, ['--reason', '--round', '--scratchpad', '--findings-file'])[0];
+  const reason = val('--reason') ?? 'fix';
+  const use =
+    'resume <id> [--reason fix|context] [--round N] [--findings-file <file>] [--scratchpad <folder>]';
+  if (!id || !L.RESUME_REASONS.includes(reason)) die(use);
+  const queue = read();
+  const o = queue.tasks.find((x) => x.id === id);
+  if (!o) die(`Unknown task ${id}`);
+  if (!['running', 'review'].includes(o.status))
+    die(`${id} has status ${o.status}; resume applies to running and review (a new start is fill or start).`);
+  const scratch = scratchpadFor(o.scratchpad ?? null);
+  if (!scratch) die(`${use}\nNeeds --scratchpad <folder> (or QUEUE_SCRATCHPAD).`);
+  const branch = o.branch ?? branchFor(id);
+  if (!branchInfo(branch).exists)
+    die(`Branch ${branch} does not exist; resume continues a branch that exists (otherwise fill --ids).`);
+  const found = L.findTrackReport(id, trackRoots(o));
+  const round = val('--round') != null ? Number(val('--round')) : found.nextRound;
+  if (!Number.isInteger(round) || round < 1) die('--round must be an integer >= 1');
+  const findingsFile = val('--findings-file') ? path.resolve(val('--findings-file')) : null;
+  if (findingsFile && !fs.existsSync(findingsFile)) die(`Could not find --findings-file ${findingsFile}`);
+  // The review package: the saved one (receive), otherwise rev-<id> in one of the roots. Files beyond the package's own are
+  // the reviewers'.
+  const reviewFolder =
+    [o.review_package, ...trackRoots(o).map((r) => path.join(r, `rev-${id}`))].find(
+      (m) => m && fs.existsSync(m),
+    ) ?? null;
+  const PACKAGE = new Set([
+    '00-package.md',
+    'diff.patch',
+    'files',
+    'trackReply.md',
+    'trackReport.md',
+    'handover.md',
+  ]);
+  const reviewFiles = reviewFolder
+    ? fs.readdirSync(reviewFolder).filter((n) => !PACKAGE.has(n) && !n.startsWith('reviewer-'))
+    : [];
+  const sourcePath = missionFile(o);
+  const original = L.trackBlock(o, queue, {
+    text: sourcePath ? fs.readFileSync(sourcePath, 'utf8') : o.mission,
+  });
+  const trackId = `${id}-r${round}`;
+  const head = git(['rev-parse', BASE]);
+  if (!head) die(`Could not find baseBranch ${BASE} in the main tree (git rev-parse ${BASE}).`);
+  fs.mkdirSync(scratch, { recursive: true });
+  const trackFile = path.join(scratch, `queue-track-${trackId}.md`);
+  const commonFile = path.join(scratch, 'queue-common.md');
+  fs.writeFileSync(
+    trackFile,
+    L.resumeBlock({
+      o,
+      round,
+      reason,
+      reportPath: found.report?.path ?? null,
+      handoverPath: found.handover?.path ?? null,
+      reviewFolder,
+      reviewFiles,
+      findingsFile,
+      original,
+    }),
+  );
+  for (const [name, args] of [
+    ['make-queue-common.mjs', ['--out', commonFile, '--scratchpad', scratch]],
+    ['make-mission.mjs', ['--common', commonFile, '--track', trackFile, '--head', head, '--out', scratch]],
+  ]) {
+    try {
+      execFileSync(process.execPath, [path.join(HERE, name), ...args], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        encoding: 'utf8',
+      });
+    } catch (e) {
+      die(`${name} failed: ${String(e?.stderr ?? e?.message ?? e).trim()}`);
+    }
+  }
+  const prompt = path.join(scratch, `prompt-${trackId}.md`);
+  const adjusted = L.resumePromptAdjust(fs.readFileSync(prompt, 'utf8'), { trackId, branch, base: BASE });
+  fs.writeFileSync(prompt, adjusted.text);
+  // The report that exists now has already been reported; only a NEW report from the new agent is reported by pulse.
+  edit((q) => {
+    const x = q.tasks.find((y) => y.id === id);
+    if (found.report) x.report_seen = Math.max(Number(x.report_seen ?? 0), found.report.mtimeMs);
+    (x.resumed ??= []).push({ round, reason, time: new Date().toISOString() });
+  });
+  pulseCursor(`resume ${id} r${round}`);
+  console.log(
+    `RESUME ${trackId} (${reason}): prompt ${prompt}` +
+      `${adjusted.swapped ? '' : '  WARNING: could not find the setup line to add --continue to; check the prompt'}`,
+  );
+  console.log(
+    `Agent: subagent_type ${require('./lib/projectRoot.js').agentRef(L.agentTypeFor(o.class))}, ` +
+      `message: ${L.trackMessage(trackId, prompt)}`,
+  );
+  // If the branch is still checked out in a worktree, prepare-track --continue refuses: the old agent must be done.
+  const holder = (git(['worktree', 'list', '--porcelain']) ?? '')
+    .split(/\r?\n\r?\n/)
+    .find((b) => b.split(/\r?\n/).includes(`branch refs/heads/${branch}`));
+  if (holder) {
+    const where = holder.split(/\r?\n/)[0].replace(/^worktree /, '');
+    console.log(
+      `NOTE: ${branch} is checked out in ${where}. If the old agent is done: git -C "${where}" switch --detach ` +
+        'before the new agent starts (otherwise prepare-track --continue refuses).',
+    );
   }
 } else if (command === 'cloud-package') {
   // ---- Cloud: the package for the routine "queue-cloud" or to paste into a cloud session ----
@@ -4543,7 +4720,7 @@ if (command === 'init') {
     'Use: cq <init|add|approve|show|next|start|set|edit|resolve|resolutions|question|limit|state|trackFile|' +
       'projects|project|edit-many|pickable|pick|deliver|release|qa|external|orchestrator|cloud|cloud-package|batch|' +
       'area|areas|focus|park|continue|rank|undo|classify|plan|fill|receive|merge|info|activeOnes|next-migr|' +
-      'capacity|compact|diagnose|cost|handover> ...  (see the top of the file)',
+      'capacity|compact|diagnose|cost|handover|deliveries|resume> ...  (see the top of the file)',
     command ? 1 : 0,
   );
 }

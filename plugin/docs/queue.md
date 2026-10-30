@@ -59,6 +59,8 @@ or `cancelled` (cancelled). Tasks added by an agent start as `proposed` and need
 | `next` | What can start now, without changing anything |
 | `fill --scratchpad <dir>` | Starts as many tasks as the limits allow and writes the mission prompts |
 | `receive <id>` | Receives a finished track: reads the RESULT line, builds the review package |
+| `deliveries` | Tracks with a `report.md` (RESULT line on top) that is not received yet; the pulse prints new ones as `NEW DELIVERY` |
+| `resume <id> --reason fix\|context` | Writes `prompt-<id>-r<N>.md` for a new agent on the same branch (fix round or continuation of an adopted track) |
 | `merge <id>` | Merges the track branch into the base branch (after review). Exit 4: the merge guard stopped it (protected paths the task does not own); `--allow-guard` overrides |
 | `set <id> <status>` | Sets status by hand |
 | `edit <id> --json '{…}'` | Changes fields |

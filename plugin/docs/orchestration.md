@@ -74,6 +74,22 @@ context size. The system keeps both small:
 - **Time and cost log.** `hook-time.mjs` logs subagent start and stop; `cq cost` turns the measured sessions into
   per-class statistics, so estimates get better over time.
 
+## Adopting running tracks (cheap rotation)
+
+Tracks keep running when the orchestrator session changes; only the `<task-notification>` goes to the session that
+started them. A new session adopts them without that notification:
+- **The signal:** `report.md` in the track folder (`<scratch>/<ID>/`, or `<scratch>/<ID>-r<N>/` for a fix round) with
+  the `RESULT status=DONE|PARTIAL …` line as its first line. `queue-takeover.mjs` classifies the task DELIVERED on it;
+  the old heuristic (commits, clean worktree, 20 min) is the fallback.
+- **`cq orchestrator pulse`** prints `NEW DELIVERY (report.md): <ID> …` once per report (the task remembers it in
+  `report_seen`), and **`cq deliveries [--json]`** lists every report that is not received yet. `cq receive <ID>`
+  reads the newest report, also from a fix round folder, and saves `report_received`.
+- **`cq resume <ID> --reason fix|context`** writes `prompt-<ID>-r<N>.md` for a NEW agent on the same branch
+  (`prepare-track --continue`, the paths to the report, handover, review package and `--findings-file`).
+
+An emergency rotation therefore needs no quiet window. Stop the old session first, so two orchestrators do not
+receive and merge the same track. Compaction is still the usual path for a long session.
+
 ## Track classes and effort
 
 | Class | Agent | Effort | Typical size |

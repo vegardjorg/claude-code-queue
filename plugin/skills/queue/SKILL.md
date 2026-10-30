@@ -38,10 +38,19 @@ Run these in parallel where possible:
 4. **Is the previous orchestrator alive?** ACTIVE marker and queue changed less than 15 min ago: probably alive.
    ACTIVE but no change for a long time: it may have hung. Two orchestrators at the same time give double starts and
    double merges. If unclear, say so and recommend that the owner stops the old one first.
-5. **Lost track reports:** tracks that delivered to a dead orchestrator have their report only in the old session's
-   transcript. For each DELIVERED task, `cq receive <id> --scratchpad <scratch>` fetches the track's last answer from
-   the agent transcript and builds the review package. Otherwise rebuild the picture from
-   `git log <baseBranch>..queue/<id>`.
+5. **Tracks that run or have delivered to another session (adoption):** tracks live on when the session changes; only
+   the `<task-notification>` goes to the session that started them. The new session adopts them like this:
+   - `queue-takeover.mjs` classifies DELIVERED safely when `<scratchpad>/<id>/report.md` (or `<id>-r<N>/`) has the
+     RESULT line on top; the heuristic (commits, clean worktree, 20 min) is only the fallback.
+   - `cq orchestrator pulse` (every loop round) prints `NEW DELIVERY (report.md): <id> …` for reports that came since
+     the last pulse, also without a notification; `cq deliveries` shows all that are not received. The next step is
+     `cq receive <id>` as usual (it finds the report in the task's saved scratchpad).
+   - Fix round or continuation (PARTIAL, context guard) for an adopted track: `cq resume <id> --reason fix|context
+     [--findings-file <file>]` writes `prompt-<id>-r<N>.md` (prepare-track `--continue`, the paths to the report,
+     handover, review package and findings); start a new track agent with the message it prints. SendMessage to the
+     old agent does not work from a new session.
+   - No report.md (the track died before it wrote one): `cq receive <id> --scratchpad <scratch>` fetches the track's
+     last answer from the agent transcript; otherwise rebuild the picture from `git log <baseBranch>..queue/<id>`.
 
 ## Phase 2: Short report to the owner (at most about 20 lines)
 
@@ -111,6 +120,10 @@ Follow `parallel-wave` ("Continuous queue") unchanged. Specific to taking over:
 - **Wind-down (about 350k, emergency brake):** when the hook says WIND_DOWN, start nothing new (`next`/`start`/`fill`
   give exit 6). Finish what is started (receive, review, fix rounds, merge, `set … done`), update the note and ask
   the owner to compact now. Delivered tracks always get through.
+- **Emergency rotation:** only when the session has hung or is broken: ask the owner for a new `/cq:queue` in a new
+  window. The rotation no longer needs a quiet window: the new session adopts the running tracks (step 5 of the
+  takeover: pulse reports the deliveries, `cq resume` makes the fix rounds). Stop the old session first, so two
+  orchestrators do not receive and merge the same track. The usual path for a long session is still compaction.
 
 ## Fewer turns per task
 
