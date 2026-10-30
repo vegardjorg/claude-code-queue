@@ -56,7 +56,7 @@ then `cq setup --settings`. A vendored install gets `git pull` in your claude-co
 How it checks: the board server (not the browser) fetches the published `plugin.json` from GitHub at start, at most
 once per 24 hours (cached in `<dataFolder>/update-check.json`). It is a plain GET with a 3 second timeout that sends
 nothing about you or the project; any error just means no banner. Turn it off with `"board": { "updateCheck": false }`
-in `queue.config.json`; it is also off when `DISABLE_UPDATES`, `DISABLE_AUTOUPDATER` or
+in `queue.config.json`; it is also off when `DISABLE_UPDATES` or
 `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` is set.
 
 Setup after an update (local, no network, also with the check off): `cq setup --settings` records the plugin version

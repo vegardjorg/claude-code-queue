@@ -72,7 +72,7 @@ const STANDARD = Object.freeze({
   // The priority rules in the plan register. null = the generic default rules (`queue.mjs plan rules`).
   priorityRules: null,
   // The reviewer agents run per class after `queue.mjs receive`.
-  reviewers: { K: [], U: [], D: ['reviewer'], 'D+': ['reviewer', 'reviewer-security'] },
+  reviewers: { K: [], U: ['reviewer-challenger'], D: ['reviewer'], 'D+': ['reviewer', 'reviewer-security'] },
   // Read guard (hook-read-guard.mjs): in addition to the built-in lists.
   readGuard: {
     agentTypes: [], // more agent types the guard applies to (track, track-d and the reviewers are already included)
@@ -146,7 +146,7 @@ const STANDARD = Object.freeze({
     // all, for every viewer; the choice in the gear is then locked). `queue-board.mjs --mascot <mode>` overrides it.
     mascot: 'chatty',
     // The update banner: the board checks GitHub for a newer plugin version at start (at most once per 24 hours, a
-    // plain GET that sends nothing about you). false turns it off; so do DISABLE_UPDATES, DISABLE_AUTOUPDATER and
+    // plain GET that sends nothing about you). false turns it off; so do DISABLE_UPDATES and
     // CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC. The local "run cq setup --settings" notice works either way.
     updateCheck: true,
   },

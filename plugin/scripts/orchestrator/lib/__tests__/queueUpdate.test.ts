@@ -45,10 +45,13 @@ describe('disabledReason (config and env)', () => {
     expect(U.disabledReason({ board: { updateCheck: true } }, {})).toBeNull();
     expect(U.disabledReason({}, {})).toBeNull();
   });
+  it('DISABLE_AUTOUPDATER does not turn it off (the desktop app sets it in every session)', () => {
+    expect(U.disabledReason({}, { DISABLE_AUTOUPDATER: '1' })).toBeNull();
+  });
   it('board.updateCheck: false turns it off', () => {
     expect(U.disabledReason({ board: { updateCheck: false } }, {})).toMatch(/updateCheck/);
   });
-  it.each(['DISABLE_UPDATES', 'DISABLE_AUTOUPDATER', 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC'])(
+  it.each(['DISABLE_UPDATES', 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC'])(
     '%s set turns it off, empty or "0" does not',
     (name) => {
       expect(U.disabledReason({}, { [name]: '1' })).toMatch(name);
@@ -95,7 +98,7 @@ describe('latestVersion (fetch and cache)', () => {
   it('off via config or env: no fetch, null', async () => {
     const fetch = answering(JSON.stringify({ version: '9.0.0' }));
     expect(await U.latestVersion({ ...base(), config: { board: { updateCheck: false } }, fetch })).toBeNull();
-    expect(await U.latestVersion({ ...base(), env: { DISABLE_AUTOUPDATER: '1' }, fetch })).toBeNull();
+    expect(await U.latestVersion({ ...base(), env: { DISABLE_UPDATES: '1' }, fetch })).toBeNull();
     expect(fetch).not.toHaveBeenCalled();
     expect(existsSync(cacheFile)).toBe(false);
   });

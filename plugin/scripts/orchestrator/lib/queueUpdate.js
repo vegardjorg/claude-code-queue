@@ -5,7 +5,7 @@
 //   - NEW VERSION: at start (and at most once per 24 hours, cached in <dataFolder>/update-check.json) the server fetches
 //     the published plugin.json from GitHub with a plain GET (no headers of its own, nothing about the user or the
 //     project) and a short timeout. Any error (network, timeout, invalid JSON, no valid version) gives null and no
-//     message. Off with board.updateCheck: false in queue.config.json, or when DISABLE_UPDATES, DISABLE_AUTOUPDATER or
+//     message. Off with board.updateCheck: false in queue.config.json, or when DISABLE_UPDATES or
 //     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC is set.
 //   - SETUP NOT RUN (local, no network, also with the check off): `cq setup --settings` records the plugin version it set
 //     up in <dataFolder>/setup.json. A plugin install whose version differs from that record (or has none) shows that
@@ -34,7 +34,9 @@
   const MAX_AGE_MS = 24 * 60 * 60 * 1000;
   const TIMEOUT_MS = 3000;
   /** Any of these set (not empty, "0" or "false") turns the network check off. */
-  const ENV_OFF = ['DISABLE_UPDATES', 'DISABLE_AUTOUPDATER', 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC'];
+  // Not DISABLE_AUTOUPDATER: the Claude desktop app sets it in every session (it updates Claude Code itself), so it
+  // says nothing about what the user wants, and the banner would never show there.
+  const ENV_OFF = ['DISABLE_UPDATES', 'CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC'];
   /** The localStorage key in the browser for the version whose banner was closed. */
   const DISMISS_KEY = 'queue-board-update-dismissed';
 

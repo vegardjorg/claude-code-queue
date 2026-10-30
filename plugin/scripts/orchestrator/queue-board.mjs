@@ -61,8 +61,8 @@
 //     as queue.mjs follow; the board never writes follow.json.
 //   - UPDATE BANNER (lib/queueUpdate.js): at start, and at most once per 24 hours (cache <dataFolder>/update-check.json),
 //     the server fetches the published plugin.json from GitHub with a plain GET (no headers of its own, nothing about
-//     the user or the project, 3 s timeout); any error is silent. Off with board.updateCheck: false or DISABLE_UPDATES,
-//     DISABLE_AUTOUPDATER or CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC. The state carries `update`, which also says when
+//     the user or the project, 3 s timeout); any error is silent. Off with board.updateCheck: false or DISABLE_UPDATES
+//     or CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC. The state carries `update`, which also says when
 //     the plugin version differs from the one `cq setup --settings` recorded in <dataFolder>/setup.json (local only).
 //
 // Security (another web page in the same browser must not be able to read or edit the queue):

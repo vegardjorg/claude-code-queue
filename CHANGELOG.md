@@ -9,7 +9,7 @@ and `package.json`.
 - **Update banner on the board**: the board server checks GitHub for a newer `cq` at most once per 24 hours (a plain
   GET with a short timeout that sends nothing about you; errors are silent) and shows "cq X is out (you have Y)" with
   a CHANGELOG link and copyable update steps. Close it per version. Off with `board.updateCheck: false` or
-  `DISABLE_UPDATES`, `DISABLE_AUTOUPDATER` or `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`.
+  `DISABLE_UPDATES` or `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`.
 - **Setup notice after an update**: `cq setup --settings` records the plugin version in `<dataFolder>/setup.json`,
   and the board says when the installed plugin differs from it (local, works with the check off). The vendored
   installer writes `scripts/orchestrator/cq-version.json` so the board knows that version too.
