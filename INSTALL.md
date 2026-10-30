@@ -130,7 +130,8 @@ Do not push unless the user asks.
 
 ## 8. Tell the user how to start
 
-- `/start` for a short status at the start of a session.
+- `/start` to open a session cheaply before pasting a task (it only answers "ready"). For the queue state,
+  run `node scripts/orchestrator/cq.mjs show`.
 - `/queue` to run this chat as the orchestrator.
 - `/add-to-queue` to turn a request into queue tasks, `/plans` for plan work, `/pick` to do one task by hand.
 - The board: `node scripts/orchestrator/cq.mjs board`.

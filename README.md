@@ -179,7 +179,7 @@ Claude offers to queue it. The slash commands below are the explicit way to do t
 4. **Push when you are ready.** Merges stay local. Nothing is pushed until you say "push", and then in one batch.
 
 Other skills: `/cq:pick` to take one task and do it yourself in the current chat, `/cq:parallel-wave` for the full
-orchestration rules, and `/cq:start` to open a session cheaply before you paste a task.
+orchestration rules, and `/cq:start` to open a session cheaply before you paste a task (it only answers "ready"; `cq show` gives the queue state).
 
 ## How it works
 

@@ -30,7 +30,9 @@ are `/<name>`.
 - `/add-to-queue`: turn a request or plan section into queue tasks.
 - `/plans <id|project|module>`: plan work only, never building.
 - `/pick`: take one queue task by hand in this chat.
-- `/start`: short session start (queue state, owner questions).
+- `/board`: start the local board in the background and give the link.
+- `/start`: answers only "ready" (a cheap way to open a session before you paste a task). For the queue state,
+  run `cq show`.
 
 ## Git
 - Commit locally for every step. **Push only in batches, when the owner says "push".** Run
