@@ -167,6 +167,12 @@ lines (owner questions with one sentence each, HIGH findings, what must be deplo
 while merging), then the path to `<folder>\report.md`. In `report.md`: status, branch and commits, the gate summary
 line, append-only files touched, deploy needs, **owner questions** in their own section, and the wiring specification
 (file, anchor, exact line).
+**QA evidence:** when the task has a label that needs evidence (`qa.evidenceLabels` in `queue.config.json`, default
+`visual`; see `cq info <TRACK> --field labels`), `report.md` has one line `EVIDENCE <type>[=<ref>[,<ref>...]]` saying how
+the owner sees that the delivery works. The types are `qa.evidenceTypes` (default `screenshot=<route or screen>`,
+`test=<test file>` or `manual=<what to check by hand>`). Pure logic takes `test`, which is closed automatically when
+the configured command is green (`cq qa auto --run`); `manual` is gathered in one manual round. `cq receive` stores
+the evidence and warns when the line is missing.
 <!-- class: D D+ -->
 For D and D+ also: migrations and contracts, tests (red before, green after) and the self-review.
 <!-- /class -->

@@ -123,7 +123,10 @@ on the same branch. Stop the old session first, so two orchestrators do not rece
 - **Picked tasks** (skill `pick`): a person or session does the task. It owns its files, is never started, merged or
   released by the orchestrator, and arrives as `review` after `cq deliver <id>`.
 - **Visual QA:** tasks with the label `visual` get `qa_status: waiting` when finished. `cq qa` lists them; only the
-  owner decides (`qa ok`, `qa deviation <id> "<text>"`, which creates `<id>-QA<n>`).
+  owner decides (`qa ok`, `qa deviation <id> "<text>"`, which creates `<id>-QA<n>`). Each entry carries evidence
+  (`EVIDENCE <type>[=<ref>]` in the track's `report.md`, stored by `receive`, or `cq qa evidence <id> <type>[=<ref>]`);
+  `cq qa auto --run` closes the entries whose evidence type is automatic (default `test`) when `qa.autoCommand` is
+  green.
 - **The board:** `cq board` (local, 127.0.0.1, link with a key) shows the queue as
   kanban, statistics, dependencies, plans and "Waiting on you". It writes only through `cq`. See
   `docs/queue/board.md`.

@@ -77,6 +77,8 @@ or `cancelled` (cancelled). Tasks added by an agent start as `proposed` and need
 | `diagnose` | Why the queue runs fewer tracks than it could (with suggested fixes) |
 | `state` | Machine-readable state (exit 3 when there is nothing to do) |
 | `undo` | Undo the last write |
+| `qa` / `qa ok <id…>` / `qa deviation <id> "…"` | The QA list (split into what to look at, a manual round and auto entries) / the owner approves / the owner finds a deviation (fix task `<id>-QA<n>`) |
+| `qa evidence <id> <type>[=<ref>]` / `qa auto [--run]` | Sets the QA evidence by hand (`receive` reads the `EVIDENCE` line in `report.md`) / runs `qa.autoCommand` for auto evidence and closes the green entries |
 | `follow [add\|log\|show\|report\|close\|extend]` | Follow-up entries: observations with a start, an end, goals, a log and a fixed report template (see below) |
 
 ### Follow-up entries
@@ -138,6 +140,9 @@ reviewer agents per class. Missing values fall back to safe defaults.
 | `cloudHidden` | `[]` | Paths a cloud session cannot see (missions pointing there are stopped) |
 | `capacity` | Tuesday 19:00 local time | Weekly quota reset for `cq capacity` |
 | `loadGuard.minFreeMemoryPct` | `null` (off) | Load guard: no new starts while free memory (percent) is below it; `cq limit minFreeMemoryPct` overrides per queue |
+| `qa.evidenceTypes`, `qa.autoTypes`, `qa.manualTypes` | `screenshot`, `test`, `manual`; auto `test`; manual `manual` | QA evidence types a track writes as `EVIDENCE <type>[=<ref>]`; auto types are closed by `qa auto --run`, manual ones gathered in one round |
+| `qa.autoCommand` | `null` | Shell command for auto evidence, e.g. `npx vitest run {refs}` (`{refs}`, `{id}`; or `{ "<type>": "<command>" }`); `null` = `qa auto` only lists |
+| `qa.evidenceLabels` | `["visual"]` | Labels for which `receive` warns when the `EVIDENCE` line is missing |
 | `excludeBranches` | `["main","master"]` | Branches never treated as external work |
 | `protectedPaths` | `.claude/`, `scripts/orchestrator/`, plugin hooks/agents/skills, `queue.config.json`, `CLAUDE.queue.md`, `package.json` … | Merge guard: a track may only change these when its task owns them; `[]` turns it off |
 | `modules`, `projectModuleSuggestion`, `priorityRules`, `documentFolders`, `indexFile`, `documents`, `planBackup` | see `queue.config.example.json` | Plan register (see `plan-register.md`) |

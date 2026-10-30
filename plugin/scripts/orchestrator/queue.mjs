@@ -174,6 +174,11 @@
 //   node scripts/orchestrator/queue.mjs qa                            (QA list: finished with the label visual that are waiting)
 //   node scripts/orchestrator/queue.mjs qa ok <id> [...]              (owner only)
 //   node scripts/orchestrator/queue.mjs qa deviation <id> "<text>"       (owner only; creates fixTask <id>-QA<n>)
+//   node scripts/orchestrator/queue.mjs qa evidence <id> <type>[=<ref>]  (the types are config().qa.evidenceTypes, default
+//                                                                  screenshot|test|manual; receive otherwise reads the
+//                                                                  EVIDENCE line in report.md)
+//   node scripts/orchestrator/queue.mjs qa auto [--run] [<id...>]        (entries with auto evidence, default test: run
+//                                                                  config().qa.autoCommand and close the green ones)
 //   node scripts/orchestrator/queue.mjs edit-many --file <json> [--dry] [--expect-changed <iso>] [--json] [--by "..."]
 //        ([{ id, project?, feature?, labels?, requires?, priority_bonus?, parked?, batched?, plan? }] or
 //         { projects: {...}, tasks: [...] }; all or nothing. See bulk edit below.)
@@ -407,7 +412,8 @@
 // [owner question id], owned_files [path or folder/], owner_db [feature], shared_patch [shared feature], source (plan and
 // sub-plan), added_by, project (pid), plan (plan entry id in plans.json), feature (short name), labels (e.g.
 // ["visual"]), requires (resources, see queueLogic.REQUIRES), batched (true = batch queue). Set by the tool: picked_by,
-// picked_at, qa_status (waiting|ok|deviation), qa_note, qa_original (on a fix task).
+// picked_at, qa_status (waiting|ok|deviation), qa_note, qa_original (on a fix task), evidence ({ type, ref }, from the
+// EVIDENCE line or qa evidence; see config().qa), qa_ok_by ("auto" when qa auto --run closed it).
 // =============================================================
 
 import fs from 'node:fs';
@@ -3201,6 +3207,14 @@ if (command === 'init') {
     L.parseResult(val('--result')) ??
     L.parseResult(trackReply) ??
     L.parseResult(reportText);
+  // QA evidence: the EVIDENCE line (report.md first, otherwise the answer) and the warning when a task that needs it
+  // (config().qa.evidenceLabels) has none. A warning, not a stop.
+  const evidenceRead = L.parseEvidence(reportText) ?? L.parseEvidence(trackReply);
+  const evidenceWarn = L.evidenceWarning({
+    o: o0,
+    evidence: evidenceRead?.evidence ?? null,
+    evidenceError: evidenceRead?.error ?? null,
+  });
   const dbObjects = L.dbObjectsFromDiff(diff, { folder: MIGR.folder });
   fs.writeFileSync(
     path.join(folder, '00-package.md'),
@@ -3230,6 +3244,7 @@ if (command === 'init') {
       if (s.error) die(s.error);
     }
     if (result) o.result = result;
+    if (evidenceRead?.evidence) o.evidence = evidenceRead.evidence;
     o.review_package = folder;
     // Adoption: the report that has been read is no longer a new delivery (pulse and deliveries skip it).
     if (trackFound.report) {
@@ -3251,6 +3266,8 @@ if (command === 'init') {
   // The report cap (about 1,500 chars); the long part belongs in report.md.
   const capWarning = L.reportCapWarning(trackReply);
   if (capWarning) console.log(capWarning);
+  if (evidenceRead?.evidence) console.log(`QA evidence: ${L.evidenceText(evidenceRead.evidence)}`);
+  if (evidenceWarn) console.log(evidenceWarn);
   focusCleanOut();
   // The reviewers (D+: two) are started in the SAME turn.
   if (prompts.length)
@@ -3942,34 +3959,96 @@ if (command === 'init') {
   console.log(`${id}: released (was picked by ${r.by ?? '?'}), waiting again.`);
   if (r.warning) console.log(`WARNING: ${r.warning}`);
 } else if (command === 'qa') {
-  // ---- Visual QA: only the owner sets qa ok / qa deviation ----
+  // ---- Visual QA: only the owner sets qa ok / qa deviation (qa auto --run closes green auto evidence) ----
   const under = a[1];
   if (!under) {
     const queue = read();
-    const groups = L.qaList(queue);
+    // Split by evidence (config().qa): what the owner looks at (also entries without evidence) grouped as before, the
+    // manual types in one manual round, and the auto types that qa auto --run closes.
+    const split = L.qaSplit(queue);
+    const groups = split.look;
     const count = groups.reduce(
       (n, p) => n + p.features.reduce((m, f) => m + f.tasks.length, 0),
       0,
     );
-    if (!count) console.log('The QA list is empty.');
-    else console.log(`QA list: ${count} finished task(s) waiting for the owner to look at them.\n`);
+    const total = count + split.manual.length + split.auto.length;
+    if (!total) console.log('The QA list is empty.');
+    else console.log(`QA list: ${total} finished task(s) waiting on QA.\n`);
+    const ageFor = (o) => (o.done ? `done ${L.ageText(Date.now() - Date.parse(o.done))} ago` : '');
     for (const p of groups) {
       console.log(cut(`${p.pid}${p.title ? `  ${p.title}` : ''}`, WIDTH));
       for (const f of p.features) {
         console.log(`  ${cut(f.feature, WIDTH - 2)}`);
         for (const o of f.tasks) {
-          const age = o.done
-            ? `done ${L.ageText(Date.now() - Date.parse(o.done))} ago`
-            : '';
-          console.log(`    ${o.id.padEnd(12)} ${age}`);
+          console.log(`    ${o.id.padEnd(12)} ${ageFor(o)} · ${L.evidenceText(o.evidence)}`);
           console.log(`      ${cut(`look for: ${o.title}`, WIDTH - 6)}`);
         }
       }
     }
-    if (count)
+    if (split.manual.length) {
+      console.log(`\nManual round (${split.manual.length}): check them together, by hand.`);
+      for (const o of split.manual)
+        console.log(`  ${o.id.padEnd(12)} ${cut(L.evidenceText(o.evidence), WIDTH - 15)}`);
+    }
+    if (split.auto.length) {
+      console.log(
+        `\nClosed automatically when the command is green (${split.auto.length}): ${CQ} qa auto --run`,
+      );
+      for (const o of split.auto)
+        console.log(`  ${o.id.padEnd(12)} ${cut(L.evidenceText(o.evidence), WIDTH - 15)}`);
+    }
+    if (total)
       console.log(
         '\nApprove: cq qa ok <id...> · deviation: cq qa deviation <id> "<what is wrong, and where>"',
       );
+  } else if (under === 'evidence') {
+    // Sets the evidence on a task by hand (receive otherwise reads it from the EVIDENCE line in report.md).
+    const [id, spec] = positional(2);
+    const qa = L.qaConfig();
+    if (!id || !spec)
+      die(`qa evidence <id> <type>[=<ref>[,<ref>...]] (type: ${qa.evidenceTypes.join(', ')})`);
+    const p = L.parseEvidence(`EVIDENCE ${spec}`);
+    if (!p || p.error) die(p?.error ?? 'invalid evidence');
+    const r = edit((queue) => {
+      const o = queue.tasks.find((x) => x.id === id);
+      if (!o) die(`Unknown task ${id}`);
+      o.evidence = p.evidence;
+      return o;
+    });
+    console.log(`${id}: evidence ${L.evidenceText(r.evidence)}`);
+  } else if (under === 'auto') {
+    // QA entries with an auto evidence type (config().qa.autoTypes). Without --run only the list; with --run the
+    // configured command (qa.autoCommand) runs from the project root per entry, and the green ones are closed
+    // (qa_ok_by "auto"). Red stays in the QA list with a remark.
+    const chosen = positional(2);
+    const run = a.includes('--run');
+    const candidates = L.qaSplit(read()).auto.filter((o) => !chosen.length || chosen.includes(o.id));
+    if (!candidates.length) console.log('No QA entries with auto evidence are waiting.');
+    for (const o of candidates) {
+      if (!run) {
+        console.log(`${o.id.padEnd(12)} ${L.evidenceText(o.evidence)}`);
+        continue;
+      }
+      const k = L.evidenceCommand(o);
+      if (k.error) die(k.error);
+      const s = spawnSync(k.command, {
+        cwd: GIT_ROOT,
+        shell: true,
+        encoding: 'utf8',
+        maxBuffer: 1 << 28,
+        windowsHide: true,
+      });
+      const green = s.status === 0;
+      edit((queue) => {
+        const u = L.qaAutoOutcome(queue, o.id, green);
+        if (u.error) die(u.error);
+        return u;
+      });
+      console.log(
+        `${o.id.padEnd(12)} ${green ? 'green, QA ok (auto)' : `red (exit ${s.status ?? '?'}), stays in the QA list`} · ${L.evidenceText(o.evidence)}`,
+      );
+    }
+    if (candidates.length && !run) console.log(`\nRun and close the green ones: ${CQ} qa auto --run [<id...>]`);
   } else if (under === 'ok') {
     const ids = positional(2);
     if (!ids.length) die('qa ok <id> [...]');
@@ -3992,7 +4071,9 @@ if (command === 'init') {
       `${id}: QA deviation. Fix task ${r.fix.id} is added to the queue (${r.fix.status}, class K, ${r.fix.project ?? L.WITHOUT_PROJECT}${r.fix.feature ? ` / ${r.fix.feature}` : ''}).`,
     );
   } else {
-    die('qa [ok <id...> | deviation <id> "<text>"]');
+    die(
+      'qa [ok <id...> | deviation <id> "<text>" | evidence <id> <type>[=<ref>] | auto [--run] [<id...>]]',
+    );
   }
 } else if (command === 'external') {
   // ---- Work outside the queue ----

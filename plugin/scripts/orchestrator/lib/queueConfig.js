@@ -110,6 +110,23 @@ const STANDARD = Object.freeze({
   loadGuard: {
     minFreeMemoryPct: null,
   },
+  // QA evidence: how the owner (or the queue itself) sees that a delivery works. A track writes one line
+  // `EVIDENCE <type>[=<ref>[,<ref>...]]` in report.md, and `queue.mjs receive` stores it on the task (field `evidence`).
+  qa: {
+    // The evidence types a track may write. screenshot = the owner looks at a screen or route, test = a test file,
+    // manual = something the owner checks by hand.
+    evidenceTypes: ['screenshot', 'test', 'manual'],
+    // Types closed automatically by `queue.mjs qa auto --run` when autoCommand is green (exit 0). They need a ref.
+    autoTypes: ['test'],
+    // Types whose ref is free text (what to check by hand); they are gathered in one manual round in `queue.mjs qa`.
+    manualTypes: ['manual'],
+    // The shell command `qa auto --run` runs from the project root, e.g. "npx vitest run {refs}". {refs} is replaced by the
+    // refs separated by spaces (appended when the placeholder is missing), {id} by the task id. Either one command for every
+    // auto type, or { "<type>": "<command>" }. null = qa auto only lists.
+    autoCommand: null,
+    // Labels that require evidence: receive warns when such a task delivers without an EVIDENCE line. [] = never warn.
+    evidenceLabels: ['visual'],
+  },
   // Branches never counted as queue branches (in addition to baseBranch).
   excludeBranches: ['main', 'master'],
   // Paths a cloud session cannot see (e.g. gitignored folders); a mission that points there is stopped.

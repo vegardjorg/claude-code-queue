@@ -355,6 +355,8 @@ describe('queue.mjs: pulse, deliveries, receive and resume against a temporary q
     expect(m.out).toContain(RES);
     expect(find()).toMatchObject({ status: 'review' });
     expect(find().report_received).toBeGreaterThan(0);
+    // No label that needs QA evidence (config().qa.evidenceLabels): no evidence warning.
+    expect(m.out).not.toMatch(/EVIDENCE/);
     expect(fs.readFileSync(path.join(scratch, 'rev-A', 'trackReport.md'), 'utf8')).toContain(
       '# Report A',
     );
@@ -387,14 +389,21 @@ describe('queue.mjs: pulse, deliveries, receive and resume against a temporary q
     // The fix round delivers in its own folder: a new delivery, and receive reads it.
     fs.mkdirSync(path.join(scratch, 'A-r1'));
     const r1 = path.join(scratch, 'A-r1', 'report.md');
-    fs.writeFileSync(r1, `${RES}\n\n# Fix round 1\n`);
+    fs.writeFileSync(r1, `${RES}\nEVIDENCE test=src/a.test.ts\n\n# Fix round 1\n`);
     const later = Date.now() / 1000 + 120;
     fs.utimesSync(r1, later, later);
     expect(deliveries()).toMatchObject([{ id: 'A', taskStatus: 'review', new: true, path: r1 }]);
-    expect(run('receive', 'A').code).toBe(0);
+    const m2 = run('receive', 'A');
+    expect(m2.code).toBe(0);
     expect(fs.readFileSync(path.join(scratch, 'rev-A', 'trackReport.md'), 'utf8')).toContain(
       '# Fix round 1',
     );
+    // The EVIDENCE line in report.md is stored on the task (QA evidence).
+    expect(m2.out).toContain('QA evidence: test src/a.test.ts');
+    expect((find() as unknown as { evidence: unknown }).evidence).toEqual({
+      type: 'test',
+      ref: ['src/a.test.ts'],
+    });
     expect(deliveries()).toEqual([]);
   });
 });
