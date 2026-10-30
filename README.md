@@ -170,7 +170,7 @@ queue", "show the board". The skills pick that up, in any language, and when you
 Claude offers to queue it. The slash commands below are the explicit way to do the same.
 
 1. **Add work.** Say "add it to the queue" (or `/cq:add-to-queue` followed by what you want done), or `/cq:plans`
-   to work on a plan. Tasks that agents propose wait for your approval.
+   to work on a plan. Tasks you add can start at once; tasks that agents propose wait for your approval.
 2. **Start the loop.** Open a chat and run `/cq:queue`. It reports the state and asks before it starts. Then it fills
    the free slots with track agents, reviews and merges what they deliver, and starts the next tasks, until the queue
    is empty, the daily budget is used, or everything left waits on you.
@@ -179,7 +179,8 @@ Claude offers to queue it. The slash commands below are the explicit way to do t
 4. **Push when you are ready.** Merges stay local. Nothing is pushed until you say "push", and then in one batch.
 
 Other skills: `/cq:pick` to take one task and do it yourself in the current chat, `/cq:parallel-wave` for the full
-orchestration rules, and `/cq:start` to open a session cheaply before you paste a task (it only answers "ready"; `cq show` gives the queue state).
+orchestration rules, and `/cq:start` to open a session cheaply before you paste a task (it only answers "ready";
+`cq show` gives the queue state).
 
 ## How it works
 

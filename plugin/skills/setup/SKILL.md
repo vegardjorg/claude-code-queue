@@ -68,7 +68,9 @@ If yes:
 2. Plan entries without the user's priority get `"priority": "owner"`, `"maturity": "idea"`,
    `"priority_set_by": "agent"` and a one-sentence `priority_reason`. Each entry needs an existing `project` (create
    projects first, from the user's answer about areas) and `sources` as `[{ "path": "<path>" }]`.
-3. Queue tasks you add start as proposals; the user approves them with `cq approve <id>` or on the board.
+3. Queue tasks you add here go straight to `waiting` and can start at once, so add only the ones the user said yes to
+   in step 1. Only tasks an agent adds (`added_by` is a track id, a reviewer or an "... agent") start as `proposed` and
+   wait for `cq approve <id>` or Approve on the board.
 4. Never copy document contents into the register; point to them with `sources`.
 
 ## 5. Commit
