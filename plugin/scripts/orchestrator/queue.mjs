@@ -260,6 +260,13 @@
 //         --rest wait (default): tasks outside the focus do not start; fill: they fill slots the focus does not use.
 //         Dependencies of focus tasks are dragged along (transitively) unless --without-dependencies. --to YYYY-MM-DD = up to
 //         and including that day (UTC); afterwards the queue is ranked as without focus, with a notice. Pause on a project takes precedence.)
+//   node scripts/orchestrator/queue.mjs focus evaluate [--json] [--all]
+//        (each stage with open, ready, minutes left, rests (batch queue, proposals, waiting only on owner questions,
+//         QA with the owner) with a suggestion per rest, and status active | done-with-rests | done.)
+//   node scripts/orchestrator/queue.mjs focus clean [--dry] [--by "..."]
+//        (takes out the stages with status done; done-with-rests stays until the rests are settled. The removal is
+//         recorded in focus.history and the changelog (queue.mjs undo). The last stage is never taken out by itself.
+//         receive, set <id> done|cancelled and fill do the same automatically, with one line per stage in the output.)
 //   node scripts/orchestrator/queue.mjs focus off
 //   node scripts/orchestrator/queue.mjs focus save --file <plan.json> [--dry] [--expect-changed <iso>] [--json] [--by "..."]
 //        (the plan view on the board: { order, now_count?, rest?, to?, name?, drag_with_dependencies?,
@@ -780,6 +787,24 @@ const editLogged = (action, fn) =>
     write(queue);
     return answer;
   });
+// receive, set <id> done|cancelled and fill evaluate the focus stages in the SAME write (under the lock) and take out
+// the stages that are done (queueLogic.cleanFocus: history + changelog, so queue.mjs undo works). An error here never
+// stops the command; the lines are printed afterwards with focusCleanOut.
+let focusClean = null;
+function autoCleanFocus(queue, action) {
+  try {
+    focusClean = L.cleanFocus(queue, { by: `cq ${action} (auto)` });
+  } catch (e) {
+    focusClean = { error: e?.message ?? String(e) };
+  }
+}
+function focusCleanOut() {
+  if (!focusClean) return;
+  if (focusClean.error)
+    console.log(`WARNING: the focus cleaning failed (${focusClean.error}); see cq focus evaluate.`);
+  else for (const l of L.focusCleanLines(focusClean)) console.log(l);
+}
+
 /** "(undo: queue.mjs undo)" after a logged write. */
 const undoHint = () =>
   lastEntry
@@ -2667,6 +2692,7 @@ if (command === 'init') {
     qa = s.qa;
     if (val('--remark')) o.remarks = [...(o.remarks ?? []), `${now} ${val('--remark')}`];
     if (measurement) saveMeasurement(o, measurement);
+    if (status === 'done' || status === 'cancelled') autoCleanFocus(queue, `set ${id} ${status}`);
     return o;
   });
   if (measurement) console.log(measurementLine(r));
@@ -2682,6 +2708,7 @@ if (command === 'init') {
   console.log(
     `${id}: ${status}${qa ? ' · label visual: now in the owner QA list (cq qa)' : ''}`,
   );
+  focusCleanOut();
   if (orchestratorStep) pulseCursor(`set ${id} ${status}`);
 } else if (command === 'edit') {
   const [, id] = a;
@@ -2952,6 +2979,8 @@ if (command === 'init') {
   // only new prompt files (e.g. after make-mission failed); a pending one must be startable now (otherwise start --force
   // on the owner's word first).
   const selected = edit((queue) => {
+    // Done focus stages are taken out before the selection (does not change the order: a done stage has no tasks).
+    autoCleanFocus(queue, 'fill');
     const out = [];
     if (ids.length) {
       const can = L.selectNext(queue, Date.now(), { uncommitted }).map((v) => v.id);
@@ -3004,6 +3033,7 @@ if (command === 'init') {
     for (const l of L.resolveWaitsLines(L.resolveWaits(read()), { max: 10 })) console.log(l);
   };
   if (quotaMessage) console.log(quotaMessage);
+  focusCleanOut();
   if (!selected.length) {
     console.log('Nothing can start now (see show and state).');
     resolveWarning();
@@ -3184,6 +3214,7 @@ if (command === 'init') {
     }
     // First delivery to review (a new round after a fix keeps the first time).
     o.t_receive ??= new Date().toISOString();
+    autoCleanFocus(queue, `receive ${id}`);
     return o;
   });
   if (o0.status !== 'review' && r.started)
@@ -3196,6 +3227,7 @@ if (command === 'init') {
   // The report cap (about 1,500 chars); the long part belongs in report.md.
   const capWarning = L.reportCapWarning(trackReply);
   if (capWarning) console.log(capWarning);
+  focusCleanOut();
   // The reviewers (D+: two) are started in the SAME turn.
   if (prompts.length)
     for (const l of L.concurrentBlock(
@@ -4590,6 +4622,39 @@ if (command === 'init') {
       });
       answer(after, r, false);
     }
+  } else if (under === 'evaluate') {
+    // The evaluation of each stage (queueLogic.evaluateFocusStep), with the rests and suggestions.
+    const queue = read();
+    const ev = L.evaluateFocusStep(queue);
+    if (a.includes('--json')) {
+      console.log(JSON.stringify({ ok: true, focus: !!queue.focus, stages: ev }));
+    } else if (!ev.length) console.log('No focus set (cq focus set ...).');
+    else {
+      const max = a.includes('--all') ? Infinity : 10;
+      for (const t of ev) {
+        console.log(
+          cut(
+            `T${t.index + 1} ${t.title} (${t.stage}): ${t.status} · ${t.open} open · ${t.ready} ready · ` +
+              `${t.min_left} min left${t.rests.length ? ` · ${t.rests.length} rest(s)` : ''}`,
+            WIDTH,
+          ),
+        );
+        for (const r of t.rests.slice(0, max)) console.log(cut(`    ${L.restText(r)}`, WIDTH));
+        if (t.rests.length > max) console.log(`    … and ${t.rests.length - max} more (--all shows all)`);
+      }
+      const done = ev.filter((t) => t.status === 'done').length;
+      if (done) console.log(`${done} stage(s) are done: cq focus clean takes them out.`);
+    }
+  } else if (under === 'clean') {
+    // Takes out the stages with status done (queueLogic.cleanFocus); --dry computes without writing.
+    const dry = a.includes('--dry');
+    const r = dry
+      ? L.cleanFocus(L.cloneJson(read()), { by: byName(), dry: true })
+      : edit((queue) => L.cleanFocus(queue, { by: byName() }));
+    if (dry) console.log(`Dry run (nothing written): ${r.taken_out.length} stage(s) would be taken out.`);
+    if (!r.taken_out.length) console.log('No done focus stages to take out.');
+    for (const l of L.focusCleanLines(r)) console.log(l);
+    if (r.entry) console.log(`Changelog no. ${r.entry.nr}; undo: cq undo`);
   } else if (under === 'off') {
     const oldOne = edit((queue) => L.removeFocus(queue));
     console.log(
@@ -4599,7 +4664,7 @@ if (command === 'init') {
     );
   } else if (under && !under.startsWith('--')) {
     die(
-      'focus | focus set <stage> [<stage> ...] [--rest wait|fill] [--to <date>] [--name "..."] [--without-dependencies] | focus off',
+      'focus | focus set <stage> [<stage> ...] [--rest wait|fill] [--to <date>] [--name "..."] [--without-dependencies] | focus evaluate [--json] | focus clean [--dry] | focus off',
     );
   } else {
     const queue = read();
@@ -4620,10 +4685,18 @@ if (command === 'init') {
           `${st.expired ? ' · EXPIRED' : ''}${st.not_started ? ' · not started yet' : ''}`,
       );
       if (st.active) {
+        // Done stages and stages with only rests are marked (the details: cq focus evaluate).
+        const ev = L.evaluateFocusStep(queue);
+        const mark = (e) =>
+          e?.status === 'done'
+            ? ' · DONE (cq focus clean)'
+            : e?.status === 'done-with-rests'
+              ? ` · DONE WITH ${e.rests.length} REST(S) (cq focus evaluate)`
+              : '';
         st.per_step.forEach((t, i) =>
           console.log(
             cut(
-              `  T${i + 1} ${t.stage.padEnd(30)} ${t.waiting} waiting · ${t.readyOnes} ready · ${t.min_left} min left`,
+              `  T${i + 1} ${t.stage.padEnd(30)} ${t.waiting} waiting · ${t.readyOnes} ready · ${t.min_left} min left${mark(ev[i])}`,
               WIDTH,
             ),
           ),

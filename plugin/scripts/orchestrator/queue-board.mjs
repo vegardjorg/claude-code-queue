@@ -306,8 +306,20 @@ function state() {
   }
   const budget = queue.limits?.dailyBudget != null;
   const s = budget ? statistics() : null;
+  // The board shows the queue as if done focus stages were already taken out (queueLogic.focusWithoutDone; nothing
+  // is written, that is done by queue.mjs focus clean and receive/set/fill). The whole board is computed on the same
+  // focus, so the stage numbers on the cards match the focus line.
+  let focusEval = null;
+  let showQueue = queue;
+  try {
+    const fe = L.focusWithoutDone(queue);
+    focusEval = new Map(fe.evaluation.map((t) => [t.stage, t]));
+    if (fe.focus) showQueue = { ...queue, focus: fe.focus };
+  } catch (e) {
+    console.error(`the focus evaluation failed: ${e?.message ?? e}`);
+  }
   const data = {
-    ...T.board(queue, {
+    ...T.board(showQueue, {
       uncommitted: g.uncommitted,
       branches,
       branchPrefix: BRANCH_PREFIX,
@@ -330,6 +342,22 @@ function state() {
     title: TITLE,
     baseBranch: BASE,
   };
+  // Each stage gets status and rests; a stage with only rests shows them in the title (the focus line and the cards
+  // read the title), not as an empty stage.
+  if (focusEval && Array.isArray(data.focus?.stage))
+    data.focus.stage = data.focus.stage.map((t) => {
+      const e = focusEval.get(t.stage);
+      if (!e) return t;
+      const extra = { status: e.status, rests: e.rests, open: e.open };
+      if (e.status === 'done-with-rests') {
+        const types = new Map();
+        for (const r of e.rests) types.set(r.type, (types.get(r.type) ?? 0) + 1);
+        const text = [...types].map(([type, n]) => `${n} ${type}`).join(', ');
+        return { ...t, ...extra, title: `${t.title} (done, rests: ${text})` };
+      }
+      if (e.status === 'done') return { ...t, ...extra, title: `${t.title} (done)` };
+      return { ...t, ...extra };
+    });
   const version = crypto.createHash('sha1').update(JSON.stringify(data)).digest('hex').slice(0, 16);
   quick = {
     mtime,

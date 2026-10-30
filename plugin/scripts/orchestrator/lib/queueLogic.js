@@ -1101,6 +1101,10 @@ function setFocus(queue, input, now = new Date().toISOString()) {
     rest,
     drag_with_dependencies: input?.drag_with_dependencies !== false,
     ...(input?.set_by ? { set_by: String(input.set_by).slice(0, FOCUS_MAX_TEXT) } : {}),
+    // The history of stages taken out (cleanFocus) is carried over when the focus is set again.
+    ...(Array.isArray(queue.focus?.history) && queue.focus.history.length
+      ? { history: queue.focus.history }
+      : {}),
   };
   // The warnings are computed on a copy with the new focus, so the queue is not changed before everything is ready.
   const trial = { ...queue, focus };
@@ -1272,6 +1276,223 @@ function focusStatus(queue, { now = Date.now(), canStart = null, context = null 
         : `Nothing ready in focus${name}${out.inProgress ? ` (${out.inProgress} in progress)` : ''}.${answer}${rest}`;
   }
   return out;
+}
+
+// ---- Done focus stages are evaluated and taken out ------------------------------------------------------------------
+//
+// The focus should only show stages that still have tasks in them. A stage is evaluated (evaluateFocusStep) to:
+//   active           open tasks: waiting (also parked and paused ones), running, picked, review;
+//   done-with-rests  0 open, but rests: batch queue tasks, proposals, tasks that ONLY wait on owner questions, and
+//                    done tasks with QA still waiting on the owner. Each rest gets a suggestion, and the stage stays
+//                    until they are settled;
+//   done             0 open and 0 rests (also a stage that never had anything).
+// cleanFocus takes out the stages with status done, records it in focus.history and in the changelog (changes with
+// `focus: true`, undone with queue.mjs undo). The last stage is never taken out by itself: a focus without stages
+// means "no focus" (everything in the queue can start), and that choice belongs to the owner (focus set … or focus off).
+// Runs from queue.mjs focus clean, and automatically in receive, set <id> done|cancelled and fill. The board shows
+// the queue as if the cleaning was done (focusWithoutDone), so done stages are never shown.
+
+/** At most this many entries in focus.history (the oldest fall out). */
+const FOCUS_HISTORY_MAX = 50;
+/** The statuses that are open work in a stage (waiting is counted separately, see evaluateFocusStep). */
+const FOCUS_OPEN_ACTIVE = new Set(['running', 'picked', 'review']);
+
+/** The suggestion for what to do with a rest. */
+function restSuggestion(type, o, sp = []) {
+  if (type === 'batched')
+    return `pack the batch queue (cq batch pack ${o.id} … --id <new-id>, or cq batch pack --auto)`;
+  if (type === 'proposed')
+    return `ask the owner for a yes on the proposal (cq approve ${o.id}), otherwise cancel it`;
+  if (type === 'question') return `owner question ${sp.join(', ')} unlocks it`;
+  return 'QA with the owner (cq qa)';
+}
+
+/**
+ * Evaluates each focus stage. A task belongs to the stage it is dragged into, otherwise its own (the most specific,
+ * ownStep). Pure function; changes nothing.
+ * @returns {{ index: number, stage: string, title: string, open: number, ready: number, min_left: number,
+ *   rests: { type: 'batched'|'proposed'|'question'|'qa', id: string, title: string|null, sp?: string[],
+ *   suggestion: string }[], status: 'active'|'done-with-rests'|'done' }[]}
+ */
+function evaluateFocusStep(queue, now = Date.now()) {
+  const order = queue?.focus?.order ?? [];
+  const out = order.map((t, i) => ({
+    index: i,
+    stage: t,
+    title: stepTitle(t, queue),
+    open: 0,
+    ready: 0,
+    min_left: 0,
+    rests: [],
+    status: 'done',
+  }));
+  if (!out.length) return out;
+  const tasks = queue.tasks ?? [];
+  const k = rankingContext(queue, now);
+  return withIndex(tasks, () => {
+    for (const o of tasks) {
+      if (!o || isExternalRow(o) || o.status === 'cancelled') continue;
+      if (o.status === 'done' && o.qa_status !== 'waiting') continue;
+      const step = k.dragged.get(o.id)?.stage ?? ownStep(o, queue);
+      if (step == null) continue;
+      const row = out[step];
+      const rest = (type, sp) =>
+        row.rests.push({
+          type,
+          id: o.id,
+          title: o.title ?? null,
+          ...(sp ? { sp } : {}),
+          suggestion: restSuggestion(type, o, sp ?? []),
+        });
+      if (o.status === 'done') rest('qa');
+      else if (o.status === 'proposed') rest('proposed');
+      else if (o.status === 'waiting' && isBatched(o)) rest('batched');
+      else if (o.status === 'waiting') {
+        const h = blockerParts(o, tasks, queue.resolved);
+        if (h.length && h.every((x) => x.type === 'question'))
+          rest(
+            'question',
+            h.map((x) => x.sp),
+          );
+        else {
+          row.open += 1;
+          row.min_left += estimate(o);
+          if (!h.length) row.ready += 1;
+        }
+      } else if (FOCUS_OPEN_ACTIVE.has(o.status)) row.open += 1;
+    }
+    for (const row of out)
+      row.status = row.open ? 'active' : row.rests.length ? 'done-with-rests' : 'done';
+    return out;
+  });
+}
+
+/**
+ * The focus without the stages with status done (pure; does not change `queue`). The first stage is kept when all
+ * are done (see the top of the section). `now_count` (the plan view's "Now") is lowered by the stages taken out in
+ * front of the limit.
+ * @returns {{ evaluation: object[], focus: object|null, taken_out: object[], kept: object|null }} focus = null when
+ *   nothing is taken out
+ */
+function focusWithoutDone(queue, now = Date.now()) {
+  const evaluation = evaluateFocusStep(queue, now);
+  const done = evaluation.filter((t) => t.status === 'done');
+  let kept = null;
+  let out = done;
+  if (done.length && done.length === evaluation.length) {
+    kept = done[0];
+    out = done.slice(1);
+  }
+  if (!out.length) return { evaluation, focus: null, taken_out: [], kept };
+  const gone = new Set(out.map((t) => t.index));
+  const f = queue.focus;
+  const focus = { ...f, order: f.order.filter((_, i) => !gone.has(i)) };
+  if (f.now_count != null) {
+    const before = out.filter((t) => t.index < f.now_count).length;
+    focus.now_count = Math.min(Math.max(f.now_count - before, 1), focus.order.length);
+  }
+  return { evaluation, focus, taken_out: out, kept };
+}
+
+/**
+ * Takes out the done focus stages (queue.mjs focus clean, and automatically in receive, set and fill). Each removal
+ * is recorded in focus.history ({ at, by, action: 'taken out', stage, title }) and as one entry in the changelog, so
+ * queue.mjs undo works. `dry` computes without changing anything.
+ * @returns {{ evaluation: object[], taken_out: { stage: string, title: string }[], with_rests: object[],
+ *   kept: object|null, changes: object[], entry: object|null }}
+ */
+function cleanFocus(queue, { by = null, now = new Date().toISOString(), dry = false } = {}) {
+  const empty = {
+    evaluation: [],
+    taken_out: [],
+    with_rests: [],
+    kept: null,
+    changes: [],
+    entry: null,
+  };
+  if (!queue?.focus?.order?.length) return empty;
+  const r = focusWithoutDone(queue, Date.parse(now));
+  const answer = {
+    evaluation: r.evaluation,
+    taken_out: r.taken_out.map((t) => ({ stage: t.stage, title: t.title })),
+    with_rests: r.evaluation.filter((t) => t.status === 'done-with-rests'),
+    kept: r.kept,
+    changes: [],
+    entry: null,
+  };
+  if (!r.focus) return answer;
+  const who = String(by ?? '').trim() || 'unknown';
+  const history = [
+    ...(Array.isArray(queue.focus.history) ? queue.focus.history : []),
+    ...answer.taken_out.map((t) => ({ at: now, by: who, action: 'taken out', ...t })),
+  ].slice(-FOCUS_HISTORY_MAX);
+  const after = { ...r.focus, history };
+  for (const field of ['order', 'now_count', 'history'])
+    if (!equalValue(queue.focus[field], after[field]))
+      answer.changes.push({
+        focus: true,
+        field,
+        before: cloneJson(queue.focus[field] ?? null),
+        after: cloneJson(after[field] ?? null),
+      });
+  if (dry) return answer;
+  queue.focus = after;
+  answer.entry = logChange(queue, { by: who, action: 'focus clean', changes: answer.changes, now });
+  return answer;
+}
+
+/** One rest in plain text: "SEC-1 proposed → ask the owner for a yes …". */
+function restText(r) {
+  return `${r.id} ${r.type}${r.sp ? ` (${r.sp.join(', ')})` : ''} → ${r.suggestion}`;
+}
+
+/** The suggestion per rest type in the short line (the one per rest is in focus evaluate). */
+const REST_GROUP_SUGGESTION = {
+  batched: 'pack the batch queue (cq batch pack --auto)',
+  proposed: 'ask the owner for a yes (cq approve <id>) or cancel',
+  question: 'the answer unlocks it',
+  qa: 'QA with the owner (cq qa)',
+};
+
+/** The rests grouped per type, short: "proposed 2 (SEC-1, SEC-2) → ask …; qa 1 (SK-2) → QA with the owner". */
+function restGroupText(rests, maxId = 4) {
+  const groups = new Map();
+  for (const r of rests ?? []) {
+    if (!groups.has(r.type)) groups.set(r.type, []);
+    groups.get(r.type).push(r.sp ? `${r.id}: ${r.sp.join(', ')}` : r.id);
+  }
+  return [...groups]
+    .map(([type, ids]) => {
+      const show = ids.slice(0, maxId).join(', ');
+      const more = ids.length > maxId ? `, +${ids.length - maxId}` : '';
+      return `${type} ${ids.length} (${show}${more}) → ${REST_GROUP_SUGGESTION[type] ?? '?'}`;
+    })
+    .join('; ');
+}
+
+/**
+ * The lines after a cleaning (queue.mjs focus clean and the automatic one in receive, set and fill): one per stage
+ * taken out, one per stage that is done with rests (the rests and suggestions; the orchestrator puts them to the owner
+ * at the end of the round), and one when the last stage is done and stays.
+ */
+function focusCleanLines(r) {
+  const lines = [];
+  const tnr = new Map((r?.evaluation ?? []).map((t) => [t.stage, t.index + 1]));
+  for (const t of r?.taken_out ?? [])
+    lines.push(
+      `Focus stage T${tnr.get(t.stage) ?? '?'} ${t.title} (${t.stage}) done and taken out (undo: cq undo)`,
+    );
+  for (const t of r?.with_rests ?? [])
+    lines.push(
+      `Focus stage T${t.index + 1} ${t.title} done with rests (${t.rests.length}): ` +
+        `${restGroupText(t.rests)}. Details: cq focus evaluate`,
+    );
+  if (r?.kept)
+    lines.push(
+      `Focus stage T${r.kept.index + 1} ${r.kept.title} is done, and all stages are done: set a new focus ` +
+        '(cq focus set …) or cq focus off.',
+    );
+  return lines;
 }
 
 /**
@@ -5090,14 +5311,18 @@ function valueText(v, max = 60) {
   return s.length > max ? `${s.slice(0, max - 1)}…` : s;
 }
 
+/** What a change concerns: the task id, "project <pid>" or "focus" (cleanFocus). */
+function changeWho(e) {
+  if (e?.id != null) return e.id;
+  if (e?.pid != null) return `project ${e.pid}`;
+  return e?.focus ? 'focus' : '?';
+}
+
 /** The lines in the preview: "A-1 project: alpha → beta". */
 function diffLines(changes, { max = 200 } = {}) {
   const lines = (changes ?? [])
     .slice(0, max)
-    .map(
-      (e) =>
-        `${e.id ?? `project ${e.pid}`} ${e.field}: ${valueText(e.before)} → ${valueText(e.after)}`,
-    );
+    .map((e) => `${changeWho(e)} ${e.field}: ${valueText(e.before)} → ${valueText(e.after)}`);
   if ((changes ?? []).length > max) lines.push(`… and ${changes.length - max} more`);
   return lines;
 }
@@ -5147,14 +5372,20 @@ function undoEntry(queue, { by = null, now = new Date().toISOString(), show = fa
   const affected = new Set();
   const batchedAffected = new Set();
   const pids = new Set();
+  // Changes to the focus itself (focus clean) have `focus: true` and are rolled back on a copy.
+  const focus = cloneJson(queue.focus ?? {});
+  let focusAffected = false;
   for (const e of entry.changes ?? []) {
-    const who = e.id ?? `project ${e.pid}`;
+    const who = changeWho(e);
     if (e.id != null && UNDO_BLOCKED.has(e.field)) {
       error.push(`${who}: ${e.field} cannot be undone (use the command that owns the field)`);
       continue;
     }
     let measure;
-    if (e.id != null) {
+    if (e.id == null && e.pid == null && e.focus === true) {
+      measure = focus;
+      focusAffected = true;
+    } else if (e.id != null) {
       measure = perId.get(e.id);
       if (!measure) {
         error.push(`${e.id}: no longer exists in the queue`);
@@ -5208,6 +5439,10 @@ function undoEntry(queue, { by = null, now = new Date().toISOString(), show = fa
   if (show) return { error: [], entry, show: true };
   queue.tasks = (queue.tasks ?? []).map((o) => (affected.has(o.id) ? perId.get(o.id) : o));
   if (pids.size) queue.projects = register;
+  if (focusAffected) {
+    if (!Array.isArray(focus.history) || !focus.history.length) delete focus.history;
+    queue.focus = focus;
+  }
   entry.undone = { at: now, by: String(by ?? '').trim() || 'unknown' };
   return { error: [], entry };
 }
@@ -6383,6 +6618,12 @@ module.exports = {
   stepTitle,
   openQuestion,
   focusStatus,
+  // Done focus stages are evaluated and taken out
+  evaluateFocusStep,
+  focusWithoutDone,
+  cleanFocus,
+  focusCleanLines,
+  restText,
   setArea,
   areaOverview,
   park,

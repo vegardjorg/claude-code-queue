@@ -71,6 +71,7 @@ or `cancelled` (cancelled). Tasks added by an agent start as `proposed` and need
 | `cost` | Cost statistics per class (median, average) from the measured track sessions |
 | `projects`, `project <pid> …` | Projects: progress, pause, prefixes |
 | `focus set <steps>` | Focus period: only these steps are started |
+| `focus evaluate [--json]` / `focus clean [--dry]` | Each stage as active, done-with-rests (batch queue, proposals, owner questions, QA, with a suggestion per rest) or done / takes out the done stages (history and changelog, so `undo` works; the last stage stays). `receive`, `set <id> done\|cancelled` and `fill` clean automatically, and the board hides done stages |
 | `park <id>` / `continue <id>` | Park / unpark |
 | `pick <id> --by "<who>"` / `deliver <id>` | A person or a separate chat takes a task by hand / delivers it |
 | `diagnose` | Why the queue runs fewer tracks than it could (with suggested fixes) |

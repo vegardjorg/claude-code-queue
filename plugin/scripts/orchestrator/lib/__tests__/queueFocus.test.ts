@@ -31,6 +31,7 @@ type Task = {
   picked_by?: string;
   batched?: boolean;
   parked?: Parked;
+  qa_status?: string;
 };
 type Project = {
   title: string;
@@ -46,6 +47,8 @@ type Focus = {
   order: string[];
   rest?: string;
   drag_with_dependencies?: boolean;
+  now_count?: number;
+  history?: { at: string; by: string; action: string; stage: string; title?: string }[];
 };
 type Queue = {
   tasks: Task[];
@@ -55,6 +58,24 @@ type Queue = {
   areas?: Record<string, { title: string; description?: string }>;
   focus?: Focus;
   next_migr?: number;
+  changelog?: { nr: number; action: string; undone?: unknown }[];
+};
+type Rest = { type: string; id: string; sp?: string[]; suggestion: string };
+type Evaluation = {
+  index: number;
+  stage: string;
+  title: string;
+  open: number;
+  ready: number;
+  min_left: number;
+  rests: Rest[];
+  status: 'active' | 'done-with-rests' | 'done';
+};
+type CleanAnswer = {
+  taken_out: { stage: string; title: string }[];
+  with_rests: Evaluation[];
+  kept: Evaluation | null;
+  changes: unknown[];
 };
 type Selected = {
   id: string;
@@ -137,6 +158,10 @@ const L = require('../queueLogic') as {
     areas?: Record<string, unknown>,
   ) => { error: string[] };
   validate: (o: unknown, ex?: Task[], register?: Record<string, Project>) => string[];
+  evaluateFocusStep: (queue: Queue, now?: number) => Evaluation[];
+  cleanFocus: (queue: Queue, option?: { by?: string; now?: string; dry?: boolean }) => CleanAnswer;
+  focusCleanLines: (r: CleanAnswer) => string[];
+  undoEntry: (queue: Queue, option?: { by?: string }) => { error: string[] };
 };
 
 const NOW = Date.parse('2026-10-07T12:00:00Z');
@@ -563,6 +588,248 @@ describe('areas', () => {
       parked: 1,
     });
     expect(rows[1].projects).toEqual(['calendar', 'report']);
+  });
+});
+
+// ---- Done focus stages are evaluated and taken out -------------------------------------------------------------
+// A stage is `active` with open tasks, `done-with-rests` when only rests are left (batch queue, proposals, waiting on
+// owner questions, QA with the owner), and `done` when it is empty. Only `done` is taken out (focus clean and
+// automatically), with history and changelog, so queue.mjs undo works.
+const focusQueue = (order: string[], extra: Partial<Focus> = {}): Queue => {
+  const queue = reasonQueue();
+  queue.focus = { from: ISO, to: null, order, rest: 'wait', ...extra };
+  return queue;
+};
+const setField = (queue: Queue, id: string, field: Partial<Task>) => {
+  Object.assign(queue.tasks.find((x) => x.id === id)!, field);
+};
+
+describe('evaluateFocusStep', () => {
+  it('active: open tasks in the stage, with ready ones and minutes left', () => {
+    const queue = focusQueue(['project:warehouse']);
+    setField(queue, 'SB-1', { status: 'running' });
+    const [t] = L.evaluateFocusStep(queue, NOW);
+    expect(t.status).toBe('active');
+    expect(t.stage).toBe('project:warehouse');
+    expect(t.title).toBe('Warehouse');
+    expect(t.open).toBe(2);
+    expect(t.ready).toBe(1);
+    expect(t.min_left).toBeGreaterThan(0);
+    expect(t.rests).toEqual([]);
+  });
+
+  it('done: 0 open and 0 rests (also a stage that never had tasks)', () => {
+    const queue = focusQueue(['project:warehouse', 'project:report']);
+    setField(queue, 'SB-1', { status: 'done' });
+    setField(queue, 'SB-2', { status: 'cancelled' });
+    const ev = L.evaluateFocusStep(queue, NOW);
+    expect(ev.map((t) => t.status)).toEqual(['done', 'done']);
+    expect(ev[0].open).toBe(0);
+  });
+
+  describe('done-with-rests, each rest type', () => {
+    const doneSb = () => {
+      const queue = focusQueue(['project:warehouse']);
+      setField(queue, 'SB-1', { status: 'done' });
+      setField(queue, 'SB-2', { status: 'done' });
+      return queue;
+    };
+    const oneRest = (queue: Queue) => {
+      const [t] = L.evaluateFocusStep(queue, NOW);
+      expect(t.status).toBe('done-with-rests');
+      expect(t.open).toBe(0);
+      expect(t.rests).toHaveLength(1);
+      return t.rests[0];
+    };
+
+    it('the batch queue: pack it', () => {
+      const queue = doneSb();
+      queue.tasks.push(o('SB-3', { batched: true }));
+      const r = oneRest(queue);
+      expect(r).toMatchObject({ type: 'batched', id: 'SB-3' });
+      expect(r.suggestion).toMatch(/cq batch pack/);
+    });
+
+    it('proposed: the owner must say yes', () => {
+      const queue = doneSb();
+      queue.tasks.push(o('SB-3', { status: 'proposed' }));
+      const r = oneRest(queue);
+      expect(r).toMatchObject({ type: 'proposed', id: 'SB-3' });
+      expect(r.suggestion).toMatch(/yes on the proposal/);
+      expect(r.suggestion).toMatch(/cq approve SB-3/);
+    });
+
+    it('waiting only on an owner question: the question id unlocks it', () => {
+      const queue = doneSb();
+      queue.tasks.push(o('SB-3', { waiting_on: ['Q-SB-9'] }));
+      const r = oneRest(queue);
+      expect(r).toMatchObject({ type: 'question', id: 'SB-3', sp: ['Q-SB-9'] });
+      expect(r.suggestion).toMatch(/owner question Q-SB-9 unlocks it/);
+      // Answered question: the task is open and ready again.
+      queue.resolved = ['Q-SB-9'];
+      expect(L.evaluateFocusStep(queue, NOW)[0].status).toBe('active');
+    });
+
+    it('waiting on an owner question AND an open dependency: open, not a rest', () => {
+      const queue = doneSb();
+      queue.tasks.push(o('SB-3', { waiting_on: ['Q-SB-9'], depends_on: ['VP-1'] }));
+      expect(L.evaluateFocusStep(queue, NOW)[0].status).toBe('active');
+    });
+
+    it('QA entry: with the owner', () => {
+      const queue = doneSb();
+      setField(queue, 'SB-2', { qa_status: 'waiting' });
+      const r = oneRest(queue);
+      expect(r).toMatchObject({ type: 'qa', id: 'SB-2' });
+      expect(r.suggestion).toMatch(/QA with the owner/);
+    });
+  });
+});
+
+describe('cleanFocus', () => {
+  const threeStages = () => {
+    const queue = focusQueue(['project:warehouse', 'project:calendar', 'project:security'], {
+      now_count: 2,
+    });
+    setField(queue, 'SB-1', { status: 'done' });
+    setField(queue, 'SB-2', { status: 'done' });
+    setField(queue, 'S-1', { status: 'proposed' });
+    return queue;
+  };
+
+  it('takes out done stages, leaves done-with-rests, records history and changelog; undo rolls back', () => {
+    const queue = threeStages();
+    const r = L.cleanFocus(queue, { by: 'test', now: ISO });
+    expect(r.taken_out).toEqual([{ stage: 'project:warehouse', title: 'Warehouse' }]);
+    expect(r.with_rests.map((t) => t.stage)).toEqual(['project:security']);
+    expect(queue.focus!.order).toEqual(['project:calendar', 'project:security']);
+    expect(queue.focus!.now_count).toBe(1);
+    expect(queue.focus!.history).toEqual([
+      { at: ISO, by: 'test', action: 'taken out', stage: 'project:warehouse', title: 'Warehouse' },
+    ]);
+    expect(queue.changelog?.at(-1)?.action).toBe('focus clean');
+    const lines = L.focusCleanLines(r);
+    expect(lines.some((l) => /Focus stage .*Warehouse.* done and taken out/.test(l))).toBe(true);
+    expect(lines.some((l) => /Security.*rests.*S-1/.test(l))).toBe(true);
+
+    expect(L.undoEntry(queue, { by: 'test' }).error).toEqual([]);
+    expect(queue.focus!.order).toEqual(['project:warehouse', 'project:calendar', 'project:security']);
+    expect(queue.focus!.now_count).toBe(2);
+    expect(queue.focus!.history ?? []).toEqual([]);
+  });
+
+  it('dry: changes nothing', () => {
+    const queue = threeStages();
+    const before = clone(queue);
+    const r = L.cleanFocus(queue, { by: 'test', now: ISO, dry: true });
+    expect(r.taken_out).toHaveLength(1);
+    expect(queue).toEqual(before);
+  });
+
+  it('nothing to take out: no change and no entry', () => {
+    const queue = focusQueue(['project:warehouse']);
+    const r = L.cleanFocus(queue, { by: 'test', now: ISO });
+    expect(r.taken_out).toEqual([]);
+    expect(queue.changelog).toBeUndefined();
+  });
+
+  it('all stages done: the first one stays (the focus is not emptied by itself)', () => {
+    const queue = focusQueue(['project:warehouse', 'project:report']);
+    setField(queue, 'SB-1', { status: 'done' });
+    setField(queue, 'SB-2', { status: 'done' });
+    const r = L.cleanFocus(queue, { by: 'test', now: ISO });
+    expect(queue.focus!.order).toEqual(['project:warehouse']);
+    expect(r.kept?.stage).toBe('project:warehouse');
+    expect(L.focusCleanLines(r).join(' ')).toMatch(/focus set|focus off/);
+  });
+
+  it('without focus: nothing', () => {
+    const queue = reasonQueue();
+    expect(L.cleanFocus(queue, { by: 'test', now: ISO }).taken_out).toEqual([]);
+    expect(queue.focus).toBeUndefined();
+  });
+
+  it('setFocus carries the history over', () => {
+    const queue = threeStages();
+    L.cleanFocus(queue, { by: 'test', now: ISO });
+    const s = L.setFocus(queue, { order: ['project:tool'] }, ISO);
+    expect(s.error).toEqual([]);
+    expect(queue.focus!.history).toHaveLength(1);
+  });
+});
+
+describe('queue.mjs: focus evaluate, focus clean and automatic removal (against a copy)', () => {
+  const QUEUE_MJS = join(__dirname, '..', '..', 'queue.mjs');
+  let folder: string;
+  function run(args: string[]): { code: number; out: string; error: string } {
+    try {
+      const out = execFileSync(process.execPath, [QUEUE_MJS, ...args], {
+        env: {
+          ...process.env,
+          QUEUE_FOLDER: folder,
+          QUEUE_GIT: folder,
+          QUEUE_TIME_LOG: join(folder, 'times.jsonl'),
+        },
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      return { code: 0, out, error: '' };
+    } catch (e) {
+      const x = e as { status: number; stdout: string; stderr: string };
+      return { code: x.status, out: x.stdout ?? '', error: x.stderr ?? '' };
+    }
+  }
+  const readQueue = (): Queue => JSON.parse(readFileSync(join(folder, 'queue.json'), 'utf8')) as Queue;
+  const writeQueue = (queue: Queue) =>
+    writeFileSync(join(folder, 'queue.json'), JSON.stringify(queue, null, 2));
+
+  beforeEach(() => {
+    folder = mkdtempSync(join(tmpdir(), 'queue-focus-clean-'));
+    const queue = focusQueue(['project:warehouse', 'project:calendar', 'project:security']);
+    setField(queue, 'SB-1', { status: 'done' });
+    setField(queue, 'S-1', { status: 'proposed' });
+    writeQueue({ ...queue, next_migr: 1000 });
+  });
+  afterEach(() => rmSync(folder, { recursive: true, force: true }));
+
+  it('focus evaluate: plain text and --json', () => {
+    const t = run(['focus', 'evaluate']);
+    expect(t.code).toBe(0);
+    expect(t.out).toMatch(/T1 .*active/);
+    expect(t.out).toMatch(/T3 .*done-with-rests/);
+    expect(t.out).toMatch(/S-1 .*proposed/);
+    const j = JSON.parse(run(['focus', 'evaluate', '--json']).out) as { stages: Evaluation[] };
+    expect(j.stages.map((x) => x.status)).toEqual(['active', 'active', 'done-with-rests']);
+  });
+
+  it('set <id> done takes out the stage that becomes done; undo puts it back', () => {
+    const s = run(['set', 'SB-2', 'done', '--without-cost']);
+    expect(s.code).toBe(0);
+    expect(s.out).toMatch(/Focus stage T1 Warehouse .*done and taken out/);
+    expect(s.out).toMatch(/Security.*done with rests/);
+    expect(readQueue().focus!.order).toEqual(['project:calendar', 'project:security']);
+    expect(readQueue().focus!.history?.[0]?.by).toMatch(/set/);
+    expect(run(['undo']).code).toBe(0);
+    expect(readQueue().focus!.order).toEqual([
+      'project:warehouse',
+      'project:calendar',
+      'project:security',
+    ]);
+  });
+
+  it('focus clean [--dry]', () => {
+    const queue = readQueue();
+    setField(queue, 'SB-2', { status: 'done' });
+    writeQueue(queue);
+    const t = run(['focus', 'clean', '--dry']);
+    expect(t.code).toBe(0);
+    expect(t.out).toMatch(/Dry run/);
+    expect(readQueue().focus!.order).toHaveLength(3);
+    const r = run(['focus', 'clean', '--by', 'owner']);
+    expect(r.out).toMatch(/done and taken out/);
+    expect(readQueue().focus!.order).toEqual(['project:calendar', 'project:security']);
+    expect(readQueue().focus!.history?.[0]?.by).toBe('owner');
+    expect(run(['focus', 'clean']).out).toMatch(/No done focus stages/);
   });
 });
 
