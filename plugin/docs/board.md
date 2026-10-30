@@ -51,6 +51,15 @@ per run ("No runs yet" until it has run). The switch is saved through `cq helper
 to `/api/helper` behind the key and the Origin check, like every other write; it never writes files itself). The
 arrow keys move between the two tabs, and the board remembers the last one.
 
+A [custom helper](orchestration.md#custom-helper-agents) has a **custom** badge, its scan level (red, yellow or
+green) and its review state: **Approved** (with who approved it and when, in local time), **Needs review** or
+**Changed since approval** (the file differs from the approved one, so it is turned off). Its switch is disabled,
+with the reason read out to a screen reader, until it is approved for the file as it is now. **Add a custom helper**
+takes the path to an agent file (`.md`) and an optional name, and posts to `/api/helper-add`, which runs
+`cq helpers add`: the file is copied, scanned and registered, and stays off. The board has no way to approve a
+helper: approval is `cq helpers approve`, after Claude has read the file and the owner has said yes (the `add-helper`
+skill), and `/api/helper` refuses to switch on a helper that is not approved.
+
 ## Update banner
 
 When a newer cq is out, a banner below the top says "cq X is out (you have Y)", links to the CHANGELOG and lists the

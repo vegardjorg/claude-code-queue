@@ -6,6 +6,17 @@ and `package.json`.
 ## Unreleased
 
 ### Added
+- **Custom helper agents**: `cq helpers add <file.md> [--name] [--classes/--labels/--paths]` (or **Add a custom
+  helper** in the board's Helper agents tab) copies an agent file to `.claude/agents/<name>.md` and registers it in
+  `queue.json` as `source: custom` with its sha256, off. Nothing in the file is run, and a builtin name is refused.
+  `cq helpers scan` (`lib/helperScan.js`) gives red, yellow or green with line numbers for the frontmatter tools and
+  keys, calls out of the machine, prompt injection and misuse, hidden content and missing guards. The new `add-helper`
+  skill has Claude read the whole file and ask the owner; `cq helpers approve <name> --by .. --sha256 ..` binds the
+  approval to the hash (a red scan needs `--force`). A custom helper can only be switched on, and is only picked by
+  `reviewersForTask`, while its file matches the approved hash; a changed file is turned off and shown as "Changed
+  since approval". The board shows the custom badge, the scan, the review state and who approved it, and can never
+  approve. `cq helpers when` changes the conditions and `cq helpers remove [--delete-file]` drops one. The read guard
+  and the push guard cover custom helpers, and `merge-track` protects their agent files.
 - **Helper agents**: optional reviewers on top of the fixed ones per class, switched with `cq helpers on|off <agent>`
   or the new **Helper agents** tab in the board's settings (saved in `queue.json`, which wins over the new `helpers`
   block in `queue.config.json`). Each runs when it is on and one condition hits: class, label, changed paths, most

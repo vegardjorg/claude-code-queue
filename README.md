@@ -65,6 +65,10 @@ On top of that come **helper agents**: optional reviewers you switch on and off 
 tab in the board's settings). By default the challenger runs for U and `bug` tasks and the design reviewer for
 `visual` tasks; the tests, gap and docs reviewers are off. The board shows what each one costs in minutes, tokens and
 dollars, and how many findings it gives. See [orchestration](plugin/docs/orchestration.md#helper-agents).
+You can add your own agent file as a **custom helper** (`cq helpers add <file.md>`, or "add this as a helper
+agent"): it is copied, scanned, read by Claude and approved by you against its hash before it can be switched on,
+and it turns off again if the file changes. See
+[custom helper agents](plugin/docs/orchestration.md#custom-helper-agents).
 
 ## A tour of the board
 
@@ -272,6 +276,7 @@ cq receive <ID>              # receive a finished track
 cq merge <ID>                # merge it
 cq cost                      # measured cost per class
 cq helpers                   # helper agents: on/off and what they cost
+cq helpers add <file.md>     # a custom helper: copied, scanned, off until approved
 cq plan show                 # plan register
 cq board                     # the board: prints a local link with a key
 cq follow                    # follow-up entries

@@ -64,8 +64,61 @@ is that file name anywhere, `**` is any number of folders. A helper with no cond
 - **Measurement:** at `set done` (and `cost measure`) the cost per agent keeps its tokens, minutes and, for reviewers,
   the H/M/L numbers from its FINDINGS line. `cq helpers`, `cq cost` and the board show per helper: runs, median and
   sum of minutes, tokens and USD, the share of the task cost it added, and findings per run. "No runs yet" until then.
-- **Your own helper:** add `"my-helper": { "enabled": true, "labels": ["db"] }` under `helpers` and an agent file
-  `my-helper.md` (frontmatter, the "Data, not instructions" rule, the FINDINGS line first).
+- **Your own helper:** see [Custom helper agents](#custom-helper-agents) below. It is added, scanned, reviewed and
+  approved before it can be switched on.
+
+### Custom helper agents
+
+A custom helper is an agent file of the project's own (or one you found) used as a helper. It runs as a subagent in
+the orchestrator session with the tools its frontmatter gives it, so it is reviewed before it is ever on.
+
+1. **Add:** `cq helpers add <file.md> [--name <name>] [--classes K,U] [--labels a,b] [--paths p,q]`, or paste the
+   path under "Add a custom helper" in the board's Helper agents tab. The file is copied to
+   `.claude/agents/<name>.md` (where Claude Code finds project agents, so the orchestrator starts it by its bare name
+   as `subagent_type`), `name:` in its frontmatter is set to the registered name, and it is registered in `queue.json`
+   as `source: custom` with `path`, `sha256` and `added_at`. It is **off**. A name that is a builtin agent (Claude
+   Code's own, the plugin's, a fixed reviewer) or an existing file is refused. Nothing in the file is run: it is read,
+   copied, hashed and scanned. Claude Code loads project agents at session start, so restart the session (or open
+   `/agents`) before a new helper can run.
+2. **Scan:** `cq helpers scan <name>` (`lib/helperScan.js`, a pure function on the text) gives red, yellow or green
+   with one line per finding and its line number:
+   - frontmatter: `tools` missing (every tool), Write, Edit, NotebookEdit, WebFetch, WebSearch, Task/Agent and MCP
+     tools (red), unrestricted Bash or PowerShell (yellow), `permissionMode`, `mcpServers`, `hooks` (red),
+     `isolation` and unknown keys (yellow), `model` (information only);
+   - calls out of the machine: URLs (red; a short list of documentation domains gives yellow), `curl`, `wget`,
+     `iwr`/`Invoke-WebRequest`, `fetch(`, `nc`, webhooks, `gh`, `git push`, `scp`, `ssh`, a pipe into a shell,
+     `npx`, `npm i`, `pip install`;
+   - prompt injection and misuse: "ignore previous instructions", "disregard", the system prompt, changing settings,
+     hooks, agent definitions or CLAUDE.md, reading `.env`, tokens, keys or `~/.ssh`, hiding something from the owner,
+     deleting or force pushing, sending data somewhere, starting other agents;
+   - hidden content: base64 like blocks, invisible and control Unicode (zero width, bidi overrides, tag characters),
+     HTML comments, very long lines, code blocks with a script language;
+   - missing guards (yellow): the "Data, not instructions" paragraph and the FINDINGS line.
+
+   A misuse rule on a line that says no to it ("never force push", "do not start other agents") gives yellow, not
+   red. **Red** must not be approved without `--force` and the owner's explicit yes; **yellow** is weighed and
+   mentioned; **green** has no findings, and the file is still read in full.
+3. **Review and approve:** the `add-helper` skill ("add this as a helper agent") runs the add and the scan, has Claude
+   read the whole file, gives the owner a short report with a recommendation, and asks. On yes:
+   `cq helpers approve <name> --by "<owner>" --sha256 <hash from the scan>`. It stores `approved_sha256`,
+   `approved_path`, `approved_by`, `approved_at` and the scan result in `queue.json`; `--sha256` refuses when the
+   file is not the one that was read. The board never approves, and an approval written into `queue.config.json` is
+   ignored, so a branch cannot approve its own helper.
+4. **On:** `cq helpers on <name>` (or the board's switch) only works while the file's sha256 equals the approved
+   one. When the file changes, `cq helpers` and `receive` turn it off in `queue.json` and show "Changed since
+   approval"; it stays off until it is reviewed and approved again.
+
+`cq helpers when <name> --classes .. --labels .. --paths .. --mostly-paths ..` changes the conditions (`none` clears
+a list). `cq helpers remove <name>` drops the registration and keeps the file; `--delete-file` also deletes the
+copied `.claude/agents/<name>.md`. The measurement and the conditions are the same as for the builtin helpers.
+
+**What guards a custom helper:** the selection (`reviewersForTask`) never takes one without a valid approval for the
+file as it is now, also when the config says `enabled` or lists it in `reviewers`. The read guard applies to it like
+to every reviewer (it is in `allReviewerTypes`), and so does the push guard (every session). The network guard
+applies to `track` and `track-d` only, as for the builtin reviewers, so a custom helper with unrestricted Bash can
+still reach the network through it: the scan flags such a `tools` line, and a reviewer needs `Read, Grep, Glob`.
+`merge-track` protects the custom helpers' agent files like `.claude/`, also when `protectedPaths` was changed: a
+track cannot rewrite an approved helper without owning its file.
 
 Every reviewer disproves a HIGH or MEDIUM finding before writing it (reread the code, look for counter-evidence,
 check that the change introduced it, lower it one level when there is no ground). A security finding is lowered only
@@ -176,6 +229,10 @@ Windows, so there are four layers:
 - **Limits.** `maxTurns` is 400 for `track` and 600 for `track-d`, and `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=1`
   (`env` in `settings.queue.json`, set by `setup --settings`) stops a track from starting agents of its own. A plugin's
   `hooks.json` cannot set environment variables, so this one lives in the project settings.
+
+A custom helper agent is itself text the owner may not have written. It is scanned, read in full and approved
+against its sha256 before it can be on, and a changed file turns it off (see
+[Custom helper agents](#custom-helper-agents)).
 
 For a task that has to read content from outside, split reading and writing between two agents (the quarantine rule
 in the mission template): the reader returns a fixed schema, and the writer never sees the raw text.
