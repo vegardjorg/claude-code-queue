@@ -25,7 +25,7 @@ const MIN_N = 3;
 const INTERVAL_MS = 10 * 60_000;
 const SINCE_MS = 7 * 86_400_000;
 const CLASSES = ['K', 'D', 'D+', 'U'];
-/** The agent types that work on a task: track, track-d and the reviewers in config().reviewers (queueLogic). */
+/** The agent types that work on a task: track, track-d, the fixed reviewers and the helper agents (lib/queueHelpers.js). */
 const taskAgentTypes = () => require('./queueLogic.js').TASK_AGENT_TYPES;
 
 const round2 = (x) => Math.round(x * 100) / 100;

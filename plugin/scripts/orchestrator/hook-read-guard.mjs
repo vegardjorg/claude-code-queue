@@ -7,7 +7,7 @@
 // whole instead of in excerpts. Read hygiene is in the mission, but a hook is deterministic.
 //
 // How it works (the rules live in lib/trackGuard.js, assessReading; the project extends them with config().readGuard):
-//   - Only for the agent types in the read guard (track, track-d, reviewer, reviewer-security + readGuard.agentTypes). The
+//   - Only for the agent types in the read guard (track, track-d, the reviewers and helper agents + readGuard.agentTypes). The
 //     field agent_type is missing in the main session: no effect there.
 //   - Denies Read without offset/limit of files that are loaded automatically (CLAUDE.md, MEMORY.md + readGuard.autoLoaded).
 //   - Denies Read without limit of a file in readGuard.largeFiles (and migrations.folder/*.sql) over 300 lines (override

@@ -107,7 +107,8 @@
 //        (the track has delivered: status review, and the review package as PLAIN FILES in <folder>/rev-<id>/: 00-package.md
 //         (resultLine, changed DB objects if any, diff statistics), diff.patch, files/ (changed files in full version
 //         from the branch), trackReply.md (the track's last answer from the transcript), trackReport.md and handover.md (from
-//         <folder>/<id>/), and reviewer-<type>.md (the short prompt) per reviewer by class (config().reviewers).
+//         <folder>/<id>/), mission.md (the prompt file), and reviewer-<type>.md (the short prompt) per reviewer: the fixed
+//         ones by class (config().reviewers) and the helper agents that are on and hit (lib/queueHelpers.js).
 //         Saves the RESULT line. Does NOT merge; prints the merge command. Adoption: the report is the newest in
 //         <folder>/<id>/ or a fix round <folder>/<id>-r<N>/, in the orchestrator's and the task's scratchpad; saves
 //         report_received.)
@@ -130,6 +131,10 @@
 //   node scripts/orchestrator/queue.mjs cost [--since 7d|24h|2026-10-01] [--max 10]   (statistics per class: n, median
 //                                                                  and sum USD, findings H/M/L; the last tasks)
 //   node scripts/orchestrator/queue.mjs cost measure <id> [...] [--findings "..."]   (measures and saves again, e.g. older finished ones)
+//   node scripts/orchestrator/queue.mjs helpers [--json]            (the helper agents: on/off, when they run, and the
+//                                                                  measurement: runs, minutes, tokens, USD, share, findings)
+//   node scripts/orchestrator/queue.mjs helpers on|off <agent>      (switches a helper in queue.json; wins over
+//                                                                  helpers.<agent>.enabled in queue.config.json)
 //   The transcripts: ~/.claude/projects/<repo-slug>/<session>/subagents/agent-<id>.jsonl (QUEUE_TRANSCRIPTS overrides).
 //
 // Fewer orchestrator turns: `fill` and `receive` end with "Start these in the SAME turn:" and one line per agent
@@ -433,6 +438,7 @@ const P = require('./lib/queuePlan.js');
 const S = require('./lib/queueStatistics.js');
 const CH = require('./lib/queueCapacity.js');
 const KK = require('./lib/queueConfig.js');
+const HELP = require('./lib/queueHelpers.js');
 const HO = require('./lib/queueHandover.js');
 const F = require('./lib/queueFollow.js');
 
@@ -2033,6 +2039,9 @@ function measureCost(agents) {
           tokens: t.tokens,
           model: t.model,
           turns: t.modelTurns,
+          minutes: t.duration_s != null ? t.duration_s / 60 : null,
+          // The reviewer's FINDINGS numbers per agent (the helper measurement, queueHelpers.helperStatistics).
+          findings: L.REVIEWER_TYPES.includes(a.type) ? L.parseFindings(L.lastAnswer(a.text)) : null,
           source: 'transcript',
         };
       }
@@ -2042,6 +2051,7 @@ function measureCost(agents) {
         tokens: a.row.tokens,
         model: a.row.model,
         turns: a.row.modelTurns,
+        minutes: a.row.duration_s != null ? a.row.duration_s / 60 : null,
         source: 'timeLog',
       };
     }),
@@ -2928,6 +2938,29 @@ if (command === 'init') {
   if (b.active) console.log(b.message);
   const night = L.nightGuard(queue);
   if (night.active) console.log(night.message);
+} else if (command === 'helpers') {
+  // ---- The helper agents (lib/queueHelpers.js): list, or switch one on or off. The switch is saved in queue.json
+  // (helpers.<agent>.enabled) under the lock, like `limit`, and wins over queue.config.json. The board's "Helper agents"
+  // tab calls this command (it never writes the files itself). ----
+  const [, mode, name] = a;
+  if (mode && mode !== '--json') {
+    const p = HELP.parseSwitch(mode, name, CONFIG);
+    if (p.error) die(p.error);
+    edit((queue) => {
+      queue.helpers = { ...(queue.helpers ?? {}), [p.name]: { enabled: p.enabled } };
+      return p;
+    });
+    console.log(`${p.name}: ${p.enabled ? 'on' : 'off'}`);
+  }
+  const rows = HELP.helperRows(CONFIG, read());
+  if (a.includes('--json')) console.log(JSON.stringify(rows, null, 2));
+  else if (!rows.length) console.log('No helper agents in the setup (helpers in queue.config.json).');
+  else
+    for (const h of rows) {
+      console.log(`${h.enabled ? 'on ' : 'off'} ${h.name}: ${h.text}`);
+      console.log(`    ${h.when}${h.fixedIn.length ? ` Also fixed for class ${h.fixedIn.join(', ')} (reviewers).` : ''}`);
+      console.log(`    ${h.measurement}`);
+    }
 } else if (command === 'compact') {
   // ---- Compaction mode for the orchestrator session ----
   // The same lock and validation as `limit autocompact`. The Claude Code side (whether the session compacts by itself) is the
@@ -3215,6 +3248,23 @@ if (command === 'init') {
     evidence: evidenceRead?.evidence ?? null,
     evidenceError: evidenceRead?.error ?? null,
   });
+  // The mission (prompt-<id>.md) goes into the package too: reviewer-gap compares the delivery with it, and the helper
+  // condition minMissionItems counts its numbered points.
+  const missionFile = path.join(scratch, `prompt-${id}.md`);
+  let missionText = null;
+  if (fs.existsSync(missionFile)) {
+    missionText = fs.readFileSync(missionFile, 'utf8');
+    fs.writeFileSync(path.join(folder, 'mission.md'), missionText);
+    files.mission = true;
+  }
+  // THE reviewers for the task (lib/queueHelpers.js): the fixed ones for the class and the helpers that are on and hit
+  // (class, label, changed paths, plan, mission points).
+  const reviewerList = L.reviewersForTask(o0, {
+    queue: read(),
+    changedPaths: [...copy, ...skipped.map((h) => h.path)],
+    missionText,
+  });
+  const reviewers = reviewerList.map((x) => x.type);
   const dbObjects = L.dbObjectsFromDiff(diff, { folder: MIGR.folder });
   fs.writeFileSync(
     path.join(folder, '00-package.md'),
@@ -3229,9 +3279,9 @@ if (command === 'init') {
       files,
       base: BASE,
       migrFolder: MIGR.folder,
+      reviewers: reviewerList,
     }),
   );
-  const reviewers = L.reviewersFor(o0.class);
   const prompts = reviewers.map((type) => {
     const file = path.join(folder, `reviewer-${type}.md`);
     fs.writeFileSync(file, L.reviewerPrompt({ o: o0, type, folder, base: BASE }) + '\n');
@@ -3269,13 +3319,18 @@ if (command === 'init') {
   if (evidenceRead?.evidence) console.log(`QA evidence: ${L.evidenceText(evidenceRead.evidence)}`);
   if (evidenceWarn) console.log(evidenceWarn);
   focusCleanOut();
-  // The reviewers (D+: two) are started in the SAME turn.
+  // The reviewers (D+: two, plus the helpers that hit) are started in the SAME turn.
+  for (const x of reviewerList.filter((y) => !y.fixed))
+    console.log(`Helper agent ${x.type}: ${x.reasons.join(', ')} (cq helpers off ${x.type} turns it off).`);
   if (prompts.length)
     for (const l of L.concurrentBlock(
       prompts.map((p) => ({ subagent_type: p.type, prompt: p.file })),
     ))
       console.log(l);
-  else console.log(`Class ${o0.class}: no review (config().reviewers has none for the class).`);
+  else
+    console.log(
+      `Class ${o0.class}: no review (config().reviewers has none for the class, and no helper agent is on and hits).`,
+    );
   console.log(
     `Merge (after an approved review, from Bash): ${CQ} merge ${id}  ` +
       `(by hand: merge-track.mjs ${branch} --wave-base ${o0.head_start ?? '<HEAD at start>'})`,
@@ -3678,6 +3733,14 @@ if (command === 'init') {
           `  ${k.class.padEnd(2)} n=${String(k.n).padEnd(3)} median $${k.median_usd}  sum $${k.usd}` +
             (k.reviewed ? `  findings H=${k.H} M=${k.M} L=${k.L} (${k.reviewed} reviewed)` : ''),
         );
+      // What the helper agents added (lib/queueHelpers.js): the same numbers as `cq helpers`.
+      const helpers = HELP.helperRows(CONFIG, read());
+      if (helpers.length) {
+        const st = HELP.helperStatistics(read(), helpers.map((h) => h.name), { since: sinceTime(val('--since')) });
+        console.log('Helper agents:');
+        for (const h of helpers)
+          console.log(cut(`  ${h.name.padEnd(20)} ${HELP.measurementText(st[h.name])}`, WIDTH));
+      }
       const n = Number(val('--max') ?? 10);
       console.log(`Last ${Math.min(n, s.rows.length)}:`);
       for (const x of s.rows.slice(0, n))

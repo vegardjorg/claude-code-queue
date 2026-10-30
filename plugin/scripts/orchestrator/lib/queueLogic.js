@@ -4833,30 +4833,25 @@ function agentTypeFor(cls) {
   return cls === 'D' || cls === 'D+' ? 'track-d' : 'track';
 }
 
-/** Default reviewers per class (subagent_type); the installation ships .claude/agents/reviewer*.md. */
-const DEFAULT_REVIEWERS = { D: ['reviewer'], 'D+': ['reviewer', 'reviewer-security'] };
+// The reviewers (fixed per class and the helper agents) are worked out in ONE place: lib/queueHelpers.js.
+const HELP = require('./queueHelpers.js');
+
+/** The FIXED reviewers by class (config().reviewers): by default K and U none, D `reviewer`, D+ also `reviewer-security`. */
+function reviewersFor(cls) {
+  return HELP.fixedFor(cfg(), cls);
+}
 
 /**
- * The reviewer setup: config().reviewers (class → list of subagent_type), otherwise the default. A class that is not
- * in the setup gets no review (K and U by default).
+ * All the reviewers for a task: the fixed ones for its class and the helpers that are on and hit (queueHelpers.js).
+ * @returns {{ type: string, fixed: boolean, reasons: string[] }[]}
  */
-function reviewerSetup() {
-  const r = cfg().reviewers;
-  return r && typeof r === 'object' && !Array.isArray(r) ? r : DEFAULT_REVIEWERS;
+function reviewersForTask(o, { queue = null, changedPaths = [], missionText = null } = {}) {
+  return HELP.reviewersForTask(o, { config: cfg(), queue, changedPaths, missionText });
 }
 
-/** The reviewers by class: by default K and U none, D `reviewer`, D+ also `reviewer-security`. */
-function reviewersFor(cls) {
-  const list = reviewerSetup()[cls];
-  return Array.isArray(list) ? list.map(String).filter(Boolean) : [];
-}
-
-/** All reviewer types in the setup (unique, in order). */
+/** All reviewer types (fixed and helpers, unique, in order): the agents that count toward a task. */
 function reviewerTypes() {
-  const out = [];
-  for (const list of Object.values(reviewerSetup()))
-    for (const t of Array.isArray(list) ? list : []) if (!out.includes(String(t))) out.push(String(t));
-  return out;
+  return HELP.allReviewerTypes(cfg());
 }
 
 /**
@@ -5195,7 +5190,8 @@ const round2 = (x) => Math.round(x * 100) / 100;
 /**
  * The sum of the usage of the agents that belonged to the task. Each agent has `tokens` and `model` from the transcript
  * (timeCost.analyzeTranscript) or from the last row in the time log; the price is timeCost.costUsd (API-equivalent USD).
- * @param {{ agent: string, type: string, tokens: object, model?: string|null, turns?: number, source?: string }[]} agents
+ * @param {{ agent: string, type: string, tokens: object, model?: string|null, turns?: number, source?: string,
+ *   minutes?: number|null, findings?: { H: number, M: number, L: number }|null }[]} agents
  * @returns {{ usd: number, tokens: { input: number, output: number, cache_read: number, cache_written: number,
  *   sum: number }, turns: number, agents: { agent: string, type: string, usd: number, source: string }[],
  *   measured: string }}
@@ -5214,7 +5210,16 @@ function sumCost(agents, now = new Date().toISOString()) {
       tokens[k] += n;
       tokens.sum += n;
     }
-    list.push({ agent: a.agent, type: a.type, usd: round2(u), source: a.source ?? 'timeLog' });
+    // Per agent also the tokens, the minutes and (for reviewers) the FINDINGS numbers: the helper measurement
+    // (queueHelpers.helperStatistics) reads them from cost.agents. Fields without a value are left out.
+    const entry = { agent: a.agent, type: a.type, usd: round2(u), source: a.source ?? 'timeLog' };
+    entry.tokens = ['input', 'output', 'cache_read', 'cache_written'].reduce(
+      (s, k) => s + (Number(a.tokens?.[k] ?? 0) || 0),
+      0,
+    );
+    if (Number.isFinite(Number(a.minutes)) && a.minutes != null) entry.minutes = Math.round(Number(a.minutes) * 10) / 10;
+    if (a.findings) entry.findings = { H: a.findings.H, M: a.findings.M, L: a.findings.L };
+    list.push(entry);
   }
   return { usd: round2(usd), tokens, turns, agents: list, measured: now };
 }
@@ -5348,6 +5353,7 @@ function reviewPackageIndex({
   files = {},
   base = baseBranch(),
   migrFolder = cfg().migrations?.folder ?? null,
+  reviewers = null,
 }) {
   const lines = [
     `# Review package ${o.id} (${o.class}): ${o.title ?? ''}`,
@@ -5366,12 +5372,21 @@ function reviewPackageIndex({
   if (files.report)
     lines.push("- `trackReport.md`: the track's `report.md` (self-review, test run, connections).");
   if (files.handover) lines.push('- `handover.md`: the handover from a PARTIAL track.');
+  if (files.mission) lines.push("- `mission.md`: the track's mission (its prompt file).");
   if (skipped.length)
     lines.push(`- Not included: ${skipped.map((h) => `\`${h.path}\` (${h.reason})`).join(', ')}.`);
   if (migrFolder) {
     lines.push('', '## Changed DB objects', '');
     if (dbObjects.length) for (const d of dbObjects) lines.push(`- ${d}`);
     else lines.push(`- (none in ${migrFolder})`);
+  }
+  // The reviewers for this task (queueHelpers.reviewersForTask): the fixed ones for the class (the floor), then each
+  // helper agent with one line on why it was chosen.
+  if (Array.isArray(reviewers)) {
+    lines.push('', '## Reviewers', '');
+    if (!reviewers.length) lines.push('- (none for this task)');
+    for (const x of reviewers)
+      lines.push(`- \`${x.type}\`: ${x.fixed ? 'fixed for the class' : 'helper agent'}. why: ${x.reasons.join(', ')}`);
   }
   lines.push('', '## Diff statistics', '', '```', String(stat ?? '').trimEnd(), '```', '');
   return lines.join('\n');
@@ -6893,6 +6908,7 @@ module.exports = {
   // The orchestrator's routine as script (show summary, fill, receive) and cost per task
   agentTypeFor,
   reviewersFor,
+  reviewersForTask,
   trackMessage,
   stateLine,
   summaryView,
@@ -6902,7 +6918,7 @@ module.exports = {
   lastAnswer,
   firstUserMessage,
   mentionsTask,
-  DEFAULT_REVIEWERS,
+  DEFAULT_REVIEWERS: HELP.DEFAULT_REVIEWERS,
   reviewerTypes,
   get REVIEWER_TYPES() {
     return reviewerTypes();

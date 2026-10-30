@@ -71,8 +71,20 @@ const STANDARD = Object.freeze({
   indexFile: 'docs/INDEX.md',
   // The priority rules in the plan register. null = the generic default rules (`queue.mjs plan rules`).
   priorityRules: null,
-  // The reviewer agents run per class after `queue.mjs receive`.
-  reviewers: { K: [], U: ['reviewer-challenger'], D: ['reviewer'], 'D+': ['reviewer', 'reviewer-security'] },
+  // The fixed reviewer agents run per class after `queue.mjs receive` (always, not switches).
+  reviewers: { K: [], U: [], D: ['reviewer'], 'D+': ['reviewer', 'reviewer-security'] },
+  // Helper agents: optional reviewers on top of the fixed ones (lib/queueHelpers.js). One runs for a task when it is
+  // enabled AND at least one condition hits: classes, labels, paths (a changed file matches), mostlyPaths (more than
+  // half of the changed files match), plan (the task has a plan entry), minMissionItems (numbered points in the
+  // mission). `cq helpers on|off <agent>` (and the board's "Helper agents" tab) switch them in queue.json, which wins.
+  // Path patterns: "dir/" = the folder from the root, "*.md" = that file name anywhere, "**" = any folders.
+  helpers: {
+    'reviewer-challenger': { enabled: true, classes: ['U'], labels: ['bug'] },
+    'reviewer-design': { enabled: true, labels: ['visual'], paths: [] },
+    'reviewer-tests': { enabled: false, classes: ['D', 'D+'], labels: ['bug'] },
+    'reviewer-gap': { enabled: false, plan: true, minMissionItems: 8 },
+    'reviewer-docs': { enabled: false, mostlyPaths: ['docs/', '*.md'] },
+  },
   // Read guard (hook-read-guard.mjs): in addition to the built-in lists.
   readGuard: {
     agentTypes: [], // more agent types the guard applies to (track, track-d and the reviewers are already included)

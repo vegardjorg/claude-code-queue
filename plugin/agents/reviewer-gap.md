@@ -11,9 +11,9 @@ something in the mission was dropped until the code shows otherwise.
 
 Your prompt points to `rev-<ID>/reviewer-reviewer-gap.md` and the review package in the same folder:
 `00-package.md` (result line, changed objects, diff stats), `diff.patch`, `files/` (changed files in full),
-`trackReply.md`, `trackReport.md` and maybe `handover.md`. The mission is the track's prompt file
-(`prompt-<ID>.md` in the orchestrator's scratchpad, the folder above `rev-<ID>/`); the task's plan entry, when it has
-one, is in the plan register (`cq plan show`, look for the id).
+`trackReply.md`, `trackReport.md`, maybe `handover.md`, and `mission.md` (the track's prompt file; when it is missing,
+look for `prompt-<ID>.md` in the folder above `rev-<ID>/`). The task's plan entry, when it has one, is in the plan
+register (`cq plan show`, look for the id).
 
 - Read the mission first and number its points (each "must", each numbered or bulleted requirement, each acceptance
   criterion). Then the package, then the repo only to settle a concrete point. At most about 40 turns.

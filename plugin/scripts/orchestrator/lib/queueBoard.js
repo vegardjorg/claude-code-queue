@@ -1752,6 +1752,19 @@ function settings(queue, { migrations = true } = {}) {
 }
 
 /**
+ * The "Helper agents" tab writes a switch: the body { name, enabled } becomes `cq helpers on|off <name>` (queue.mjs does
+ * the write under the lock, never the board). `names` are the helpers in the setup; anything else is refused here.
+ * @returns {{ args: string[] } | { error: string }}
+ */
+function helperSwitchArgs(b, names) {
+  const name = String(b?.name ?? '');
+  if (!/^[a-z0-9][a-z0-9-]{0,63}$/i.test(name) || !(names ?? []).includes(name))
+    return { error: `unknown helper agent ${name}` };
+  if (typeof b.enabled !== 'boolean') return { error: 'enabled must be true or false' };
+  return { args: ['helpers', b.enabled ? 'on' : 'off', name] };
+}
+
+/**
  * The working rules the panel shows (static text, see docs/orchestration.md and the parallel-wave skill). The saver mode numbers
  * come from SAVER_MODE, so the panel and the settings always say the same.
  */
@@ -1759,7 +1772,10 @@ const SKILL_RULES = [
   {
     text: `Recommended to save quota: at most ${SAVER_MODE.maxConcurrent} concurrent tracks and ${SAVER_MODE.maxDPlus} D+.`,
   },
-  { text: 'Review by class: K and U none, D one reviewer, D+ two.' },
+  {
+    text:
+      'Review by class: K none, D one reviewer, D+ two; the helper agents that are on add to it (the Helper agents tab).',
+  },
   {
     text:
       'Context: a track delivers partial before the context is full, and the orchestrator compacts instead of rotating.',
@@ -2130,6 +2146,7 @@ module.exports = {
   bulkSummary,
   SETTINGS,
   settings,
+  helperSwitchArgs,
   SKILL_RULES,
   SKILL_SOURCE,
   QUEUE_HOOKS,

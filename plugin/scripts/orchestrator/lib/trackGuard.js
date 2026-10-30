@@ -15,7 +15,8 @@
 // (hook-time.mjs reads the same fields on SubagentStart). In the main session the fields are missing, and the guards do nothing.
 //
 // The read guard can be extended per project in queue.config.json, the `readGuard` field (all optional):
-//   agentTypes   extra agent types the guard applies to (in addition to track, track-d, reviewer, reviewer-security)
+//   agentTypes   extra agent types the guard applies to (in addition to track, track-d and every reviewer and helper
+//                agent in the setup, lib/queueHelpers.js allReviewerTypes)
 //   autoLoaded   extra files that are loaded automatically and must not be read whole (file name, or path relative to the root)
 //   largeFiles   glob patterns (relative to the root, e.g. "db/migrations/*.sql") for files that must be read in excerpts
 //                when they exceed maxLines; migrations.folder/*.sql is included automatically when it is set
@@ -193,8 +194,15 @@ function readRules(readGuard, migrations) {
   const list = (x) => (Array.isArray(x) ? x.filter((v) => typeof v === 'string' && v) : []);
   const largeOnes = list(lv.largeFiles);
   if (migrations?.folder) largeOnes.push(`${norm(migrations.folder).replace(/\/+$/, '')}/*.sql`);
+  // The reviewers in the setup (fixed per class and every helper agent, lib/queueHelpers.js) are track agents too.
+  let reviewerTypes = [];
+  try {
+    reviewerTypes = require('./queueHelpers.js').allReviewerTypes(require('./queueConfig.js').config());
+  } catch {
+    reviewerTypes = Object.keys(require('./queueHelpers.js').CATALOG);
+  }
   return {
-    types: new Set([...READ_TYPES, ...list(lv.agentTypes)]),
+    types: new Set([...READ_TYPES, ...reviewerTypes, ...list(lv.agentTypes)]),
     autoLoaded: [...AUTO_LOADED, ...list(lv.autoLoaded)],
     largeFiles: largeOnes.map(globToRegex),
     maxLines: Number(lv.maxLines) > 0 ? Number(lv.maxLines) : MAX_LINES,
