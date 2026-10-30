@@ -3349,19 +3349,29 @@
     const model = o.models?.length
       ? o.models.map((m) => `${m.model} (${m.count})`).join(', ')
       : 'not logged yet';
-    // The queue system's own hooks (scripts/orchestrator/hook-*.mjs) in .claude/settings.json.
+    // Plugin install: the hooks are in the plugin's hooks/hooks.json and the skills in its skills/ folder.
+    // Vendored install: they are in the project's .claude/settings.json and .claude/skills/<name>/SKILL.md.
+    const plugin = o.install?.mode === 'plugin';
+    const from = plugin ? ' (from the plugin)' : '';
     const hooks = !o.hooks
-      ? 'could not find .claude/settings.json'
+      ? plugin
+        ? "could not read the plugin's hooks/hooks.json"
+        : 'could not find .claude/settings.json'
       : o.hooks.all
-        ? 'yes, all the queue system hooks are in place'
+        ? `yes, all the queue system hooks are in place${from}`
         : el('strong', { class: 'fare', text: `missing: ${o.hooks.missing.join(', ')}` });
-    // The queue system's own skills (.claude/skills/<name>/SKILL.md).
     const skills = !o.skills
       ? 'unknown'
       : o.skills.all
-        ? `yes, all (${o.skills.exists.join(', ')})`
+        ? `yes, all (${o.skills.exists.join(', ')})${from}`
         : el('strong', { class: 'fare', text: `missing: ${o.skills.missing.join(', ')}` });
-    const rows = [...facts('Base branch', o.baseBranch ?? 'main')];
+    const install = plugin
+      ? `plugin${o.install.name ? ` ${o.install.name}` : ''}${o.install.version ? ` ${o.install.version}` : ''}`
+      : 'vendored (scripts and skills copied into the project)';
+    const rows = [
+      ...facts('Installed as', o.install ? install : null),
+      ...facts('Base branch', o.baseBranch ?? 'main'),
+    ];
     // The migrations are shown only when the project has turned them on (migrations.folder in queue.config.json).
     const m = o.migrations;
     if (m) {

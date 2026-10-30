@@ -1842,6 +1842,44 @@ function skillsCoverage(exists, name = QUEUE_SKILLS) {
   return { all: missing.length === 0, exists: yes, missing };
 }
 
+/**
+ * Where the setup check looks for the queue system's hooks and skills. Two ways to install:
+ *   - plugin: the board runs from <plugin>/scripts/orchestrator/, next to <plugin>/.claude-plugin/plugin.json. The hooks are
+ *     in <plugin>/hooks/hooks.json (same `hooks` shape as settings.json) and the skills in <plugin>/skills/.
+ *   - vendored: the scripts are copied into the project, the hooks are in .claude/settings.json and the skills in
+ *     .claude/skills/.
+ * `exists(filePath)` is the file check from the server, so the function does no I/O itself.
+ * @param {string} here the folder of queue-board.mjs (scripts/orchestrator/)
+ * @param {string} gitRoot the project's main tree
+ * @returns {{ mode: 'plugin'|'vendored', pluginRoot: string|null, manifest: string|null, hooksFile: string, skillsFolder: string }}
+ */
+function setupSources(here, gitRoot, exists) {
+  const path = require('path');
+  const pluginRoot = path.resolve(here, '..', '..');
+  const manifest = path.join(pluginRoot, '.claude-plugin', 'plugin.json');
+  let plugin = false;
+  try {
+    plugin = !!exists(manifest);
+  } catch {
+    plugin = false;
+  }
+  if (plugin)
+    return {
+      mode: 'plugin',
+      pluginRoot,
+      manifest,
+      hooksFile: path.join(pluginRoot, 'hooks', 'hooks.json'),
+      skillsFolder: path.join(pluginRoot, 'skills'),
+    };
+  return {
+    mode: 'vendored',
+    pluginRoot: null,
+    manifest: null,
+    hooksFile: path.join(gitRoot, '.claude', 'settings.json'),
+    skillsFolder: path.join(gitRoot, '.claude', 'skills'),
+  };
+}
+
 /** The default pattern for migration files (like config().migrations.filePattern): the first group is the number. */
 const MIGRATION_PATTERN = '^(\\d+)_.*\\.sql$';
 
@@ -2095,6 +2133,7 @@ module.exports = {
   hooksCoverage,
   QUEUE_SKILLS,
   skillsCoverage,
+  setupSources,
   MIGRATION_PATTERN,
   highestMigration,
   boardTitle,

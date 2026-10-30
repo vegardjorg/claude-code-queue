@@ -557,6 +557,17 @@ const V = require('../queueBoard') as {
     exists: (name: string) => boolean,
     name?: string[],
   ) => { all: boolean; exists: string[]; missing: string[] };
+  setupSources: (
+    here: string,
+    gitRoot: string,
+    exists: (filePath: string) => boolean,
+  ) => {
+    mode: 'plugin' | 'vendored';
+    pluginRoot: string | null;
+    manifest: string | null;
+    hooksFile: string;
+    skillsFolder: string;
+  };
   highestMigration: (
     files: string[],
     filePattern?: string,
@@ -961,6 +972,42 @@ describe('settings and setup', () => {
       }
     };
     expect(V.skillsCoverage(exists).missing).toEqual([]);
+  });
+
+  it('setupSources: a plugin install reads hooks/hooks.json and skills/ in the plugin, a vendored one .claude/', () => {
+    const here = join('/x', 'plugin', 'scripts', 'orchestrator');
+    const gitRoot = join('/project');
+    const plugin = V.setupSources(here, gitRoot, (f) => f.endsWith(join('.claude-plugin', 'plugin.json')));
+    expect(plugin.mode).toBe('plugin');
+    expect(plugin.hooksFile.endsWith(join('x', 'plugin', 'hooks', 'hooks.json'))).toBe(true);
+    expect(plugin.skillsFolder.endsWith(join('x', 'plugin', 'skills'))).toBe(true);
+    const vendored = V.setupSources(here, gitRoot, () => false);
+    expect(vendored.mode).toBe('vendored');
+    expect(vendored.hooksFile).toBe(join('/project', '.claude', 'settings.json'));
+    expect(vendored.skillsFolder).toBe(join('/project', '.claude', 'skills'));
+    // A file check that throws counts as "not a plugin".
+    expect(
+      V.setupSources(here, gitRoot, () => {
+        throw new Error('no');
+      }).mode,
+    ).toBe('vendored');
+  });
+
+  it('setupSources: the plugin as shipped is reported as complete (no red "missing" in plugin mode)', () => {
+    const readable = (f: string) => {
+      try {
+        return readFileSync(f, 'utf8').length > 0;
+      } catch {
+        return false;
+      }
+    };
+    // __dirname is plugin/scripts/orchestrator/lib/__tests__; queue-board.mjs lives two folders up.
+    const src = V.setupSources(join(__dirname, '..', '..'), join(__dirname, 'no-project'), readable);
+    expect(src.mode).toBe('plugin');
+    const coverage = V.hooksCoverage(JSON.parse(readFileSync(src.hooksFile, 'utf8')));
+    expect(coverage.missing).toEqual([]);
+    expect(coverage.all).toBe(true);
+    expect(V.skillsCoverage((n) => readable(join(src.skillsFolder, n, 'SKILL.md'))).all).toBe(true);
   });
 
   it('the highest migration among the file names, with the project\'s file pattern', () => {

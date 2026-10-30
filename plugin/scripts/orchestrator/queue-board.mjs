@@ -534,15 +534,23 @@ function setup(queue, stat) {
     };
   }
   const cursor = readJson(CURSOR);
-  const settings = readJson(path.join(GIT_ROOT, '.claude', 'settings.json'));
+  // Plugin install: the hooks and skills ship in the plugin folder. Vendored: they are in the project's .claude/.
+  const src = T.setupSources(HERE, GIT_ROOT, (f) => fs.existsSync(f));
+  const settings = readJson(src.hooksFile);
+  const manifest = src.manifest ? readJson(src.manifest) : null;
   return {
     baseBranch: BASE,
     migrations,
     orchestrator: { ...L.orchestratorStatus(cursor), updated: cursor?.updated ?? null },
     models: stat.models,
+    install: {
+      mode: src.mode,
+      name: manifest?.name ?? null,
+      version: manifest?.version ?? null,
+    },
     hooks: settings ? T.hooksCoverage(settings) : null,
     skills: T.skillsCoverage((name) =>
-      fs.existsSync(path.join(GIT_ROOT, '.claude', 'skills', name, 'SKILL.md')),
+      fs.existsSync(path.join(src.skillsFolder, name, 'SKILL.md')),
     ),
     rules: T.SKILL_RULES.map((r) => r.text),
     rulesSource: T.SKILL_SOURCE,
