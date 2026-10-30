@@ -6,11 +6,11 @@
 // files list the same scripts.
 // =============================================================
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, mkdirSync } from 'fs';
+import { mkdtempSync, rmSync, writeFileSync, readFileSync, mkdirSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 // @ts-expect-error: plain ESM script without types
-import { mergeSettings, PLUGIN_ROOT } from '../setup.mjs';
+import { mergeSettings, PLUGIN_ROOT, setupProject } from '../setup.mjs';
 
 type Settings = { hooks: Record<string, { matcher?: string; hooks: { command: string }[] }[]> } & Record<
   string,
@@ -99,5 +99,34 @@ describe('setup.mjs mergeSettings', () => {
     const notes = mergeSettings(target, { keys: true }).join('\n');
     expect(notes).toContain('statusLine: kept your own');
     expect(read().statusLine).toEqual({ type: 'command', command: 'my-line.sh' });
+  });
+});
+
+describe('setup.mjs records the plugin version it set up (for the setup notice on the board)', () => {
+  let target: string;
+  const before = process.env.QUEUE_FOLDER;
+  beforeEach(() => {
+    target = mkdtempSync(join(tmpdir(), 'queue-setup-rec-'));
+    delete process.env.QUEUE_FOLDER;
+  });
+  afterEach(() => {
+    rmSync(target, { recursive: true, force: true });
+    if (before === undefined) delete process.env.QUEUE_FOLDER;
+    else process.env.QUEUE_FOLDER = before;
+  });
+  const version = () => JSON.parse(readFileSync(join(PLUGIN_ROOT, '.claude-plugin', 'plugin.json'), 'utf8')).version;
+  const recordFile = () => join(target, 'scripts', '.queue', 'setup.json');
+
+  it('--settings in a plugin install writes <dataFolder>/setup.json with the plugin version', () => {
+    const log = setupProject({ target, settings: true });
+    expect(JSON.parse(readFileSync(recordFile(), 'utf8')).pluginVersion).toBe(version());
+    expect(log.notes.join(' | ')).toContain(`setup record: plugin ${version()} (scripts/.queue/setup.json)`);
+  });
+
+  it('nothing without --settings, with --dry, or in a vendored install (hooks)', () => {
+    setupProject({ target });
+    setupProject({ target, settings: true, dry: true });
+    setupProject({ target, settings: true, hooks: true });
+    expect(existsSync(recordFile())).toBe(false);
   });
 });

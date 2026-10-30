@@ -114,6 +114,22 @@ copyFolder(
     }
   }
 }
+// The installed version (the board compares it with the published one, lib/queueUpdate.js). A vendored install has no
+// .claude-plugin/plugin.json, so the version is written next to the scripts. Same rule as the other files: kept
+// unless --overwrite, so it always matches the scripts that are there.
+{
+  const vf = path.join(TARGET, 'scripts', 'orchestrator', 'cq-version.json');
+  const manifest = JSON.parse(fs.readFileSync(path.join(PLUGIN, '.claude-plugin', 'plugin.json'), 'utf8'));
+  const exists = fs.existsSync(vf);
+  if (exists && !OVERWRITE) log.skippedOver.push(path.relative(TARGET, vf));
+  else {
+    (exists ? log.replaced : log.copied).push(path.relative(TARGET, vf));
+    if (!DRY) {
+      makeFolder(path.dirname(vf));
+      fs.writeFileSync(vf, JSON.stringify({ name: manifest.name, version: manifest.version }, null, 2) + '\n');
+    }
+  }
+}
 copyFolder(path.join(PLUGIN, 'skills'), path.join(TARGET, '.claude', 'skills'), (name) => name === 'setup');
 copyFolder(path.join(PLUGIN, 'agents'), path.join(TARGET, '.claude', 'agents'));
 

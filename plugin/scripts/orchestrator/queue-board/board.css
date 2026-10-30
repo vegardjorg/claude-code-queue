@@ -3178,6 +3178,62 @@ body.with-option-line .board {
   }
 }
 
+/* ---- The update banner (a newer cq version, or setup not run after an update; lib/queueUpdate.js) ---- */
+.update-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--distance-md);
+  padding: var(--distance-sm) var(--distance-md);
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+  border-bottom: 1px solid var(--color-outline-variant);
+}
+
+.update-banner[hidden] {
+  display: none;
+}
+
+.update-banner-content {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.update-banner-title {
+  margin: 0;
+  font-weight: 600;
+}
+
+.update-banner a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+.update-steps {
+  margin: var(--distance-xs) 0 0;
+  padding-left: 1.4em;
+}
+
+.update-step + .update-step {
+  margin-top: var(--distance-xs);
+}
+
+.update-step .cloud-command {
+  margin-top: var(--distance-xs);
+}
+
+/* The command on the banner's own color: the lightest surface, so it reads as a field in light and dark mode. */
+.update-step .cloud-command code {
+  flex: 0 1 auto;
+  padding: var(--distance-xs) var(--distance-sm);
+  background: var(--color-surface-container-lowest);
+  color: var(--color-on-surface);
+}
+
+.update-banner-close {
+  flex: 0 0 auto;
+  color: inherit;
+}
+
 /* ---- The banner after a restart, the theme choice, the legend and "Show all" in Selection ---- */
 
 /* The server has been restarted (401). A clear banner below the top, with the field for the link. */

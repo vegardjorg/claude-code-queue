@@ -26,6 +26,8 @@
     <!-- The mascot's rules (lib/queueMascot.js) and the speech bubble, before board.js, which reports to them. -->
     <script src="/queueMascot.js" defer></script>
     <script src="/mascot.js" defer></script>
+    <!-- The update banner's rules (lib/queueUpdate.js), before board.js, which draws the banner. -->
+    <script src="/queueUpdate.js" defer></script>
     <script src="/board.js" defer></script>
     <!-- The Plans room. The rules (queuePlanView.js) are the same file the tests use; plans.js draws. After
          board.js, so the key from the link is saved before Plans fetches the register. -->
@@ -234,6 +236,8 @@
         ></select>
       </div>
     </header>
+    <!-- The update banner (a newer cq version, or setup not run after an update), drawn by board.js from the state. -->
+    <div id="update-banner" class="update-banner" role="status" aria-live="polite" hidden></div>
     <!-- The focus line (the steps, the rest, ready ones in focus, a notice when the focus has nothing ready). -->
     <div id="focusLine" class="focusLine" aria-label="Focus" hidden></div>
     <div id="stripe" class="stripe" aria-label="Next up and the chain" hidden></div>

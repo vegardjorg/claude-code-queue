@@ -513,6 +513,7 @@
         t.version = answer.version;
         indexes();
         drawLogo();
+        drawUpdateBanner();
         // The mascot sees the change (events between two polls) and may say something.
         window.QueueMascotView?.newState(t.data);
         if (drag || boosted || t.busy || window.QueuePlan?.busy()) t.pending = true;
@@ -6275,6 +6276,109 @@
    * The logo (optional file in the queue folder, served at /logo) sits in the fixed mascot zone in the left corner of the top.
    * Without a logo the zone is empty, but keeps its space, so the top does not jump when the file comes or goes.
    */
+  // ---- The update banner (the rules and texts in lib/queueUpdate.js; the server sends `update` in the state) ----
+  /** The version whose banner was closed (localStorage through `store`, so blocked storage only means not remembered). */
+  const dismissedUpdate = () => store.getItem(window.QueueUpdate?.DISMISS_KEY ?? 'queue-board-update-dismissed');
+
+  /** One step: the text, and the command with a "Copy" button (the same look as the cloud commands). */
+  function updateStep(s) {
+    return el(
+      'li',
+      { class: 'update-step' },
+      s.text ? el('span', { text: s.text }) : null,
+      s.command
+        ? el(
+            'div',
+            { class: 'cloud-command' },
+            el('code', { text: s.command }),
+            el('button', {
+              type: 'button',
+              class: 'button button-outline',
+              text: 'Copy',
+              'aria-label': `Copy ${s.command}`,
+              onclick: () => copyText(s.command, 'The command is copied.'),
+            }),
+          )
+        : null,
+    );
+  }
+
+  function drawUpdateBanner() {
+    const box = $('update-banner');
+    const U = window.QueueUpdate;
+    const n = t.data?.update ?? null;
+    if (!box || !U || !n) {
+      if (box) box.hidden = true;
+      return;
+    }
+    const show = U.visible(n, dismissedUpdate());
+    const parts = [];
+    if (show.newVersion) {
+      const v = n.newVersion;
+      parts.push(
+        el(
+          'p',
+          { class: 'update-banner-title' },
+          `cq ${v.latest} is out (you have ${n.installed}). `,
+          el('a', {
+            href: v.changelog,
+            target: '_blank',
+            rel: 'noopener noreferrer',
+            text: 'What is new (CHANGELOG)',
+          }),
+        ),
+        el('ol', { class: 'update-steps' }, ...v.steps.map(updateStep)),
+      );
+    }
+    // The update steps already end with setup, so the setup notice shows on its own only without them.
+    if (show.setup && !(show.newVersion && n.setup === 'run')) {
+      if (n.setup === 'restart')
+        parts.push(
+          el('p', {
+            class: 'update-banner-title',
+            text:
+              `Setup was run for cq ${n.setupVersion}, but this board still runs cq ${n.installed}. ` +
+              'Stop the board and start it again to load the new version.',
+          }),
+        );
+      else
+        parts.push(
+          el('p', {
+            class: 'update-banner-title',
+            text: n.setupVersion
+              ? `cq ${n.installed} is installed, but the project was last set up for cq ${n.setupVersion}. Run setup again in Claude Code:`
+              : `cq ${n.installed} is installed, but setup has not been recorded for it. Run setup again in Claude Code:`,
+          }),
+          el('ol', { class: 'update-steps' }, updateStep({ text: '', command: 'cq setup --settings' })),
+        );
+    }
+    if (!parts.length) {
+      box.hidden = true;
+      box.replaceChildren();
+      return;
+    }
+    const content = el('div', { class: 'update-banner-content' }, ...parts);
+    // Only the new-version part can be closed (per version); the setup notice goes away when setup has been run.
+    const close = show.newVersion
+      ? el(
+          'button',
+          {
+            type: 'button',
+            class: 'button-icon update-banner-close',
+            'aria-label': `Close the notice about cq ${n.newVersion.latest}`,
+            title: 'Close until a newer version is out',
+            onclick: () => {
+              store.setItem(U.DISMISS_KEY, n.newVersion.latest);
+              drawUpdateBanner();
+            },
+          },
+          icon('close'),
+        )
+      : null;
+    box.replaceChildren(content, ...(close ? [close] : []));
+    box.hidden = false;
+  }
+
   function drawLogo() {
     const zone = $('mascot');
     const exists = zone.querySelector('.logo');

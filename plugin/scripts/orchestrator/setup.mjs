@@ -16,6 +16,8 @@
 //      at 300k, worktrees from HEAD, the status line statusline.mjs). A plugin cannot set these itself; without the flag
 //      they are only listed. A plugin install writes the status line with the plugin's absolute (versioned) path, so
 //      run --settings again after a plugin update; a status line of your own is kept.
+//   7. --settings in a plugin install records the plugin version in <dataFolder>/setup.json, so the board can show
+//      that setup must be run again after an update (lib/queueUpdate.js).
 //   Hooks (install.mjs only, a plugin brings hooks/hooks.json): every hook in settings.queue.json is added next to the
 //   project's own, also hooks added in a later version (e.g. hook-track-end.mjs on SubagentStop). The two files must
 //   list the same scripts (__tests__/setup.test.ts checks it).
@@ -95,7 +97,46 @@ export function setupProject(o) {
 
   // 6: settings
   log.notes.push(...mergeSettings(t, { dry: o.dry, keys: o.settings, hooks: o.hooks }));
+
+  // 7: --settings in a plugin install records the plugin version it set up, so the board can tell when setup has not
+  // been run after a plugin update (lib/queueUpdate.js). It lives in the queue's data folder (gitignored).
+  if (o.settings && !o.hooks) {
+    const note = recordSetupVersion(t, { dry: o.dry });
+    if (note) log.notes.push(note);
+  }
   return log;
+}
+
+/** The record setup --settings writes: <dataFolder>/setup.json. QUEUE_FOLDER overrides the folder, as for queue.mjs. */
+export function setupRecordFile(target) {
+  const KK = require('./lib/queueConfig.js');
+  const folder = process.env.QUEUE_FOLDER ?? path.join(target, KK.config({ root: target }).dataFolder);
+  return path.join(folder, 'setup.json');
+}
+
+/**
+ * Writes { pluginVersion, at } to setupRecordFile(target). Only when the plugin manifest exists (a plugin install).
+ * Returns a note for the log, or null.
+ */
+export function recordSetupVersion(target, o = {}) {
+  let version = null;
+  try {
+    version = JSON.parse(fs.readFileSync(path.join(PLUGIN_ROOT, '.claude-plugin', 'plugin.json'), 'utf8')).version ?? null;
+  } catch {
+    return null;
+  }
+  if (!version) return null;
+  const file = setupRecordFile(target);
+  const rel = path.relative(target, file).split(path.sep).join('/');
+  if (!o.dry) {
+    try {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, JSON.stringify({ pluginVersion: version, at: new Date().toISOString() }, null, 2) + '\n');
+    } catch (e) {
+      return `setup record: could not write ${rel} (${e.message})`;
+    }
+  }
+  return `setup record: plugin ${version} (${rel})`;
 }
 
 /**

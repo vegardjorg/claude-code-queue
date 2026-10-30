@@ -59,6 +59,11 @@
 //   - FOLLOW UP: the read view /follow (its own page; the link is written in the terminal) with the follow-up entries from
 //     follow.json via GET /api/follow (behind the key). The rules (due date, statuses) are lib/queueFollow.js, the same
 //     as queue.mjs follow; the board never writes follow.json.
+//   - UPDATE BANNER (lib/queueUpdate.js): at start, and at most once per 24 hours (cache <dataFolder>/update-check.json),
+//     the server fetches the published plugin.json from GitHub with a plain GET (no headers of its own, nothing about
+//     the user or the project, 3 s timeout); any error is silent. Off with board.updateCheck: false or DISABLE_UPDATES,
+//     DISABLE_AUTOUPDATER or CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC. The state carries `update`, which also says when
+//     the plugin version differs from the one `cq setup --settings` recorded in <dataFolder>/setup.json (local only).
 //
 // Security (another web page in the same browser must not be able to read or edit the queue):
 //   - listens only on 127.0.0.1,
@@ -99,6 +104,8 @@ const M = require('./lib/queueMascot.js');
 const KAP = require('./lib/queueCapacity.js');
 // The "Follow up" entries (the same rules as queue.mjs follow; the board only reads follow.json).
 const F = require('./lib/queueFollow.js');
+// The update banner (a newer plugin version, or setup not run after an update). Served to the browser as /queueUpdate.js.
+const U = require('./lib/queueUpdate.js');
 
 const CONFIG = KK.config();
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -155,6 +162,46 @@ const HOST = '127.0.0.1';
 const KEY = crypto.randomBytes(24).toString('base64url');
 const VALID_HOSTS = new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`]);
 const VALID_ORIGIN = new Set([...VALID_HOSTS].map((v) => `http://${v}`));
+
+// ---- The update banner (lib/queueUpdate.js) ------------------------------------------------------------------------
+// The installed version: the plugin manifest (setupSources finds it), or cq-version.json next to the scripts in a vendored
+// install (install.mjs writes it). Read once: a plugin update installs into a new folder, so this board keeps its version.
+const INSTALL = (() => {
+  const src = T.setupSources(HERE, GIT_ROOT, (f) => fs.existsSync(f));
+  let version = null;
+  try {
+    const file = src.manifest ?? path.join(HERE, 'cq-version.json');
+    version = JSON.parse(fs.readFileSync(file, 'utf8')).version ?? null;
+  } catch {
+    version = null;
+  }
+  return { mode: src.mode, version };
+})();
+const UPDATE_CACHE = path.join(FOLDER, 'update-check.json');
+const SETUP_RECORD = path.join(FOLDER, 'setup.json');
+// The published version. Fetched at start and then at most once per 24 hours (the cache on disk); null when unknown,
+// turned off or on any error (no message: the banner simply does not show).
+let latestPublished = null;
+async function refreshLatest() {
+  if (typeof globalThis.fetch !== 'function') return;
+  const r = await U.latestVersion({
+    config: CONFIG,
+    env: process.env,
+    cacheFile: UPDATE_CACHE,
+    fs,
+    fetch: globalThis.fetch,
+  });
+  if (r) latestPublished = r.latest;
+}
+/** What the banner says now (null = nothing). The setup record is read on every state build (a tiny file). */
+const updateNotice = () =>
+  U.notice({
+    mode: INSTALL.mode,
+    installed: INSTALL.version,
+    latest: latestPublished,
+    setupVersion: U.readSetupRecord(fs, SETUP_RECORD),
+    projectFolder: MAIN_TREE,
+  });
 
 // ---- The colors (the neutral palette in lib/queueBoard.js) ----------------------------------------------------------
 const THEME_CSS = T.themeCss(T.PALETTE);
@@ -295,9 +342,12 @@ function state() {
   const mascotFile = MASCOT_MODE !== 'off' && isFile(MASCOT_FILE);
   // With a daily quota, "Next up" needs today's usage (the time log, via the cached statistics).
   const stat = quick?.budget ? statistics().version : null;
+  const update = updateNotice();
+  const updateKey = JSON.stringify(update);
   if (
     quick &&
     quick.mtime === mtime &&
+    quick.updateKey === updateKey &&
     quick.gitTime === g.time &&
     quick.logo === logo &&
     quick.mascotFile === mascotFile &&
@@ -348,6 +398,8 @@ function state() {
     mascotNumbers: MASCOT_MODE === 'off' ? null : mascotNumbers(queue),
     title: TITLE,
     baseBranch: BASE,
+    // The update banner (lib/queueUpdate.js): null, or a newer version and/or "run cq setup --settings".
+    update,
   };
   // Each stage gets status and rests; a stage with only rests shows them in the title (the focus line and the cards
   // read the title), not as an empty stage.
@@ -373,6 +425,7 @@ function state() {
     mascotFile,
     budget,
     stat: s?.version ?? null,
+    updateKey,
     version,
     data,
   };
@@ -1764,6 +1817,8 @@ const STATIC = {
   // The speech bubble (mascot.js) and the pure rules in lib/queueMascot.js (the same file the tests use).
   '/mascot.js': ['mascot.js', 'text/javascript; charset=utf-8'],
   '/queueMascot.js': [path.join('..', 'lib', 'queueMascot.js'), 'text/javascript; charset=utf-8'],
+  // The update banner's rules (lib/queueUpdate.js, the same file the tests use); board.js draws it.
+  '/queueUpdate.js': [path.join('..', 'lib', 'queueUpdate.js'), 'text/javascript; charset=utf-8'],
   // The plan view (Now, Next, Later, Waiting) with a draft and "Save focus", and the help.
   '/plan.js': ['plan.js', 'text/javascript; charset=utf-8'],
   // Shared focus trap, toast queue, tabs and legend (the same file the tests use).
@@ -2039,4 +2094,7 @@ server.listen(PORT, HOST, () => {
   console.log(`Open: http://${HOST}:${PORT}/#key=${KEY}`);
   console.log(`Follow up: http://${HOST}:${PORT}/follow#key=${KEY}`);
   console.log(`Queue: ${FILE}. Ctrl+C stops the board.`);
+  // The update check: once now and then once a day (the cache keeps it to one fetch per 24 hours, also across restarts).
+  refreshLatest().catch(() => {});
+  setInterval(() => refreshLatest().catch(() => {}), U.MAX_AGE_MS).unref();
 });

@@ -145,6 +145,10 @@ const STANDARD = Object.freeze({
     // The mascot's speech bubble: "chatty" (everything), "events" (only events and clicks) or "off" (no bubbles at
     // all, for every viewer; the choice in the gear is then locked). `queue-board.mjs --mascot <mode>` overrides it.
     mascot: 'chatty',
+    // The update banner: the board checks GitHub for a newer plugin version at start (at most once per 24 hours, a
+    // plain GET that sends nothing about you). false turns it off; so do DISABLE_UPDATES, DISABLE_AUTOUPDATER and
+    // CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC. The local "run cq setup --settings" notice works either way.
+    updateCheck: true,
   },
 });
 
