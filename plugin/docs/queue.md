@@ -77,6 +77,29 @@ or `cancelled` (cancelled). Tasks added by an agent start as `proposed` and need
 | `diagnose` | Why the queue runs fewer tracks than it could (with suggested fixes) |
 | `state` | Machine-readable state (exit 3 when there is nothing to do) |
 | `undo` | Undo the last write |
+| `follow [add\|log\|show\|report\|close\|extend]` | Follow-up entries: observations with a start, an end, goals, a log and a fixed report template (see below) |
+
+### Follow-up entries
+
+A follow-up entry (`F-…`) is something to watch over a period: an internal test, a trial after an owner decision, a
+variable to measure. It lives in `<dataFolder>/follow.json` (under the queue's lock), not in the memory or the
+handover note.
+
+```json
+{ "id": "F-AUTOCOMPACT", "title": "Trial of automatic compaction", "why": "Is anything lost?",
+  "start": "2026-10-08", "end": "2026-10-15", "owner": "orchestrator",
+  "goals": [{ "name": "losses", "how": "read the handover note after each compaction", "expected": "0" }],
+  "close_action": "cq compact manual" }
+```
+
+- `follow add --file <json>` adds it (status `active`), `follow log <id> --text "…" --value name=x` logs along the
+  way, `follow extend <id> --to <date>` moves the end, `follow` lists and `follow show <id>` shows one.
+- From the end date (the machine's local calendar day) the entry is `to-report`: `show` and `orchestrator pulse`
+  print TO REPORT until `follow report <id>` writes `<dataFolder>/follow/<id>-report.md` from the fixed template
+  (Question, Setup, Measurements, Findings, Deviations and losses, Recommendation, Owner decision).
+- `follow close <id> --decision "…"` (or `--cancelled`) records the owner decision, writes the report again with it
+  and prints the close action. The command never runs the close action itself.
+- The board shows the entries read only at `/follow`.
 
 ## Limits and safety
 

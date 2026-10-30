@@ -381,6 +381,22 @@
 //   node scripts/orchestrator/queue.mjs handover now               (prints only the "Now" part of the note; the archive is
 //                                                                  read with grep when needed)
 //
+// "Follow up" entries (observations with a start, an end, goals, a log and a fixed report template; <dataFolder>/follow.json,
+// the same lock as the queue; the rules in lib/queueFollow.js). `show` and `orchestrator pulse` show the active ones and
+// TO REPORT (the day is the local calendar day):
+//   node scripts/orchestrator/queue.mjs follow                          (the list: status, period, number of log entries)
+//   node scripts/orchestrator/queue.mjs follow add --file <json>        ({ id: "F-...", title, why, start, end, owner,
+//                                                                  goals: [{ name, how, expected }], related?,
+//                                                                  close_action? }; end after start, unique id)
+//   node scripts/orchestrator/queue.mjs follow log <id> [--text "..."] [--value name=x ...] [--source "..."]
+//   node scripts/orchestrator/queue.mjs follow show <id>
+//   node scripts/orchestrator/queue.mjs follow report <id>              (writes <dataFolder>/follow/<id>-report.md from the
+//                                                                  template, status reported; the assessment is the
+//                                                                  orchestrator's)
+//   node scripts/orchestrator/queue.mjs follow close <id> --decision "..." [--cancelled]   (the owner decision; writes the
+//                                                                  report again with the decision and shows the close action)
+//   node scripts/orchestrator/queue.mjs follow extend <id> --to <YYYY-MM-DD>
+//
 // Exit codes: 0 ok, 1 error, 3 empty queue (state), 4 the daily budget is used up (next, start), 5 night pause (next,
 // start), 6 the orchestrator is in windDown (next, start, fill) or the queue has changed since the preview
 // (--expect-changed), 7 the machine is full (the load guard; next, start, fill).
@@ -412,6 +428,7 @@ const S = require('./lib/queueStatistics.js');
 const CH = require('./lib/queueCapacity.js');
 const KK = require('./lib/queueConfig.js');
 const HO = require('./lib/queueHandover.js');
+const F = require('./lib/queueFollow.js');
 
 // The project's settings (queue.config.json merged with the defaults in lib/queueConfig.js).
 const CONFIG = KK.config();
@@ -435,6 +452,9 @@ const CQ = require('./lib/projectRoot.js').cqCommand();
 const FOLDER = KK.dataFolder();
 const FILE = path.join(FOLDER, 'queue.json');
 const LOCK = path.join(FOLDER, '.lockState');
+// The "Follow up" entries (queue.mjs follow; the rules in lib/queueFollow.js) and their reports.
+const FOLLOW_FILE = path.join(FOLDER, 'follow.json');
+const FOLLOW_REPORTS = path.join(FOLDER, 'follow');
 // The time log with the usage per agent (hook-time.mjs writes it). QUEUE_TIME_LOG overrides (tests).
 const TIME_LOG = KK.timeLog();
 // The repo the queue branches are counted in (pick, release, show). QUEUE_GIT overrides (smoke test against a temporary repo).
@@ -1832,7 +1852,7 @@ function logTime(id, event, remark) {
 function highestMigr(root = MAIN_TREE) {
   if (!MIGR.folder) return 0;
   const dir = path.join(root, MIGR.folder);
-  const pattern = new RegExp(MIGR.filePattern ?? '^(\d+)_.*\.sql$');
+  const pattern = new RegExp(MIGR.filePattern ?? String.raw`^(\d+)_.*\.sql$`);
   let max = 0;
   if (!fs.existsSync(dir)) return 0;
   for (const f of fs.readdirSync(dir)) {
@@ -2418,6 +2438,9 @@ if (command === 'init') {
     console.log(l);
   // Loose waits (free text or an unregistered question, or an answer that still blocks).
   for (const l of L.resolveWaitsLines(L.resolveWaits(queue), { max: 5 })) console.log(l);
+  // Follow up: the active entries and TO REPORT. The resume text after a compaction has this view, so due entries are
+  // mentioned there too (hook-after-compact.mjs runs queue.mjs show).
+  for (const l of followLines()) console.log(l);
 } else if (command === 'show') {
   const queue = read();
   const all = a.includes('--all');
@@ -2553,6 +2576,7 @@ if (command === 'init') {
   if (n.active) console.log(n.message);
   // Loose waits (free text or an unregistered question, or an answer that still blocks).
   for (const l of L.resolveWaitsLines(L.resolveWaits(queue), { max: 50 })) console.log(l);
+  for (const l of followLines()) console.log(l);
 } else if (command === 'next') {
   const queue = read();
   // Budget guard: over the daily budget nothing is proposed (exit 4, so a loop does not take it for "empty queue").
@@ -4046,6 +4070,8 @@ if (command === 'init') {
       );
     // Adoption: report.md files that came since the last pulse (an adopted track does not notify this session).
     deliveryWarning({ update: true });
+    // Follow up: the pulse repeats due entries every time, until the report is written (cq follow report).
+    for (const l of followLines({ pulse: true })) console.log(l);
     // The pulse runs every loop round, so low parallelism is checked now and then even without fill and receive.
     parallelWarning();
   } else if (under === 'stop') {
@@ -4964,12 +4990,15 @@ if (command === 'init') {
 } else if (command === 'handover') {
   // ---- The ongoing handover note in two parts (rules: lib/queueHandover.js) ----
   handoverCommand();
+} else if (command === 'follow') {
+  // ---- The "Follow up" entries (see the top of the file and lib/queueFollow.js) ----
+  followCommand();
 } else {
   die(
     'Use: cq <init|add|approve|show|next|start|set|edit|resolve|resolutions|question|limit|state|trackFile|' +
       'projects|project|edit-many|pickable|pick|deliver|release|qa|external|orchestrator|cloud|cloud-package|batch|' +
       'area|areas|focus|park|continue|rank|undo|classify|plan|fill|receive|merge|info|activeOnes|next-migr|migr|' +
-      'capacity|compact|diagnose|cost|handover|deliveries|resume> ...  (see the top of the file)',
+      'capacity|compact|diagnose|cost|handover|deliveries|resume|follow> ...  (see the top of the file)',
     command ? 1 : 0,
   );
 }
@@ -5213,4 +5242,131 @@ function handoverCommand() {
       `; the note ${before} -> ${after} lines; "Now" ${r.nowLines ?? '-'} lines (limit ${HO.NOW_MAX_LINES}).`,
   );
   for (const w of r.warnings) console.log(`WARNING: ${w}`);
+}
+
+// ---- queue.mjs follow: the "Follow up" entries in <dataFolder>/follow.json under the queue's lock ------------------
+// (FOLLOW_FILE and FOLLOW_REPORTS are defined at the top with the other paths: the dispatch above runs before this line.)
+function readFollow() {
+  if (!fs.existsSync(FOLLOW_FILE)) return F.emptyRegister();
+  return F.normalize(JSON.parse(fs.readFileSync(FOLLOW_FILE, 'utf8')));
+}
+function writeFollow(reg) {
+  reg.changed = new Date().toISOString();
+  const tmp = `${FOLLOW_FILE}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(reg, null, 2) + '\n');
+  fs.renameSync(tmp, FOLLOW_FILE);
+}
+/**
+ * Changes the follow-up register under the queue's lock, ALL OR NOTHING: `fn(reg, today)` gives { error, entry }; an error
+ * gives exit 1 and no write. Active entries past their end date are stored as to-report in the same write.
+ */
+function editFollow(fn) {
+  return withLock(() => {
+    const reg = readFollow();
+    const today = F.dayDate(new Date());
+    const answer = fn(reg, today);
+    if (answer.error?.length) die(`Nothing changed:\n  ${answer.error.join('\n  ')}`);
+    F.updateDue(reg, today);
+    writeFollow(reg);
+    return answer;
+  });
+}
+/** The follow-up lines for show and orchestrator pulse. An error (e.g. a broken follow.json) never stops the command. */
+function followLines({ pulse = false } = {}) {
+  try {
+    return F.shortLines(readFollow(), F.dayDate(new Date()), { pulse });
+  } catch (e) {
+    return [`WARNING: could not read ${FOLLOW_FILE} (${e?.message ?? e}); see ${CQ} follow.`];
+  }
+}
+/** The path to the report file, relative to the main tree when it lives there (like the mission field). */
+function followReportPath(id) {
+  return missionRef(path.join(FOLLOW_REPORTS, `${id}-report.md`));
+}
+function writeFollowReport(p) {
+  fs.mkdirSync(FOLLOW_REPORTS, { recursive: true });
+  const file = path.join(FOLLOW_REPORTS, `${p.id}-report.md`);
+  const tmp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, F.reportText(p, { now: new Date().toISOString() }));
+  fs.renameSync(tmp, file);
+  return file;
+}
+
+/** `follow [add|log|show|report|close|extend]`; the rules live in lib/queueFollow.js. */
+function followCommand() {
+  const [sub, id] = positional(1, ['--file', '--text', '--value', '--source', '--decision', '--to']);
+  const now = new Date().toISOString();
+  const today = F.dayDate(new Date());
+  if (!sub) {
+    for (const l of F.listLines(readFollow(), today)) console.log(cut(l, WIDTH));
+    return;
+  }
+  if (sub === 'add') {
+    const file = val('--file');
+    if (!file) die(`Use: ${CQ} follow add --file <json>`);
+    let input;
+    try {
+      input = JSON.parse(fs.readFileSync(file, 'utf8'));
+    } catch (e) {
+      die(`Could not read ${file}: ${e?.message ?? e}`);
+    }
+    const s = editFollow((reg) => F.add(reg, input, { now }));
+    console.log(
+      `Added ${s.entry.id} (${s.entry.start} -> ${s.entry.end}, ${s.entry.goals.length} goal(s)). ` +
+        `Log along the way: ${CQ} follow log ${s.entry.id} --text "..." [--value name=x].`,
+    );
+    return;
+  }
+  if (!id) die(`Use: ${CQ} follow ${sub} <id> ...`);
+  if (sub === 'show') {
+    const p = readFollow().entries.find((x) => x.id === id);
+    if (!p) die(`Unknown follow-up entry ${id} (${CQ} follow lists them)`);
+    for (const l of F.showLines(p, today)) console.log(l);
+  } else if (sub === 'log') {
+    const measured = {};
+    for (const v of values('--value')) {
+      const i = v.indexOf('=');
+      if (i <= 0) die(`--value "${v}" must be name=value`);
+      measured[v.slice(0, i)] = v.slice(i + 1);
+    }
+    editFollow((reg) =>
+      F.log(reg, id, { text: val('--text'), values: measured, source: val('--source') }, { now }),
+    );
+    console.log(`Logged in ${id}.`);
+  } else if (sub === 'report') {
+    // The report file is written under the lock, before the register (status reported); if the write fails, nothing changes.
+    const s = editFollow((reg) => {
+      const p = reg.entries.find((x) => x.id === id);
+      if (!p) return { error: [`Unknown follow-up entry ${id} (${CQ} follow lists them)`] };
+      const r = F.markReported(reg, id, followReportPath(id), { now });
+      if (!r.error.length) writeFollowReport(p);
+      return r;
+    });
+    console.log(
+      `The report is written: ${s.entry.report}. Fill in the sections marked "assessed by the orchestrator", present it ` +
+        `to the owner, and close it with ${CQ} follow close ${id} --decision "...".`,
+    );
+  } else if (sub === 'close') {
+    const s = editFollow((reg) => {
+      const r = F.close(reg, id, { decision: val('--decision'), cancelled: a.includes('--cancelled') }, { now });
+      if (!r.error.length) {
+        r.entry.report = followReportPath(id);
+        r.entry.reported = r.entry.reported ?? now;
+        writeFollowReport(r.entry);
+      }
+      return r;
+    });
+    console.log(`${id} is closed (${s.entry.status}); the report with the decision: ${s.entry.report}.`);
+    if (s.entry.close_action?.length && s.entry.status !== 'cancelled') {
+      console.log('Close action (do it only if the decision calls for it; queue.mjs never does it itself):');
+      for (const h of s.entry.close_action) console.log(`  ${h}`);
+    }
+  } else if (sub === 'extend') {
+    const s = editFollow((reg) => F.extend(reg, id, val('--to'), { now }));
+    console.log(`${id} is extended to ${s.entry.end}.`);
+  } else {
+    die(
+      `Use: ${CQ} follow [add --file <json> | log <id> | show <id> | report <id> | close <id> | extend <id>]`,
+    );
+  }
 }

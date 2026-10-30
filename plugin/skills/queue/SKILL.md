@@ -125,6 +125,25 @@ Follow `parallel-wave` ("Continuous queue") unchanged. Specific to taking over:
   takeover: pulse reports the deliveries, `cq resume` makes the fix rounds). Stop the old session first, so two
   orchestrators do not receive and merge the same track. The usual path for a long session is still compaction.
 
+## Follow-up entries
+
+What we follow over time lives in the queue with a start, an end and a fixed report template, not only in the
+memory or the handover note (`scripts/.queue/follow.json`, the same lock as the queue; the rules in
+`lib/queueFollow.js`).
+- **Add an entry** (`cq follow add --file <json>`, id `F-…`) for internal tests, variables to watch over time and
+  trial periods after an owner decision (for example automatic compaction). The entry has `why`, `start` and `end`,
+  `owner`, `goals` (name, how it is measured, expected value), and optional `related` and `close_action`.
+- **Along the way:** `cq follow log <id> --text "…" [--value name=x]` when something happens or is measured;
+  `cq follow show <id>` and `cq follow` (the list). Need more time: `cq follow extend <id> --to <date>`.
+- **When the end date is reached** (the local calendar day), `cq show` and `cq orchestrator pulse` print "TO REPORT",
+  and the pulse repeats it every round until the report is written. **Never ignore that notice:** run
+  `cq follow report <id>` (writes `scripts/.queue/follow/<id>-report.md` from the template: Question, Setup,
+  Measurements, Findings, Deviations and losses, Recommendation, Owner decision), fill in the assessment, and present
+  it to the owner at the end of the round with a recommendation.
+- **The owner decision:** `cq follow close <id> --decision "…"` (or `--cancelled`). The command prints the close
+  action but never does it; do it only when the decision calls for it.
+- The board has the read view at `/follow` (the link is printed when `cq board` starts).
+
 ## Fewer turns per task
 
 - `fill` and `receive` end with "Start these in the SAME turn:": start ALL listed agents in one turn (parallel Agent calls).

@@ -56,6 +56,9 @@
 //     POST /api/plan-bulk runs `queue.mjs plan prioritize|edit|combine` (dry = preview, otherwise
 //     --expect-changed, all or nothing), POST /api/plan-undo undoes what the board just saved (`plan undo --nr`),
 //     and GET /api/plans?wait=1 waits until plans.json or queue.json changes (live update, fs.watch).
+//   - FOLLOW UP: the read view /follow (its own page; the link is written in the terminal) with the follow-up entries from
+//     follow.json via GET /api/follow (behind the key). The rules (due date, statuses) are lib/queueFollow.js, the same
+//     as queue.mjs follow; the board never writes follow.json.
 //
 // Security (another web page in the same browser must not be able to read or edit the queue):
 //   - listens only on 127.0.0.1,
@@ -94,6 +97,8 @@ const KK = require('./lib/queueConfig.js');
 // The mascot's rules (the same file the browser gets at /queueMascot.js) and the weekly quota (the forecast).
 const M = require('./lib/queueMascot.js');
 const KAP = require('./lib/queueCapacity.js');
+// The "Follow up" entries (the same rules as queue.mjs follow; the board only reads follow.json).
+const F = require('./lib/queueFollow.js');
 
 const CONFIG = KK.config();
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -105,6 +110,8 @@ const FOLDER = KK.dataFolder();
 const FILE = path.join(FOLDER, 'queue.json');
 const CURSOR = path.join(FOLDER, 'orchestrator.json');
 const PLAN_FILE = path.join(FOLDER, 'plans.json');
+// The "Follow up" entries (queue.mjs follow writes; the board only reads).
+const FOLLOW_FILE = path.join(FOLDER, 'follow.json');
 // Documents in the reading view live in the main tree, like the source paths in the plan register (same env var as queue.mjs).
 const SOURCE_ROOT = process.env.QUEUE_PLAN_SOURCE_ROOT ?? MAIN_TREE;
 const GIT_ROOT = process.env.QUEUE_GIT ?? MAIN_TREE;
@@ -1587,6 +1594,118 @@ async function write(filePath, b) {
   return { status: 404, answer: { ok: false, message: 'unknown address' } };
 }
 
+// ---- Follow up: read only ----------------------------------------------------------------------------------------
+/** The entries with the status as it applies today (queueFollow.effectiveStatus), the open ones first, and the lines show prints. */
+function followData() {
+  const reg = fs.existsSync(FOLLOW_FILE)
+    ? F.normalize(JSON.parse(fs.readFileSync(FOLLOW_FILE, 'utf8')))
+    : F.emptyRegister();
+  return F.boardData(reg, F.dayDate(new Date()));
+}
+
+// The page is a shell without data (CSP: only script and style from 'self'); the script fetches /api/follow with the key
+// (the same sessionStorage key as the board) and builds the view with textContent, never innerHTML, so text from the
+// entries is never read as HTML. Colors from /theme.css (the palette in lib/queueBoard.js), light and dark.
+// A function: escHtml and TITLE are defined further down (and the title is read once per request, which is cheap).
+const followHtml = () => `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Follow up · ${escHtml(TITLE)}</title>
+<link rel="stylesheet" href="/theme.css">
+<link rel="stylesheet" href="/follow.css">
+</head>
+<body>
+<header><h1>Follow up</h1><a href="/">Back to the queue</a></header>
+<p id="lines" class="lines"></p>
+<main id="entries"><p>Loading ...</p></main>
+<script src="/follow.js"></script>
+</body>
+</html>
+`;
+const FOLLOW_CSS = `body { font-family: system-ui, sans-serif; margin: 0 auto; max-width: 960px; padding: 16px;
+  background: var(--color-surface-container-low); color: var(--color-on-surface); }
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
+a { color: var(--color-primary); }
+.lines { white-space: pre-line; color: var(--color-on-surface-variant); }
+article { background: var(--color-surface-container-lowest); border: 1px solid var(--color-outline-variant);
+  border-radius: 12px; padding: 12px 16px; margin: 12px 0; }
+article.to-report { border-color: var(--color-error); }
+.status { font-weight: 600; }
+article.to-report .status { color: var(--color-error); }
+h2 { font-size: 1.05rem; margin: 0 0 4px; overflow-wrap: anywhere; }
+ul { margin: 4px 0 8px; padding-left: 20px; }
+li, p { overflow-wrap: anywhere; }
+.small { color: var(--color-on-surface-variant); font-size: 0.9rem; }
+`;
+const FOLLOW_JS = `'use strict';
+(function () {
+  var KEY = 'queue-board-key';
+  function getKey() {
+    var m = /[#&]key=([A-Za-z0-9_-]+)/.exec(location.hash);
+    if (m) {
+      sessionStorage.setItem(KEY, m[1]);
+      history.replaceState(null, '', location.pathname + location.search);
+    }
+    return sessionStorage.getItem(KEY);
+  }
+  function el(tag, text, cls) {
+    var e = document.createElement(tag);
+    if (text != null) e.textContent = text;
+    if (cls) e.className = cls;
+    return e;
+  }
+  function list(rows) {
+    var ul = el('ul');
+    rows.forEach(function (r) { ul.appendChild(el('li', r)); });
+    return ul;
+  }
+  function values(l) {
+    if (!l.values) return '';
+    return ' [' + Object.keys(l.values).map(function (k) { return k + '=' + l.values[k]; }).join(', ') + ']';
+  }
+  function entry(p) {
+    var a = el('article', null, p.status);
+    a.appendChild(el('h2', p.id + ': ' + p.title));
+    var st = p.decided ? 'closed (' + p.status + ')' : p.status === 'to-report' ? 'TO REPORT' : p.status;
+    a.appendChild(el('div', st + ' · ' + p.start + ' -> ' + p.end + ' · owner ' + p.owner, 'status'));
+    a.appendChild(el('p', p.why));
+    a.appendChild(el('div', 'Goals', 'small'));
+    a.appendChild(list(p.goals.map(function (m) {
+      return m.name + ': ' + m.how + ' (expected: ' + m.expected + ')';
+    })));
+    var log = p.log.slice(-10).map(function (l) {
+      return String(l.at).slice(0, 16).replace('T', ' ') + ' ' + l.source + ': ' + (l.text || '') + values(l);
+    });
+    a.appendChild(el('div', 'Log (' + p.log.length + (p.log.length > 10 ? ', the last 10' : '') + ')', 'small'));
+    a.appendChild(log.length ? list(log) : el('p', '(empty)', 'small'));
+    if (p.decision) a.appendChild(el('p', 'Owner decision: ' + p.decision));
+    if (p.report) a.appendChild(el('p', 'Report: ' + p.report, 'small'));
+    else if (p.status === 'to-report') a.appendChild(el('p', 'Run: cq follow report ' + p.id, 'small'));
+    return a;
+  }
+  var target = document.getElementById('entries');
+  fetch('/api/follow', { headers: { 'X-Queue-Key': getKey() || '' } })
+    .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+    .then(function (s) {
+      target.textContent = '';
+      if (!s.ok) { target.appendChild(el('p', s.d.message || 'Could not fetch the follow-up entries.')); return; }
+      document.getElementById('lines').textContent = s.d.lines.join('\\n');
+      if (!s.d.entries.length)
+        target.appendChild(el('p', 'No follow-up entries. Add one: cq follow add --file <json>.'));
+      s.d.entries.forEach(function (p) { target.appendChild(entry(p)); });
+    })
+    .catch(function () { target.textContent = 'Could not fetch the follow-up entries.'; });
+})();
+`;
+// path -> [type, () => body]
+const FOLLOW_PAGE = {
+  '/follow': ['text/html; charset=utf-8', followHtml],
+  '/follow.css': ['text/css; charset=utf-8', () => FOLLOW_CSS],
+  '/follow.js': ['text/javascript; charset=utf-8', () => FOLLOW_JS],
+};
+
 // ---- HTTP -------------------------------------------------------------------------------------------------------
 const SECURITY = {
   'Content-Security-Policy':
@@ -1708,6 +1827,11 @@ const server = http.createServer(async (req, res) => {
         return send(res, 405, 'text/plain; charset=utf-8', 'GET only.');
       if (filePath === '/theme.css')
         return send(res, 200, 'text/css; charset=utf-8', THEME_CSS, { 'Cache-Control': 'no-cache' });
+      // Follow up: the read view (the shell without data; the data is fetched from /api/follow behind the key).
+      if (FOLLOW_PAGE[filePath]) {
+        const [type, body] = FOLLOW_PAGE[filePath];
+        return send(res, 200, type, body(), { 'Cache-Control': 'no-cache' });
+      }
       if (STATIC[filePath]) {
         const [file, type] = STATIC[filePath];
         const body =
@@ -1759,6 +1883,16 @@ const server = http.createServer(async (req, res) => {
         return json(res, 503, {
           ok: false,
           message: `Could not read the queue (${e?.code ?? e?.message ?? 'unknown error'}).`,
+        });
+      }
+    }
+    if (req.method === 'GET' && filePath === '/api/follow') {
+      try {
+        return json(res, 200, followData());
+      } catch (e) {
+        return json(res, 503, {
+          ok: false,
+          message: `Could not read the follow-up entries (${e?.code ?? e?.message ?? 'unknown error'}).`,
         });
       }
     }
@@ -1895,5 +2029,6 @@ server.listen(PORT, HOST, () => {
   if (!fs.existsSync(FILE)) console.log(`WARNING: could not find the queue ${FILE}.`);
   console.log(`Kanban board for the work queue is running (only on this machine).`);
   console.log(`Open: http://${HOST}:${PORT}/#key=${KEY}`);
+  console.log(`Follow up: http://${HOST}:${PORT}/follow#key=${KEY}`);
   console.log(`Queue: ${FILE}. Ctrl+C stops the board.`);
 });
