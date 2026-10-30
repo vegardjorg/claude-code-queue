@@ -4068,10 +4068,12 @@
           ? ` ${sd.project_bonus > 0 ? '+' : '−'} ${Math.abs(sd.project_bonus)} (the project's bonus)`
           : '')
       : String(k.score ?? '?');
+    // One flat list of dt/dd: el() flattens only one level, so a list of facts() lists would show up as
+    // "[object HTMLElement]" in the panel.
     return [
-      facts('Placement', stage),
-      facts('Dragged along by', pl.dragged_by ? idButton(pl.dragged_by) : null),
-      facts(
+      ...facts('Placement', stage),
+      ...facts('Dragged along by', pl.dragged_by ? idButton(pl.dragged_by) : null),
+      ...facts(
         'Score',
         el('span', { text: formula, title: 'Higher score is started first within the same stage.' }),
       ),
