@@ -194,10 +194,18 @@ function readRules(readGuard, migrations) {
   const list = (x) => (Array.isArray(x) ? x.filter((v) => typeof v === 'string' && v) : []);
   const largeOnes = list(lv.largeFiles);
   if (migrations?.folder) largeOnes.push(`${norm(migrations.folder).replace(/\/+$/, '')}/*.sql`);
-  // The reviewers in the setup (fixed per class and every helper agent, lib/queueHelpers.js) are track agents too.
+  // The reviewers in the setup (fixed per class and every helper agent, lib/queueHelpers.js) are track agents too,
+  // also the custom helpers registered in queue.json (`cq helpers add`).
   let reviewerTypes = [];
   try {
-    reviewerTypes = require('./queueHelpers.js').allReviewerTypes(require('./queueConfig.js').config());
+    const KK = require('./queueConfig.js');
+    let queue = null;
+    try {
+      queue = JSON.parse(fs.readFileSync(path.join(KK.dataFolder(), 'queue.json'), 'utf8'));
+    } catch {
+      // no queue yet: the config's helpers only
+    }
+    reviewerTypes = require('./queueHelpers.js').allReviewerTypes(KK.config(), queue);
   } catch {
     reviewerTypes = Object.keys(require('./queueHelpers.js').CATALOG);
   }

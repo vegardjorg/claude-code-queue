@@ -41,6 +41,21 @@ function defaultProtected() {
 }
 
 /**
+ * The protected paths plus extra exact paths (the custom helpers' agent files, queueHelpers.customPaths). `base`
+ * undefined = the defaults. The extra paths are protected even when the project emptied or changed the list.
+ * @param {string[]|undefined} base
+ * @param {string[]} extra
+ */
+function withPaths(base, extra = []) {
+  const out = [...(Array.isArray(base) ? base : defaultProtected())];
+  for (const p of extra ?? []) {
+    const n = norm(p);
+    if (n && !out.map(norm).includes(n)) out.push(n);
+  }
+  return out;
+}
+
+/**
  * Is the path protected?
  * @param {string} p
  * @param {string[]} [protectedPaths] default STANDARD.protectedPaths
@@ -182,4 +197,5 @@ module.exports = {
   migrCovered,
   taskIdFromBranch,
   assessGuard,
+  withPaths,
 };

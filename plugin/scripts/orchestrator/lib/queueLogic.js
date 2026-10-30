@@ -4845,13 +4845,13 @@ function reviewersFor(cls) {
  * All the reviewers for a task: the fixed ones for its class and the helpers that are on and hit (queueHelpers.js).
  * @returns {{ type: string, fixed: boolean, reasons: string[] }[]}
  */
-function reviewersForTask(o, { queue = null, changedPaths = [], missionText = null } = {}) {
-  return HELP.reviewersForTask(o, { config: cfg(), queue, changedPaths, missionText });
+function reviewersForTask(o, { queue = null, changedPaths = [], missionText = null, hashes = null } = {}) {
+  return HELP.reviewersForTask(o, { config: cfg(), queue, changedPaths, missionText, hashes });
 }
 
 /** All reviewer types (fixed and helpers, unique, in order): the agents that count toward a task. */
-function reviewerTypes() {
-  return HELP.allReviewerTypes(cfg());
+function reviewerTypes(queue = null) {
+  return HELP.allReviewerTypes(cfg(), queue);
 }
 
 /**
@@ -6250,16 +6250,19 @@ const SAME_TURN = 'Start these in the SAME turn:';
 /**
  * The agent list the orchestrator starts in ONE turn (in parallel): one line per agent with subagent_type and the message
  * (the track message mentions the prompt file; a reviewer gets the content of the prompt file as the message).
- * @param {{ subagent_type: string, prompt: string, message?: string|null }[]} agents
+ * `bare: true` keeps the name as it is: a custom helper lives in the project's .claude/agents/, never under the
+ * plugin's prefix.
+ * @param {{ subagent_type: string, prompt: string, message?: string|null, bare?: boolean }[]} agents
  */
 function concurrentBlock(agents) {
   if (!agents?.length) return [];
+  const ref = (x) => (x.bare ? x.subagent_type : require('./projectRoot.js').agentRef(x.subagent_type));
   return [
     SAME_TURN,
     ...agents.map((x) =>
       x.message
-        ? `  subagent_type=${require('./projectRoot.js').agentRef(x.subagent_type)} · message: ${x.message}`
-        : `  subagent_type=${require('./projectRoot.js').agentRef(x.subagent_type)} · message: the content of ${x.prompt}`,
+        ? `  subagent_type=${ref(x)} · message: ${x.message}`
+        : `  subagent_type=${ref(x)} · message: the content of ${x.prompt}`,
     ),
   ];
 }

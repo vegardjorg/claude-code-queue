@@ -131,15 +131,31 @@ describe('the register is open: builtin and custom helpers are treated alike', (
     expect(s['reviewer-docs']).toMatchObject({ source: 'custom', path: 'agents/docs.md', sha256: null });
     expect(H.helperSetup(conf({ helpers: { x: { sha256: 'nope' } } })).x.sha256).toBeNull();
   });
-  it('a custom helper is selected, switched and measured exactly like a builtin one', () => {
-    expect(types({ class: 'K', labels: ['db'] }, c)).toEqual(['my-db-check']);
-    expect(types({ class: 'K', labels: ['db'] }, c, { queue: { helpers: { 'my-db-check': { enabled: false } } } })).toEqual(
-      [],
-    );
+  it('a custom helper that is approved for its file is selected, switched and measured exactly like a builtin one', () => {
+    // The approval lives in queue.json (cq helpers approve), bound to the file's sha256; `hashes` is the file now.
+    const sha = 'ab'.repeat(32);
+    const approved = { 'my-db-check': { approved_sha256: sha, approved_path: '.claude/agents/my-db-check.md' } };
+    const hashes = { 'my-db-check': sha, 'reviewer-docs': null };
+    expect(types({ class: 'K', labels: ['db'] }, c, { queue: { helpers: approved }, hashes })).toEqual(['my-db-check']);
+    expect(
+      types({ class: 'K', labels: ['db'] }, c, {
+        queue: { helpers: { 'my-db-check': { ...approved['my-db-check'], enabled: false } } },
+        hashes,
+      }),
+    ).toEqual([]);
     expect(H.parseSwitch('off', 'my-db-check', c)).toEqual({ name: 'my-db-check', enabled: false });
     expect(H.allReviewerTypes(c)).toContain('my-db-check');
-    const row = H.helperRows(c, {}).find((r: { name: string }) => r.name === 'my-db-check');
-    expect(row).toMatchObject({ source: 'custom', enabled: true, measurement: 'No runs yet', when: 'When: label db.' });
+    const row = H.helperRows(c, { helpers: approved }, { hashes }).find((r: { name: string }) => r.name === 'my-db-check');
+    expect(row).toMatchObject({
+      source: 'custom',
+      enabled: true,
+      review: 'approved',
+      canEnable: true,
+      measurement: 'No runs yet',
+      when: 'When: label db.',
+    });
+    // Without an approval (or without the file checked) the same config selects nothing (helperCustom.test.ts).
+    expect(types({ class: 'K', labels: ['db'] }, c)).toEqual([]);
   });
 });
 

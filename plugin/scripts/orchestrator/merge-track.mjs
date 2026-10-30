@@ -133,8 +133,13 @@ function writeWithNewAttempt(file, text) {
   const { dataFolder, timeLog } = require('./lib/queueConfig.js');
   const id = G.taskIdFromBranch(branch, K.branchPrefix);
   let task = null;
+  // The agent files of the custom helpers (cq helpers add) are protected like .claude/, also when protectedPaths was
+  // changed: a track cannot rewrite an approved helper without owning its file.
+  let helperPaths = [];
   try {
     const queue = JSON.parse(fs.readFileSync(path.join(dataFolder(), 'queue.json'), 'utf8'));
+    const HELP = require('./lib/queueHelpers.js');
+    helperPaths = HELP.customPaths(HELP.helperSetup(K, queue));
     const tasks = queue.tasks || [];
     task = tasks.find((o) => o.branch === branch) ?? (id ? tasks.find((o) => o.id === id) : null) ?? null;
   } catch {
@@ -152,7 +157,7 @@ function writeWithNewAttempt(file, text) {
     sharedPatch: task?.shared_patch ?? [],
     migrBlock: task?.migr_block ?? null,
     migrations: K.migrations,
-    protectedPaths: Array.isArray(K.protectedPaths) ? K.protectedPaths : undefined,
+    protectedPaths: G.withPaths(Array.isArray(K.protectedPaths) ? K.protectedPaths : undefined, helperPaths),
     allowGuard: ALLOW_GUARD,
   });
   if (guard.drift.length > 0) {
