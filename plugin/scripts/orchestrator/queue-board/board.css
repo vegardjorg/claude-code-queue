@@ -1428,6 +1428,45 @@ input.switch:disabled {
   }
 }
 
+/* A custom helper: the badges (custom, scan level, review state). The words carry the meaning; the color repeats it. */
+.helper-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--distance-xs);
+  margin-top: var(--distance-xs);
+}
+
+.badge.tone-ok {
+  background: var(--color-primary-container);
+  color: var(--color-on-primary-container);
+  border-color: transparent;
+}
+
+.badge.tone-warn {
+  background: var(--color-module-amber-container);
+  color: var(--color-on-surface);
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.badge.tone-bad {
+  background: var(--color-error-container);
+  color: var(--color-on-error-container);
+  border-color: transparent;
+  font-weight: 600;
+}
+
+/* The switch of a custom helper that is not approved: disabled (not in progress), the reason is in the row. */
+.helper-locked input.switch:disabled {
+  cursor: not-allowed;
+}
+
+.helper-add-form .setting-control input {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+}
+
 .helper-measure {
   margin-top: var(--distance-sm);
 }

@@ -109,6 +109,8 @@ const U = require('./lib/queueUpdate.js');
 
 const CONFIG = KK.config();
 const HELP = require('./lib/queueHelpers.js');
+// The custom helpers' files (sha256 against the approval); only read and hashed, never run.
+const HF = require('./lib/helperFiles.js');
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 // The project root (two folders above scripts/orchestrator/). The queue lives in the main tree, as for queue.mjs: if the board runs from a
 // worktree, config().root already points to the main tree.
@@ -1519,11 +1521,19 @@ async function write(filePath, b) {
     return run(['limit', name, val], `limit ${name} ${val}`);
   }
   // The "Helper agents" tab: a switch goes through `cq helpers on|off <agent>` (queue.json, under the lock).
+  // A custom helper that is not approved for its file as it is now is refused here (and again in queue.mjs).
   if (filePath === '/api/helper') {
-    const names = Object.keys(HELP.helperSetup(CONFIG, null));
-    const h = T.helperSwitchArgs(b, names);
+    const { setup } = HF.verifiedSetup(CONFIG, queueNow(), MAIN_TREE);
+    const h = T.helperSwitchArgs(b, Object.keys(setup), setup);
     if (h.error) return no(h.error);
     return run(h.args, `helper ${h.args[2]} ${h.args[1]}`);
+  }
+  // "Add helper": a pasted path goes to `cq helpers add` (queue.mjs reads, copies, hashes and scans the file; the helper
+  // stays off). Approving is never possible from the board: that is Claude's review and the owner's yes, in the CLI.
+  if (filePath === '/api/helper-add') {
+    const h = T.helperAddArgs(b);
+    if (h.error) return no(h.error);
+    return run(h.args, `helper add ${h.args[2]}`);
   }
   if (filePath === '/api/lane') {
     const pid = pidOrNull(b.pid);
@@ -2025,7 +2035,8 @@ const server = http.createServer(async (req, res) => {
           night: L.nightGuard(queue),
           setup: setup(queue, stat),
           // The "Helper agents" tab: one row per helper with the switch, when it runs and the measurement.
-          helpers: HELP.helperRows(CONFIG, queue),
+          // A custom helper is checked against its approved sha256 (Needs review, Changed since approval).
+          helpers: HELP.helperRows(CONFIG, queue, { hashes: HF.currentHashes(CONFIG, queue, MAIN_TREE) }),
         });
       } catch (e) {
         return json(res, 503, {

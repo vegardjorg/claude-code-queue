@@ -1754,14 +1754,40 @@ function settings(queue, { migrations = true } = {}) {
 /**
  * The "Helper agents" tab writes a switch: the body { name, enabled } becomes `cq helpers on|off <name>` (queue.mjs does
  * the write under the lock, never the board). `names` are the helpers in the setup; anything else is refused here.
+ * `setup` (helperSetup with the files checked) refuses to switch on a custom helper that is not approved for its file
+ * as it is now, before queue.mjs is even asked (queue.mjs refuses it too). The board can never approve.
  * @returns {{ args: string[] } | { error: string }}
  */
-function helperSwitchArgs(b, names) {
+function helperSwitchArgs(b, names, setup = null) {
   const name = String(b?.name ?? '');
   if (!/^[a-z0-9][a-z0-9-]{0,63}$/i.test(name) || !(names ?? []).includes(name))
     return { error: `unknown helper agent ${name}` };
   if (typeof b.enabled !== 'boolean') return { error: 'enabled must be true or false' };
+  if (b.enabled) {
+    const block = require('./queueHelpers.js').enableBlock(name, setup?.[name] ?? null);
+    if (block) return { error: block };
+  }
   return { args: ['helpers', b.enabled ? 'on' : 'off', name] };
+}
+
+/**
+ * The "Add helper" field: the body { path, name? } becomes `cq helpers add <path> [--name <name>]`. queue.mjs reads,
+ * copies, hashes and scans the file on the server side and leaves the helper OFF; nothing from the file is run.
+ * Only a .md path without control characters, and a valid agent name, get through.
+ * @returns {{ args: string[] } | { error: string }}
+ */
+function helperAddArgs(b) {
+  const file = String(b?.path ?? '').trim();
+  if (!file || file.length > 1024 || /[\u0000-\u001f\u007f]/.test(file)) return { error: 'paste the path to the agent file (.md)' };
+  if (!/\.md$/i.test(file)) return { error: 'the agent file must be a .md file' };
+  if (file.startsWith('-')) return { error: 'the path cannot start with -' };
+  const args = ['helpers', 'add', file];
+  const name = String(b?.name ?? '').trim();
+  if (name) {
+    if (!/^[a-z0-9][a-z0-9-]{0,63}$/i.test(name)) return { error: `invalid agent name "${name}"` };
+    args.push('--name', name);
+  }
+  return { args };
 }
 
 /**
@@ -2147,6 +2173,7 @@ module.exports = {
   SETTINGS,
   settings,
   helperSwitchArgs,
+  helperAddArgs,
   SKILL_RULES,
   SKILL_SOURCE,
   QUEUE_HOOKS,

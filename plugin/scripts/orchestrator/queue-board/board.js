@@ -3355,25 +3355,50 @@
           text:
             'Optional reviewers on top of the fixed ones for the class (D: reviewer, D+: reviewer and reviewer-security). ' +
             'One runs for a task when it is on and one of its conditions hits. The conditions are in queue.config.json ' +
-            '(helpers); the switch here is saved in the queue.',
+            '(helpers), or for a custom helper set with cq helpers when; the switch here is saved in the queue. ' +
+            'A custom helper (an agent file of the project) can only be switched on after Claude has reviewed it and you have ' +
+            'approved it for the file as it is now; a later change to the file turns it off.',
         }),
         rows.length
           ? rows.map((h) => helperRow(h))
           : el('p', { class: 'empty', text: 'No helper agents in the setup (helpers in queue.config.json).' }),
       ),
+      helperAddForm(),
     );
+  }
+
+  /** The review state of a custom helper as a badge: the words carry the meaning, the color only repeats it. */
+  const REVIEW_TONE = { approved: 'ok', 'needs-review': 'warn', changed: 'bad', missing: 'bad', unverified: 'warn' };
+  const SCAN_TEXT = { red: 'Scan: red', yellow: 'Scan: yellow', green: 'Scan: green' };
+  const SCAN_TONE = { red: 'bad', yellow: 'warn', green: 'ok' };
+
+  /** "2026-10-30 22:59" in the viewer's own time (stored in UTC). */
+  function localTime(iso) {
+    const t = Date.parse(iso ?? '');
+    if (!Number.isFinite(t)) return '';
+    const x = new Date(t);
+    const p = (n) => String(n).padStart(2, '0');
+    return `${x.getFullYear()}-${p(x.getMonth() + 1)}-${p(x.getDate())} ${p(x.getHours())}:${p(x.getMinutes())}`;
   }
 
   function helperRow(h) {
     const id = `helper-${h.name}`;
+    const custom = h.source === 'custom';
     const error = el('p', { class: 'setting-error', role: 'alert', hidden: true });
+    // A custom helper can only be switched on when it is approved for its file as it is now. The board can never
+    // approve: that is Claude's review and the owner's yes (cq helpers approve), so the switch is off and disabled
+    // until then, with the reason next to it.
+    const locked = custom && h.canEnable === false;
+    const described = [`${id}-text`, `${id}-when`, `${id}-measure`];
+    if (custom) described.splice(1, 0, `${id}-review`);
     const box = el('input', {
       id,
       type: 'checkbox',
       role: 'switch',
       class: 'switch',
       checked: h.enabled,
-      'aria-describedby': `${id}-text ${id}-when ${id}-measure`,
+      disabled: locked,
+      'aria-describedby': described.join(' '),
     });
     box.addEventListener('change', () => saveHelper(h, box, error));
     const fixed = h.fixedIn?.length
@@ -3381,7 +3406,7 @@
       : '';
     return el(
       'div',
-      { class: 'setting-field helper-row', 'data-helper': h.name },
+      { class: `setting-field helper-row${locked ? ' helper-locked' : ''}`, 'data-helper': h.name },
       el(
         'div',
         { class: 'helper-head' },
@@ -3392,16 +3417,119 @@
           el('span', { class: 'helper-title', text: h.title }),
           ' ',
           el('code', { text: h.name }),
-          // A helper of the project's own (source custom) says so; the switch and the measurement are the same.
-          h.source === 'custom' ? el('span', { class: 'helper-source', text: ' (custom)' }) : null,
         ),
         el('span', { class: 'helper-state', 'aria-hidden': 'true', text: h.enabled ? 'On' : 'Off' }),
       ),
+      custom ? helperBadges(h) : null,
       el('p', { id: `${id}-text`, class: 'setting-explanation', text: h.text }),
+      custom ? helperReview(h, `${id}-review`, locked) : null,
       el('p', { id: `${id}-when`, class: 'setting-meta', text: h.when + fixed }),
       helperMeasure(h, `${id}-measure`),
       error,
     );
+  }
+
+  /** The badges of a custom helper: custom, the scan level and the review state. */
+  function helperBadges(h) {
+    const scan = h.scan?.level ? SCAN_TEXT[h.scan.level] ?? `Scan: ${h.scan.level}` : 'Not scanned';
+    return el(
+      'div',
+      { class: 'helper-badges' },
+      el('span', { class: 'badge helper-source', text: 'custom' }),
+      el('span', {
+        class: `badge helper-scan tone-${h.scan?.level ? SCAN_TONE[h.scan.level] ?? 'warn' : 'warn'}`,
+        'data-scan': h.scan?.level ?? 'none',
+        text: h.scan && h.scan.current === false ? `${scan} (older file)` : scan,
+      }),
+      el('span', {
+        class: `badge helper-review tone-${REVIEW_TONE[h.review] ?? 'warn'}`,
+        'data-review': h.review ?? 'unverified',
+        text: h.reviewText ?? 'Not verified',
+      }),
+    );
+  }
+
+  /** Who approved it and when, or why the switch is locked and how to get it reviewed. */
+  function helperReview(h, id, locked) {
+    const approved = h.approvedBy
+      ? `Approved by ${h.approvedBy}${h.approvedAt ? ` on ${localTime(h.approvedAt)}` : ''}${h.review === 'changed' ? ', for an earlier version of the file' : ''}.`
+      : 'Not approved yet.';
+    const how = locked
+      ? h.review === 'missing'
+        ? ` The agent file ${h.path ?? ''} is missing, so it cannot be switched on.`
+        : ` The switch unlocks after a review: ask Claude to "review the helper agent ${h.name}" (it scans and reads the file, reports to you and asks before approving). Approving is never done from the board.`
+      : '';
+    return el('p', { id, class: 'setting-meta helper-review-text', text: `${approved}${how} File: ${h.path ?? '(no path)'}.` });
+  }
+
+  /**
+   * "Add helper": paste the path of an agent file (.md). The server runs `cq helpers add`, which copies the file to
+   * .claude/agents/, hashes and scans it and leaves the helper off and locked until it is reviewed and approved.
+   */
+  function helperAddForm() {
+    const error = el('p', { id: 'helper-add-error', class: 'setting-error', role: 'alert', hidden: true });
+    const file = el('input', {
+      id: 'helper-add-path',
+      type: 'text',
+      autocomplete: 'off',
+      spellcheck: 'false',
+      placeholder: 'C:\\agents\\my-check.md',
+      'aria-describedby': 'helper-add-help',
+    });
+    const name = el('input', {
+      id: 'helper-add-name',
+      type: 'text',
+      autocomplete: 'off',
+      spellcheck: 'false',
+      'aria-describedby': 'helper-add-help',
+    });
+    const add = el('button', { type: 'button', id: 'helper-add', class: 'button button-muted', text: 'Add helper' });
+    add.addEventListener('click', () => addHelper(file, name, add, error));
+    for (const input of [file, name])
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          add.click();
+        }
+      });
+    return el(
+      'section',
+      { class: 'setting helper-add-form', 'aria-labelledby': 'setting-helper-add' },
+      el('h3', { id: 'setting-helper-add', class: 'setting-title', text: 'Add a custom helper' }),
+      el('p', {
+        id: 'helper-add-help',
+        class: 'setting-explanation',
+        text:
+          'Paste the path of an agent file (.md) on this machine. It is copied to .claude/agents/, hashed and scanned, ' +
+          'and stays off until Claude has reviewed it and you have approved it. Nothing in the file is run.',
+      }),
+      el(
+        'div',
+        { class: 'setting-field' },
+        el('label', { for: 'helper-add-path', text: 'Path to the agent file' }),
+        el('div', { class: 'setting-control' }, file),
+        el('label', { for: 'helper-add-name', text: 'Name (optional, otherwise the name in the file)' }),
+        el('div', { class: 'setting-control' }, name, add),
+        error,
+      ),
+    );
+  }
+
+  async function addHelper(file, name, button, errorEl) {
+    errorEl.hidden = true;
+    button.disabled = true;
+    try {
+      const answer = await writeWithGuard('/api/helper-add', { path: file.value.trim(), name: name.value.trim() });
+      if (!answer) return;
+      messageWithInfo('Helper added (off until reviewed and approved)', answer);
+      await getSettings();
+      $('helper-add-path')?.focus();
+    } catch (e) {
+      errorEl.textContent = e.message;
+      errorEl.hidden = false;
+      button.disabled = false;
+      file.focus();
+    }
   }
 
   /** The measurement: "No runs yet", or the numbers as a small list of facts. */
