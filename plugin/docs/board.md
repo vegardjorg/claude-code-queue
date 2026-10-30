@@ -20,13 +20,30 @@ the port.
 
 ## What it shows
 
-- **Queue:** columns per status (proposal, waiting, running, review, done), with class, estimate, value, blockers and
-  owner questions. Cards can be approved, parked, edited and reordered.
-- **Projects and areas:** progress, remaining minutes, focus period.
-- **Plans:** the plan register by area and priority, with sources and the "working now" marker.
-- **Graph:** dependencies between tasks.
-- **Cost:** measured cost per class and per task (API-equivalent USD and tokens), and the capacity estimate.
-- **QA list:** done tasks with the label `visual` that wait for the owner's manual check (`qa ok` / `qa deviation`).
+The switch at the top left changes between two workspaces, **Queue** and **Plans**.
+
+The Queue workspace has these tabs:
+- **Flat:** the columns **In queue** (ready now, blocked, proposed by agents and the batch queue), **In progress**,
+  **Review** and **Built**. Each card shows class, estimate, value, blockers and owner questions. Click a card for
+  its details and actions (to the top of the queue, pick, put on hold, add to the batch queue). Drag cards to
+  reorder them.
+- **Project lanes:** the same cards with one row per project; drag a lane to change the project's priority.
+- **Focus:** the order the queue takes work in, as Now, Next, Later and Waiting. Drag areas, projects and features
+  between the columns. "Areas …" creates and names the areas.
+- **Dependencies:** a graph of which tasks wait on which.
+- **Cloud:** tasks that can run in a cloud session, and the cloud sessions.
+- **Statistics:** done per day, added versus finished, time per class, cost per day (API-equivalent USD), context at
+  the end of tracks, key figures (including usage today), and the legend for the badges on the cards.
+
+**Waiting on you** (the button at the top) collects what needs the owner: owner questions, proposals to approve,
+QA (done tasks with the label `visual` that wait for a manual check, `qa ok` / `qa deviation`) and what is stuck.
+
+The **Plans** workspace is the plan register. **Overview** has one card per area, what is being worked on now and
+what waits on you. **Plan entries** shows the entries as a list, a priority map, a tree map or dependencies, with
+filters and the details of the selected entry. **Documents and agreements**, **Legal**, **Decisions** and **Launch**
+show the documents, the legal points, the owner decisions and what stands between the plan and launch.
+
+The gear holds the settings (theme, mascot, the queue's limits and the read-only setup) and the help.
 
 ## Logo
 

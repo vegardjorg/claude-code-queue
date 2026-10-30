@@ -45,8 +45,8 @@ a track adding a proposal) cannot corrupt the file. `cq undo` undoes the last ch
 | `project`, `feature`, `source` | Project id (must exist), feature name, and the plan section the task comes from |
 | `batched` | `true` for small low-value tasks: they go to the batch queue (`cq batch`) instead of their own track |
 
-Status flow: `proposed` (proposal) → `waiting` (waiting, approved) → `running` (running) → `review` → `done` (done),
-or `cancelled` (cancelled). Tasks added by an agent start as `proposed` and need `approve` (approve).
+Status flow: `proposed` → `waiting` (approved, ready to run) → `running` → `review` → `done`, or `cancelled`. Tasks
+added by an agent start as `proposed` and need `approve`; tasks the owner or the orchestrator adds start as `waiting`.
 
 ## Everyday commands
 
