@@ -16,9 +16,23 @@ By Vegard Cowie Jørgensen.
 
 ## Why I built it
 
-I run a large project mostly from my phone. I put tasks in the queue, often hundreds of them, and leave Claude Code
-working on them overnight. In the morning I open the board (a kanban-style dashboard), answer the questions the
-agents could not decide alone, and approve what comes next.
+I wanted a project that keeps moving without me sitting at it. With the queue, Claude Code runs a large project on
+its own for long stretches, often overnight or for days. It picks the next task, starts track agents, reviews and
+merges what they deliver, and starts the next tasks. When a task needs my decision, the queue does not stop: it parks
+that task and carries on with everything else that can be done. The decisions wait for me on the board, or the
+orchestrator lists them in the chat, each with context and a recommendation.
+
+Most of the time I work from my phone. Remote Control connects me to the orchestrator chat in Claude Code, so I only
+deal with a single chat. The work itself happens in fresh, small contexts for each task. The orchestrator keeps its
+state in the queue and in a handover note, and the chat is compacted automatically at 300k tokens of context, so it
+can keep going for days. From the phone I ask what is next, what is blocked or what a plan contains, and I answer the
+open questions. The tasks that waited on them then move on.
+
+On the desktop I use the board to keep track of the project. I go through the open questions, manage the
+dependencies between tasks, and choose the focus. With focus, I pick which areas of the project to work on now. The
+queue finishes those before it moves on to the next feature or step I want. The queue also helps Claude Code keep
+order: it keeps track of the plans, the tasks, what depends on what and what is running right now, so nothing gets
+lost between sessions.
 
 Before this, I worked in long chats, and the token bill grew much faster than the work did. Splitting the work into
 right-sized tasks, each in a fresh small context, cut my usage a lot. On a Claude Max (20x) plan, the queue now keeps
