@@ -431,7 +431,209 @@ function afterCompactText({
   return (start + body).slice(0, maxDraw);
 }
 
+// =============================================================
+// Context guards after automatic compaction (tracks, the orchestrator's pause advice and the track end gate).
+//
+// `autoCompactWindow: 300000` (settings.queue.json) applies to every session, the tracks too, so they compact at about
+// 267k. A PARTIAL guard at 280k alone would then practically never trigger. The rule: a track may compact once. PARTIAL
+// comes at the SECOND compaction, or at a hard limit, whichever happens first. After the first compaction the track
+// gets one short reminder to check the mission, the branch and its commits.
+// =============================================================
+
+/** Agent types the track guards below apply to (the queue's track agents; bare names, see projectRoot.bareAgentType). */
+const TRACK_AGENT_TYPES = new Set(['track', 'track-d']);
+
+/**
+ * Hard context limit for tracks (tokens), the same value as the old guard (trackGuard.TRACK_THRESHOLD). With the default
+ * autoCompactWindow (300k) the track compacts before it gets here, so the limit only triggers when the window is raised
+ * (or the compaction does not happen). Overridden with TRACK_CONTEXT_WARNING in hook-track-context.mjs.
+ */
+const TRACK_HARD_LIMIT = 280_000;
+
+/** The markers in hook-track-context.mjs's state file (the triggered list). */
+const KEY_COMPACT1 = 'compact1';
+const KEY_PARTIAL = 'partial';
+
+const COMPACT1_MESSAGE =
+  '[contextGuard] You have been compacted once. Check the mission path, the branch and what is committed before you ' +
+  'continue.';
+
+/** Has the PARTIAL message been given? State files from before this guard hold the threshold as a number (e.g. 280000). */
+function partialSaid(triggered = []) {
+  return triggered.includes(KEY_PARTIAL) || triggered.some((x) => typeof x === 'number');
+}
+
+/**
+ * Should the track agent get a message now (PostToolUse)?
+ * @param {{ agentType?: string|null, compactions?: number, context?: number|null, hardLimit?: number,
+ *   triggered?: Array<string|number> }} a
+ * @returns {null | { key: 'compact1'|'partial', cause: 'compaction'|'hard', message: string, compactions: number }}
+ */
+function assessTrackContext({
+  agentType,
+  compactions = 0,
+  context = null,
+  hardLimit = TRACK_HARD_LIMIT,
+  triggered = [],
+} = {}) {
+  if (!agentType || !TRACK_AGENT_TYPES.has(agentType)) return null;
+  if (partialSaid(triggered)) return null; // PARTIAL is given once; after it no reminder is needed
+  const n = Number.isFinite(compactions) && compactions > 0 ? compactions : 0;
+  const over =
+    typeof context === 'number' && Number.isFinite(context) && hardLimit > 0 && context >= hardLimit;
+  if (n >= 2 || over) {
+    const why =
+      n >= 2
+        ? `You have been compacted ${n} times`
+        : `Your context is about ${k(context)} tokens (hard limit ${k(hardLimit)})`;
+    return {
+      key: KEY_PARTIAL,
+      cause: n >= 2 ? 'compaction' : 'hard',
+      compactions: n,
+      message:
+        `[contextGuard] ${why}. Finish the step you are on, commit, write handover.md (what is done, what remains, ` +
+        'next command) and deliver PARTIAL. Every turn now costs much more than in a new track.',
+    };
+  }
+  if (n === 1 && !triggered.includes(KEY_COMPACT1))
+    return { key: KEY_COMPACT1, cause: 'compaction', compactions: n, message: COMPACT1_MESSAGE };
+  return null;
+}
+
+// ----- Pause advice (hook-context.mjs, the orchestrator only) -----
+
+/** The pause advice is given from this context size (tokens). Overridden with CONTEXT_PAUSE. */
+const PAUSE_THRESHOLD = 150_000;
+
+const PAUSE_TIP =
+  'Tip: run /compact before the break. A pause of over 1 h writes the whole context to the cache again.';
+
+/**
+ * Phrases that say the owner is leaving the machine, in English and Norwegian (the queue's first users). Whole words
+ * only: "pause" in "pauseButton" must not trigger. \b does not work with non-ASCII letters, so the boundaries are
+ * letter/digit lookarounds with the u flag. "away" and "back in" alone are left out on purpose ("right away", "put it
+ * back in").
+ */
+const PAUSE_WORDS = [
+  'have to go',
+  'got to go',
+  'gotta go',
+  'heading out',
+  'leaving now',
+  'stepping away',
+  'be back',
+  'back later',
+  'afk',
+  'brb',
+  'going to bed',
+  'good night',
+  'taking a break',
+  'pause',
+  'må reise',
+  'skal reise',
+  'går nå',
+  'drar nå',
+  'må gå',
+  'borte',
+  'tilbake om',
+  'legger meg',
+  'god natt',
+];
+const PAUSE_RE = new RegExp(
+  `(?<![\\p{L}\\p{N}])(?:${PAUSE_WORDS.map((o) => o.replace(/ /g, '\\s+')).join('|')})(?![\\p{L}\\p{N}])`,
+  'iu',
+);
+
+/** Does the message say the owner is leaving the machine? System messages (agent done and the like) never count. */
+function isPauseMessage(prompt) {
+  const p = String(prompt ?? '');
+  if (isSystemMessage(p)) return false;
+  return PAUSE_RE.test(p);
+}
+
+/**
+ * The pause advice as hook output (advice only, never block), or null. The shape is the cost guard's
+ * ({ systemMessage, additionalContext }), so hook-context.mjs merges it the same way.
+ * @param {{ prompt: string, n: number|null, orchestrator: boolean, threshold?: number }} a
+ */
+function pauseAdvice({ prompt, n, orchestrator, threshold = PAUSE_THRESHOLD }) {
+  if (!orchestrator) return null;
+  if (typeof n !== 'number' || !Number.isFinite(n) || n <= threshold) return null;
+  if (!isPauseMessage(prompt)) return null;
+  return { systemMessage: PAUSE_TIP, additionalContext: PAUSE_TIP };
+}
+
+// ----- SubagentStop gate (hook-track-end.mjs) -----
+
+const END_REASON =
+  'Finish: commit the work and write the RESULT line (or PARTIAL/REFUSE with the reason) before you stop.';
+
+/** An end line: the RESULT line, or PARTIAL / REFUSE (with a reason). */
+const END_LINE = /\bRESULT\s+status=|\bPARTIAL\b|\bREFUSE[DS]?\b/;
+
+/**
+ * Has the agent written an end line in its last message? Looks at `last_assistant_message` from the hook input and at the
+ * last assistant rows of the transcript (text, and `message` in a SubagentHandback call, where the report is delivered).
+ * @param {{ lastMessage?: string|null, text?: string|null, maxRows?: number }} a
+ */
+function hasEndLine({ lastMessage = null, text = null, maxRows = 3 } = {}) {
+  if (lastMessage && END_LINE.test(String(lastMessage))) return true;
+  const lines = String(text ?? '').split('\n');
+  let seen = 0;
+  for (let i = lines.length - 1; i >= 0 && seen < maxRows; i--) {
+    const l = lines[i];
+    if (!l.includes('"assistant"')) continue;
+    let o;
+    try {
+      o = JSON.parse(l);
+    } catch {
+      continue; // the first line of the tail may be cut
+    }
+    if (o?.type !== 'assistant' || !Array.isArray(o?.message?.content)) continue;
+    seen++;
+    for (const c of o.message.content) {
+      const parts =
+        c?.type === 'text'
+          ? [c.text]
+          : c?.type === 'tool_use'
+            ? [c?.input?.message, c?.input?.content]
+            : [];
+      if (parts.some((b) => typeof b === 'string' && END_LINE.test(b))) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Should the gate stop the agent (SubagentStop, decision: block)?
+ * @param {{ agentType?: string|null, commits: number|null, hasEndLine: boolean, alreadyBlocked: boolean,
+ *   stopHookActive?: boolean }} a  commits = the track's own commits on its branch since head_start (null = unknown).
+ * @returns {null | { decision: 'block', reason: string }}
+ * Fails open: an unknown agent type, an unknown commit count or a block already given gives null.
+ */
+function assessEndGate({ agentType, commits, hasEndLine: ended, alreadyBlocked, stopHookActive = false }) {
+  if (!agentType || !TRACK_AGENT_TYPES.has(agentType)) return null;
+  if (alreadyBlocked || stopHookActive) return null; // once per agent: no loop
+  if (typeof commits !== 'number' || !Number.isFinite(commits)) return null;
+  if (commits > 0 || ended) return null;
+  return { decision: 'block', reason: END_REASON };
+}
+
 module.exports = {
+  TRACK_AGENT_TYPES,
+  TRACK_HARD_LIMIT,
+  KEY_COMPACT1,
+  KEY_PARTIAL,
+  COMPACT1_MESSAGE,
+  partialSaid,
+  assessTrackContext,
+  PAUSE_THRESHOLD,
+  PAUSE_TIP,
+  isPauseMessage,
+  pauseAdvice,
+  END_REASON,
+  hasEndLine,
+  assessEndGate,
   COMPACT_COMMAND,
   HANDOVER_NOTE,
   AUTOCOMPACT_ON,

@@ -1,5 +1,5 @@
 {
-  "description": "claude-code-queue: context, read and push guards, compaction re-injection and the subagent time log. Every hook exits at once in projects without queue.config.json.",
+  "description": "claude-code-queue: context, read and push guards, compaction re-injection, the subagent time log and the track end gate. Every hook exits at once in projects without queue.config.json.",
   "hooks": {
     "PreToolUse": [
       {
@@ -67,6 +67,11 @@
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/orchestrator/hook-time.mjs\"",
             "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/orchestrator/hook-track-end.mjs\"",
+            "timeout": 20
           }
         ]
       }

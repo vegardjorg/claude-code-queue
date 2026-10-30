@@ -32,8 +32,16 @@ context size. The system keeps both small:
 
 - **Small, self-contained missions.** A track starts with only its mission and reads excerpts (`grep -n`, then
   `offset`/`limit`), never whole files twice.
-- **Context cap.** A track that reaches about 300k context commits, writes `handover.md` (handover) and delivers
-  PARTIAL; a new agent continues. The hook `hook-track-context.mjs` enforces this on tool calls.
+- **Context cap.** A track may compact once (`autoCompactWindow` applies to tracks too). After the first compaction
+  it gets one reminder to check the mission, the branch and its commits. At the second compaction, or at the hard
+  limit 280k (`TRACK_CONTEXT_WARNING`), it is told to commit, write `handover.md` (handover) and deliver PARTIAL; a
+  new agent continues. The hook `hook-track-context.mjs` enforces this on tool calls.
+- **End gate.** `hook-track-end.mjs` (SubagentStop) stops a track ONCE when it ends with no own commits on its branch
+  (counted against `head_start` and the base branch) and no end line (`RESULT`, `PARTIAL` or `REFUSE`). It fails
+  open: an unknown task, branch or git error lets the track stop.
+- **Pause advice.** When the owner writes that they are leaving ("have to go", "good night", "pause") and the
+  orchestrator is over 150k (`CONTEXT_PAUSE`), `hook-context.mjs` suggests `/compact` before the break, because a
+  pause of over an hour writes the whole context to the cache again.
 - **Orchestrator compaction.** `hook-context.mjs` warns, then winds down, then stops the orchestrator chat as it
   grows; `/compact` with a focus is the normal path, and `hook-after-compact.mjs` re-injects the queue state after
   compaction, so the summary does not have to carry it. `autoCompactWindow` is set to 300000. Automatic compaction is

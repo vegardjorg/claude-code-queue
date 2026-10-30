@@ -14,6 +14,9 @@
 //   5. --claude-md: adds the line @CLAUDE.queue.md to CLAUDE.md (creates the file when missing).
 //   6. --settings: adds the recommended settings to .claude/settings.json (1 h prompt cache for subagents, compaction
 //      at 300k, worktrees from HEAD). A plugin cannot set these itself; without the flag they are only listed.
+//   Hooks (install.mjs only, a plugin brings hooks/hooks.json): every hook in settings.queue.json is added next to the
+//   project's own, also hooks added in a later version (e.g. hook-track-end.mjs on SubagentStop). The two files must
+//   list the same scripts (__tests__/setup.test.ts checks it).
 // The target is the project's main tree (lib/projectRoot.js), or --target.
 // =============================================================
 import fs from 'node:fs';

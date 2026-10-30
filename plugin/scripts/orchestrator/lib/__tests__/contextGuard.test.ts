@@ -765,4 +765,19 @@ describe('hook-context.mjs and queue.mjs: the wind-down step end to end', () => 
     expect(run('queue.mjs', ['orchestrator', 'stop']).code).toBe(0);
     expect(run('queue.mjs', ['start', 'A']).code).toBe(0);
   });
+
+  it('pause advice: for the orchestrator over 150k, never block, not for "pauseButton"', () => {
+    expect(run('queue.mjs', ['orchestrator', 'pulse', '--session', 'queue A']).code).toBe(0);
+    const out = hook('s1', 200_000, 'I have to go, back later');
+    expect(out).not.toHaveProperty('decision');
+    expect(out.systemMessage).toContain('/compact before the break');
+    expect(hook('s1', 200_000, 'Add a pauseButton to the board')).toBeNull();
+    expect(hook('s1', 120_000, 'pause now')).toBeNull(); // below 150k
+    // Above the notice limit the advice is merged into the notice.
+    const v = hook('s1', 260_000, 'taking a break');
+    expect(v.systemMessage).toMatch(/Context about 260k/);
+    expect(v.systemMessage).toContain('/compact before the break');
+    // Not the orchestrator: no advice.
+    expect(hook('s9', 200_000, 'pause', false)).toBeNull();
+  });
 });

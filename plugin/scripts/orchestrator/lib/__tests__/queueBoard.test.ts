@@ -916,7 +916,11 @@ describe('settings and setup', () => {
       V.hooksCoverage({
         hooks: {
           ...fullSettings().hooks,
-          SubagentStop: [{ hooks: [{ command: 'node scripts\\orchestrator\\hook-time.mjs' }] }],
+          SubagentStop: [
+            // the other SubagentStop hooks (the track end gate) stay as they are
+            ...fullSettings().hooks.SubagentStop.filter((e) => !e.hooks[0].command.includes('hook-time.mjs')),
+            { hooks: [{ command: 'node scripts\\orchestrator\\hook-time.mjs' }] },
+          ],
         },
       }).all,
     ).toBe(true);

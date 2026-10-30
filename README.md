@@ -272,7 +272,9 @@ The orchestrator added about 18 turns and about 0.75 USD per task. Its target is
 
 **Measured: where tokens were wasted, and what the plugin does about it.**
 - Turns taken while a track's context was above about 300k tokens were about 61% of track cost. So a track stops at
-  about 300k: it commits, writes a handover note, and a fresh agent continues.
+  about 300k: it commits, writes a handover note, and a fresh agent continues. A track may compact once; at the second
+  compaction it delivers PARTIAL. A SubagentStop gate (`hook-track-end.mjs`) sends a track back once if it stops with
+  neither a commit nor a RESULT line.
 - Prompt cache expiry while waiting was about 23% of all usage. So there are no sleep or polling loops, and
   subagents use a 1-hour cache.
 - Fix rounds sent to an agent that already held 400k to 900k tokens of context were 35 to 38% of track cost. So fix

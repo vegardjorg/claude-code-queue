@@ -49,6 +49,11 @@
 // <dataFolder>/cost-guard-log.jsonl (read with cost-guard-statistics.mjs). The thresholds and text live in lib/costGuard.js,
 // with tests. COST_GUARD_BY=1 turns the guard off.
 //
+// PAUSE ADVICE: when the owner's message says they are leaving the machine ("have to go", "be back", "good night",
+// "pause" and so on, whole words, English and Norwegian) and the active orchestrator session is over 150k
+// (CONTEXT_PAUSE overrides), one line is added: run /compact before the break (a pause of over 1 h writes the whole
+// context to the cache again). Advice only, never block. The rules: contextGuard.pauseAdvice/isPauseMessage, with tests.
+//
 // Fails OPEN: any internal error gives no output and exit 0, so the hook never blocks normal work.
 // =============================================================
 import fs from 'node:fs';
@@ -234,7 +239,7 @@ function costGuard(now) {
   return COST.hookText(v.notices);
 }
 
-/** Adds the cost guard's text to the context hook's output (a block stands alone). */
+/** Adds an advice's text (cost guard, pause advice) to the context hook's output (a block stands alone). */
 function merge(out, cost) {
   if (!cost) return out;
   if (out?.decision === 'block') return out;
@@ -274,9 +279,16 @@ async function main() {
       cost = null;
     }
   }
+  // Pause advice: the owner says they are leaving, and the orchestrator session is over 150k. Advice only, never block.
+  const pause = KV.pauseAdvice({
+    prompt: String(input.prompt || ''),
+    n,
+    orchestrator: bind.orchestrator,
+    threshold: Number(process.env.CONTEXT_PAUSE) || KV.PAUSE_THRESHOLD,
+  });
   if (n == null || n < Math.min(g.notice, g.windDown, g.compact)) {
     if (bind.changed) writeCursor(bind.cursor);
-    const out = merge(null, cost);
+    const out = merge(merge(null, cost), pause);
     if (out) process.stdout.write(JSON.stringify(out));
     return;
   }
@@ -299,8 +311,8 @@ async function main() {
   if (bind.changed || b.setWindDown) writeCursor(cursor);
 
   const out = merge(
-    KV.hookOutput(b, { n, orchestrator: bind.orchestrator, g, compactions, mode }),
-    cost,
+    merge(KV.hookOutput(b, { n, orchestrator: bind.orchestrator, g, compactions, mode }), cost),
+    pause,
   );
   if (out) process.stdout.write(JSON.stringify(out));
 }
