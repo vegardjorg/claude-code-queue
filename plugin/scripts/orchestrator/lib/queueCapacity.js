@@ -12,7 +12,8 @@
 // the budget guard and `log-time.mjs --cost`). One constant, `usd_per_100`, says how many such USD in the TIME LOG
 // correspond to 100 % of the weekly quota. The time log covers only the subagents; the orchestrator session and other sessions are outside,
 // but are included in the constant as long as their share is stable. That is why the constant is calibrated against the percentage Claude shows on
-// the usage page (`queue.mjs capacity --calibrate <percent>`), not against list prices.
+// the usage page (`queue.mjs capacity --calibrate <percent>`), not against list prices. `--calibrate auto` takes the
+// percentage from the status line instead (statusline.mjs saves the last rate_limits reading; lib/rateLimits.js).
 //
 // No I/O here (beyond reading the config): queue.mjs reads the queue and the time log and calls these functions. Tested in
 // scripts/orchestrator/lib/__tests__/queueCapacity.test.ts.
@@ -21,6 +22,7 @@
 
 const L = require('./queueLogic.js');
 const { config } = require('./queueConfig.js');
+const RL = require('./rateLimits.js');
 
 const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 const HOUR_MS = 3_600_000;
@@ -452,6 +454,8 @@ module.exports = {
   queueCost,
   forecast,
   calibrate,
+  readObserved: RL.readObserved,
+  observedPercent: RL.observedPercent,
   quotaCap,
   timeText,
   lines,

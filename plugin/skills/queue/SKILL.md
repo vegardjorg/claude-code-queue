@@ -22,8 +22,9 @@ Run these in parallel where possible:
 1. `cq takeover`: one status picture with
    - at the TOP: the wind-down flag (the previous orchestrator passed about 350k context) and the newest handover note
      `scripts/.queue/handover-*.md` (normally the running `handover-ongoing.md`). If a note is newer than the last
-     pulse of the previous session, read ALL of it before the report: it has active tasks, review packages, open owner
-     questions and the next command.
+     pulse of the previous session, run `cq handover archive` and then `cq handover now` before the report: the
+     "Now" part has active tasks, review packages, open owner questions and the next command. Never read the whole note
+     or `handover-archive/`; grep them only when you need an old detail.
    - when the queue was last changed, and a warning if another orchestrator may still be alive
    - branch, HEAD, commits ahead of the remote, and any leftover `index.lock`
    - every active task with commits on `queue/<id>` and an assessment: DELIVERED, EMPTY or UNCERTAIN
@@ -97,7 +98,10 @@ Follow `parallel-wave` ("Continuous queue") unchanged. Specific to taking over:
   uncommitted.
 - **Running handover note:** keep `scripts/.queue/handover-ongoing.md` up to date after every merge and every owner
   decision (active tasks with branch, worktree and prompt; review packages; open owner questions in plain language;
-  decisions; scratchpad path; next command). Then both compaction and an emergency rotation are cheap.
+  decisions; scratchpad path; next command). Then both compaction and an emergency rotation are cheap. The note has
+  two parts: a `## Now` section at the top (the current state, at most 40 lines, rewritten in place) and a dated log
+  below it. `cq handover archive` moves log entries older than 24 h to `handover-archive/<year-month>.md`; run it
+  at every compaction. After compaction only the "Now" part is injected.
 - **Compaction is the default:** at about 300k context `hook-context.mjs` gives the owner a ready `/compact keep: …`
   line to paste (you cannot run `/compact` yourself). Update the note, finish the step you are in, and do not start
   long new operations in the middle. After compaction `hook-after-compact.mjs` injects a resume instruction and the

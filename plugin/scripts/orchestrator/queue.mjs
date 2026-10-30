@@ -78,6 +78,9 @@
 //   node scripts/orchestrator/queue.mjs capacity --mode notice|cap|off   (fill: only a notice (default), a cap on new tracks
 //                                                                  that is overridden with fill --over-quota, or off)
 //   node scripts/orchestrator/queue.mjs capacity --set <usd_per_100>   (set the constant directly)
+//   node scripts/orchestrator/queue.mjs capacity --calibrate auto   (the 7-day percentage the status line saw last,
+//                                                                  <dataFolder>/rate-limits.json; refused when it is
+//                                                                  older than 1 h or from another quota week)
 //   node scripts/orchestrator/queue.mjs capacity --cloud-credit <left_usd> [--total <usd>] [--expires <ISO>]
 //                                                                  (a separate pot for cloud sessions, set by hand)
 //
@@ -336,6 +339,14 @@
 // `orchestrator pulse --session "<new name>"` (the new session takes the cursor) or `orchestrator stop` also resets.
 // `start --force` (the owner's word) overrides.
 //
+//   node scripts/orchestrator/queue.mjs handover archive [--dry]   (moves dated log entries older than 24 h from
+//                                                                  <dataFolder>/handover-ongoing.md to
+//                                                                  handover-archive/<year-month>.md and warns when "Now"
+//                                                                  has over 40 lines; --dry writes nothing. Run at every
+//                                                                  compaction and at takeover; lib/queueHandover.js)
+//   node scripts/orchestrator/queue.mjs handover now               (prints only the "Now" part of the note; the archive is
+//                                                                  read with grep when needed)
+//
 // Exit codes: 0 ok, 1 error, 3 empty queue (state), 4 the daily budget is used up (next, start), 5 night pause (next,
 // start), 6 the orchestrator is in windDown (next, start, fill) or the queue has changed since the preview
 // (--expect-changed).
@@ -366,6 +377,7 @@ const P = require('./lib/queuePlan.js');
 const S = require('./lib/queueStatistics.js');
 const CH = require('./lib/queueCapacity.js');
 const KK = require('./lib/queueConfig.js');
+const HO = require('./lib/queueHandover.js');
 
 // The project's settings (queue.config.json merged with the defaults in lib/queueConfig.js).
 const CONFIG = KK.config();
@@ -3284,8 +3296,16 @@ if (command === 'init') {
   const now = time ? Date.parse(time) : Date.now();
   if (!Number.isFinite(now)) die('--time must be an ISO time, e.g. 2026-10-23T10:35+02:00');
   if (val('--calibrate') != null) {
+    let percent = val('--calibrate');
+    if (percent === 'auto') {
+      // The status line (statusline.mjs) saves the last rate_limits it saw; use its 7-day percentage.
+      const p = CH.observedPercent(CH.readObserved(FOLDER), { now });
+      if (p.error) die(`--calibrate auto: ${p.error}. Give the percentage from Claude instead.`);
+      percent = p.percent;
+      console.log(`Calibration point from the status line: ${p.percent} % (seen ${p.age_min} min ago).`);
+    }
     const r = edit((queue) => {
-      const k = CH.calibrate(queue, { percent: val('--calibrate'), events, now });
+      const k = CH.calibrate(queue, { percent, events, now });
       if (k.error) die(k.error);
       queue.capacity = k.capacity;
       return k;
@@ -4515,12 +4535,15 @@ if (command === 'init') {
       }
     }
   }
+} else if (command === 'handover') {
+  // ---- The ongoing handover note in two parts (rules: lib/queueHandover.js) ----
+  handoverCommand();
 } else {
   die(
     'Use: cq <init|add|approve|show|next|start|set|edit|resolve|resolutions|question|limit|state|trackFile|' +
       'projects|project|edit-many|pickable|pick|deliver|release|qa|external|orchestrator|cloud|cloud-package|batch|' +
       'area|areas|focus|park|continue|rank|undo|classify|plan|fill|receive|merge|info|activeOnes|next-migr|' +
-      'capacity|compact|diagnose|cost> ...  (see the top of the file)',
+      'capacity|compact|diagnose|cost|handover> ...  (see the top of the file)',
     command ? 1 : 0,
   );
 }
@@ -4718,4 +4741,50 @@ function externalScan() {
     for (const s of proposed) out.push(cut(`  ${s.proposed}   "${s.subject}"`, WIDTH));
   }
   console.log(out.join('\n'));
+}
+
+// ---- queue.mjs handover: the ongoing note in two parts ---------------------------------------------------------
+/**
+ * `handover archive [--dry]` and `handover now`. The orchestrator edits the note by hand (not under the queue lock), so
+ * the write is atomic (tmp + rename), and the archive is written BEFORE the note: if the call crashes midway, the lines
+ * are in both files (never in neither). The rules live in lib/queueHandover.js.
+ */
+function handoverCommand() {
+  const sub = a[1];
+  const note = path.join(FOLDER, 'handover-ongoing.md');
+  const archiveFolder = path.join(FOLDER, 'handover-archive');
+  if (sub !== 'archive' && sub !== 'now') die('Use: cq handover <archive [--dry]|now>');
+  let text = '';
+  try {
+    text = fs.readFileSync(note, 'utf8');
+  } catch {
+    die(`Could not find ${note}`);
+  }
+  if (sub === 'now') {
+    const part = HO.nowPart(text);
+    if (part === null) die('The note has no "## Now" section.');
+    console.log(part);
+    return;
+  }
+  const dry = a.includes('--dry');
+  const now = new Date();
+  const r = HO.archive(text, now);
+  const months = Object.keys(r.archive).sort();
+  if (!dry && r.moved > 0) {
+    fs.mkdirSync(archiveFolder, { recursive: true });
+    for (const m of months)
+      fs.appendFileSync(path.join(archiveFolder, `${m}.md`), HO.archiveAddition(r.archive[m], now));
+    const tmp = `${note}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, r.keep);
+    fs.renameSync(tmp, note);
+  }
+  const before = text.replace(/\r\n/g, '\n').split('\n').length;
+  const after = r.keep.split('\n').length;
+  console.log(
+    `${dry ? '(dry run, nothing written) ' : ''}handover archive: ${r.moved} entries ` +
+      `(${r.movedLines} lines) ${dry ? 'would be moved' : 'moved'}` +
+      (months.length ? ` to handover-archive/${months.map((m) => `${m}.md`).join(', ')}` : '') +
+      `; the note ${before} -> ${after} lines; "Now" ${r.nowLines ?? '-'} lines (limit ${HO.NOW_MAX_LINES}).`,
+  );
+  for (const w of r.warnings) console.log(`WARNING: ${w}`);
 }

@@ -359,6 +359,8 @@ function withoutWindDown(cursor, sessionId) {
 
 /** Cap for additionalContext after compaction (about 3k tokens). */
 const AFTER_COMPACT_MAX_DRAW = 12_000;
+/** Cap for the handover note's "Now" part inside that text (the queue view is cut first). */
+const AFTER_COMPACT_NOW_MAX = 4_000;
 
 /**
  * The resume instruction after compaction: what the orchestrator must do right away, without waiting for
@@ -369,7 +371,9 @@ function resumeText(mode) {
   const cq = require('./projectRoot.js').cqCommand();
   return [
     'RESUME NOW, without waiting for the owner:',
-    `  1. Read the handover note ${HANDOVER_NOTE} (Read; the scratchpad path and open matters are there).`,
+    `  1. Read the "Now" part of the handover note ${HANDOVER_NOTE} (below, or \`${cq} handover now\`; the ` +
+      `scratchpad path and open matters are there). Run \`${cq} handover archive\` first; grep the rest of the ` +
+      'note and handover-archive/ only when you need an old detail.',
     `  2. ${cq} orchestrator pulse`,
     `  3. Receive tracks that have delivered (report.md exists): ${cq} receive <id>`,
     `  4. ${cq} fill --scratchpad <scratchpad from the note>, and start ALL the agents it ` +
@@ -388,8 +392,10 @@ function resumeText(mode) {
  * the cap is reached.
  * @param {{ show: string, question: Array<{ sp: string, text?: string|null, recommendation?: string|null }>,
  *   unpushed: number|null, base?: string, compactions: number, windDownRevoked?: boolean,
- *   mode?: 'auto'|'manual', g?: object, maxDraw?: number }} input
+ *   mode?: 'auto'|'manual', g?: object, maxDraw?: number, now?: string|null }} input
  *   `base` = baseBranch (config().baseBranch) for the line about unpushed commits.
+ *   `now` = the "Now" part of the handover note (queueHandover.nowPart); null = the note has no "## Now" section,
+ *   undefined = no note (nothing is said).
  */
 function afterCompactText({
   show,
@@ -401,6 +407,7 @@ function afterCompactText({
   mode = 'manual',
   g = limits(),
   maxDraw = AFTER_COMPACT_MAX_DRAW,
+  now = undefined,
 }) {
   const header = [
     `[hook-after-compact] The session has been compacted (compaction no. ${compactions} in the session; mode: ` +
@@ -412,6 +419,19 @@ function afterCompactText({
       'The wind-down for this session is revoked (the owner compacted), so cq fill works again.',
     );
   header.push(resumeText(mode));
+  if (now === null)
+    header.push(
+      'The handover note has no "## Now" section. Add one at the top (current state, active tracks, next step, at ' +
+        'most 40 lines) so the next compaction and takeover can read only that part.',
+    );
+  else if (typeof now === 'string' && now.trim()) {
+    const cutNow = '\n… (truncated; run cq handover now)';
+    const n = now.trimEnd();
+    header.push(
+      'The handover note, "Now" part (read from the file just now):\n' +
+        (n.length <= AFTER_COMPACT_NOW_MAX ? n : n.slice(0, AFTER_COMPACT_NOW_MAX - cutNow.length) + cutNow),
+    );
+  }
   header.push(`Unpushed commits on ${base}: ${unpushed == null ? 'unknown' : unpushed}`);
   const openOnes = (question ?? []).map(
     (s) =>

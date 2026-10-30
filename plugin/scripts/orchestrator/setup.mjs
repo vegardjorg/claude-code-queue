@@ -13,7 +13,9 @@
 //   4. .gitignore: the data folder and the agents' worktrees.
 //   5. --claude-md: adds the line @CLAUDE.queue.md to CLAUDE.md (creates the file when missing).
 //   6. --settings: adds the recommended settings to .claude/settings.json (1 h prompt cache for subagents, compaction
-//      at 300k, worktrees from HEAD). A plugin cannot set these itself; without the flag they are only listed.
+//      at 300k, worktrees from HEAD, the status line statusline.mjs). A plugin cannot set these itself; without the flag
+//      they are only listed. A plugin install writes the status line with the plugin's absolute (versioned) path, so
+//      run --settings again after a plugin update; a status line of your own is kept.
 //   Hooks (install.mjs only, a plugin brings hooks/hooks.json): every hook in settings.queue.json is added next to the
 //   project's own, also hooks added in a later version (e.g. hook-track-end.mjs on SubagentStop). The two files must
 //   list the same scripts (__tests__/setup.test.ts checks it).
@@ -113,8 +115,27 @@ export function mergeSettings(target, o = {}) {
   }
   const changes = [];
   const wanted = [];
+  // statusLine (statusline.mjs): a plugin cannot set it, and $CLAUDE_PLUGIN_ROOT is not expanded in project settings,
+  // so a plugin install writes the plugin's absolute path. That path holds the plugin version, so a status line that
+  // is already ours (it runs scripts/orchestrator/statusline.mjs) is refreshed. Someone else's is kept untouched (no
+  // subkeys merged into it).
+  if (fresh.statusLine) {
+    const ours = { ...fresh.statusLine };
+    if (!o.hooks)
+      ours.command = `node "${path.join(PLUGIN_ROOT, 'scripts', 'orchestrator', 'statusline.mjs').split(path.sep).join('/')}"`;
+    const own = existing.statusLine;
+    if (own === undefined) {
+      wanted.push(`statusLine=${ours.command}`);
+      if (o.keys) existing.statusLine = ours;
+    } else if (String(own?.command ?? '').includes('scripts/orchestrator/statusline.mjs')) {
+      if (own.command !== ours.command) {
+        wanted.push(`statusLine=${ours.command} (refreshed)`);
+        if (o.keys) existing.statusLine = { ...own, command: ours.command };
+      }
+    } else changes.push('statusLine: kept your own (the queue status line is scripts/orchestrator/statusline.mjs)');
+  }
   for (const [key, val] of Object.entries(fresh)) {
-    if (key.startsWith('_') || key.startsWith('$') || key === 'hooks') continue; // comments; hooks below
+    if (key.startsWith('_') || key.startsWith('$') || key === 'hooks' || key === 'statusLine') continue; // comments; hooks below
     if (existing[key] === undefined) {
       wanted.push(`${key}=${JSON.stringify(val)}`);
       if (o.keys) existing[key] = val;

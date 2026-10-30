@@ -47,6 +47,18 @@ context size. The system keeps both small:
   compaction, so the summary does not have to carry it. `autoCompactWindow` is set to 300000. Automatic compaction is
   the default (`cq compact auto`) and uses Claude Code's own compaction (`autoCompactEnabled`, on by default). For
   `cq compact manual`, turn that off too, or Claude Code still compacts at 300k.
+- **Handover note in two parts.** `<dataFolder>/handover-ongoing.md` has a `## Now` section at the top (the current
+  state, at most 40 lines, rewritten in place) and a dated log below it. `cq handover archive [--dry]` moves log
+  entries older than 24 h to `handover-archive/<year-month>.md` (an active trial or follow-up section stays) and warns
+  when "Now" is too long or missing; run it at every compaction. `cq handover now` prints only the "Now" part. After
+  compaction `hook-after-compact.mjs` injects only that part, and `/cq:queue` reads only that part at takeover; the
+  rest is read with grep when needed.
+- **Status line.** `statusline.mjs` shows `ctx 142k 71% | $3.21 | 5h 23% 7d 41% | tracks 2 (+1 review)`: context,
+  session cost, the 5-hour and 7-day quota, and running tracks (the count is cached on the queue file's mtime, so
+  it is cheap). A plugin cannot set `statusLine` itself, so `cq setup --settings` writes it to
+  `.claude/settings.json` with the plugin's absolute path; run it again after a plugin update. A status line of your
+  own is kept. The line also saves the last quota reading in `<dataFolder>/rate-limits.json`, and
+  `cq capacity --calibrate auto` uses its 7-day percentage as a calibration point (refused when it is over 1 h old).
 - **Context limits in every chat.** The same hook also watches every other chat in a project with the queue, not only
   the orchestrator: a notice at 250k, and at 400k the message is stopped so a long chat does not keep paying for its
   whole history. Compact the chat (`/compact`), or start the message with `continue:` to send it anyway. Messages

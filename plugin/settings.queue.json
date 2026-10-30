@@ -9,6 +9,13 @@
   "env": {
     "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH": "1"
   },
+  "_statusLine": "Context, session cost, 5h/7d quota and active tracks (scripts/orchestrator/statusline.mjs). A plugin cannot set statusLine itself; setup --settings writes it with the plugin's absolute path (run it again after a plugin update). An existing status line of your own is kept.",
+  "statusLine": {
+    "type": "command",
+    "command": "node \"$CLAUDE_PROJECT_DIR/scripts/orchestrator/statusline.mjs\"",
+    "padding": 0,
+    "refreshInterval": 5
+  },
   "hooks": {
     "PreToolUse": [
       { "matcher": "Bash|PowerShell", "hooks": [{ "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/scripts/orchestrator/hook-push-guard.mjs\"", "timeout": 10 }] },

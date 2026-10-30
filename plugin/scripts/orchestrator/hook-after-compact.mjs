@@ -12,7 +12,8 @@
 //   - the queue view from `queue.mjs show` (short view: active ones, startable and counts),
 //   - open owner questions (queueLogic.questionOverview, the ones not resolved),
 //   - number of unpushed commits: `git rev-list --count <remote>/<baseBranch>..<baseBranch>` in mainTree,
-//   - how many compactions the session has behind it, and the mode (limits.autocompact, `queue.mjs compact auto|manual`).
+//   - how many compactions the session has behind it, and the mode (limits.autocompact, `queue.mjs compact auto|manual`),
+//   - the "Now" part of the handover note (at most 40 lines, lib/queueHandover.js), never the whole note.
 // The text is built and trimmed (about 3k tokens) in lib/contextGuard.js (afterCompactText), with tests.
 //
 // Automatic resume: an automatic compaction
@@ -104,6 +105,21 @@ function unpushed() {
   }
 }
 
+/**
+ * The "Now" part of the running handover note (lib/queueHandover.js), cut at 40 lines; null when the note has no
+ * "## Now" section, undefined when there is no note. Only this part goes into the context: the whole note can be
+ * thousands of lines, and the archive is read with grep when needed.
+ */
+function handoverNow() {
+  let text;
+  try {
+    text = fs.readFileSync(path.join(QUEUE_FOLDER, 'handover-ongoing.md'), 'utf8');
+  } catch {
+    return undefined;
+  }
+  return require('./lib/queueHandover.js').nowPart(text, 40);
+}
+
 function compactions(filePath) {
   try {
     if (!filePath || fs.statSync(filePath).size > MAX_TRANSCRIPT) return 0;
@@ -149,6 +165,7 @@ async function main() {
     windDownRevoked: revoke.changed,
     mode: KV.compactMode(queue),
     g: KV.limits(process.env),
+    now: handoverNow(),
   });
   process.stdout.write(
     JSON.stringify({

@@ -275,6 +275,10 @@ The orchestrator added about 18 turns and about 0.75 USD per task. Its target is
   about 300k: it commits, writes a handover note, and a fresh agent continues. A track may compact once; at the second
   compaction it delivers PARTIAL. A SubagentStop gate (`hook-track-end.mjs`) sends a track back once if it stops with
   neither a commit nor a RESULT line.
+- The orchestrator's handover note grew to thousands of lines that every takeover read in full. So it has a short
+  "Now" part and a dated log; `cq handover archive` moves old log entries to a monthly archive, and only "Now" is read
+  after compaction and at takeover. A status line (`cq setup --settings`) shows context, cost, quota and running
+  tracks while you work.
 - Prompt cache expiry while waiting was about 23% of all usage. So there are no sleep or polling loops, and
   subagents use a 1-hour cache.
 - Fix rounds sent to an agent that already held 400k to 900k tokens of context were 35 to 38% of track cost. So fix

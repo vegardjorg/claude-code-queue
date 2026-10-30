@@ -65,4 +65,39 @@ describe('setup.mjs mergeSettings', () => {
       'hook-track-end.mjs',
     ]);
   });
+
+  const settingsFile = () => join(target, '.claude', 'settings.json');
+  const read = () => JSON.parse(readFileSync(settingsFile(), 'utf8'));
+  const pluginCommand = `node "${join(PLUGIN_ROOT, 'scripts', 'orchestrator', 'statusline.mjs').split('\\').join('/')}"`;
+
+  it('statusLine: a plugin install writes the absolute plugin path, a vendored one the $CLAUDE_PROJECT_DIR form', () => {
+    mergeSettings(target, { keys: true });
+    expect(read().statusLine).toMatchObject({ type: 'command', command: pluginCommand, padding: 0 });
+    rmSync(settingsFile());
+    mergeSettings(target, { keys: true, hooks: true });
+    expect(read().statusLine.command).toBe('node "$CLAUDE_PROJECT_DIR/scripts/orchestrator/statusline.mjs"');
+  });
+
+  it('statusLine: without --settings it is only recommended', () => {
+    const notes = mergeSettings(target, {}).join('\n');
+    expect(notes).toContain('recommended, not set');
+    expect(notes).toContain('statusLine=');
+  });
+
+  it('statusLine: an old plugin path is refreshed, someone else`s status line is kept', () => {
+    mkdirSync(join(target, '.claude'));
+    writeFileSync(
+      settingsFile(),
+      JSON.stringify({
+        statusLine: { type: 'command', command: 'node "/old/cq/1.0.0/scripts/orchestrator/statusline.mjs"', padding: 1 },
+      }),
+    );
+    mergeSettings(target, { keys: true });
+    expect(read().statusLine).toEqual({ type: 'command', command: pluginCommand, padding: 1 });
+
+    writeFileSync(settingsFile(), JSON.stringify({ statusLine: { type: 'command', command: 'my-line.sh' } }));
+    const notes = mergeSettings(target, { keys: true }).join('\n');
+    expect(notes).toContain('statusLine: kept your own');
+    expect(read().statusLine).toEqual({ type: 'command', command: 'my-line.sh' });
+  });
 });
