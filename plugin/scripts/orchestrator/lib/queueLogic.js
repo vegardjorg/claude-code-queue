@@ -1840,14 +1840,23 @@ function selectNext(queue, now = Date.now(), { uncommitted = [] } = {}) {
 /**
  * Assigns the next free migration block. A task with `migr_tens` > 0 gets that many blocks of `size` numbers
  * (config().migrations.blockSize, default 10), and the block starts on a whole multiple of the size.
- * Returns { from, to, nextAvailable }.
+ * Blocks in `taken` (takenBlocks: a migration file, the block of a task that is not finished, or a block named in an
+ * active prompt file, e.g. after a move by hand) are skipped, and `skipped` lists them. Without `taken` the answer is
+ * the same as before.
+ * Returns { from, to, nextAvailable, skipped? }.
  */
-function assignMigrBlock(nextAvailable, tens, size = 10) {
+function assignMigrBlock(nextAvailable, tens, size = 10, taken = []) {
   if (!tens || tens <= 0) return { from: null, to: null, nextAvailable };
   const s = Number(size) > 0 ? Math.floor(Number(size)) : 10;
-  const from = Math.ceil(nextAvailable / s) * s;
-  const to = from + tens * s - 1;
-  return { from, to, nextAvailable: to + 1 };
+  let from = Math.ceil(nextAvailable / s) * s;
+  const skipped = [];
+  for (;;) {
+    const to = from + tens * s - 1;
+    const hit = taken.filter((t) => t.from <= to && t.to >= from);
+    if (!hit.length) return { from, to, nextAvailable: to + 1, ...(taken.length ? { skipped } : {}) };
+    skipped.push(...hit);
+    from = Math.ceil((Math.max(...hit.map((t) => t.to)) + 1) / s) * s;
+  }
 }
 
 /**
@@ -1860,6 +1869,148 @@ function migrTens(o, migrations = cfg().migrations) {
   return Number.isFinite(t) && t > 0 ? t : 0;
 }
 
+// ---- Taken migration blocks ----------------------------------------------------------------------------------
+// `fill` could hand out a block that a running track already had: the orchestrator moved the block by hand in the
+// prompt file, but the queue (migr_block) and next_migr did not know, so the next fill got the same block. Free now
+// means: not a migration file in migrations.folder, not the block of a task that is not finished, and not named in an
+// active prompt file in the scratchpad.
+
+/** Statuses in which a task no longer holds its block. */
+const MIGR_FREE_STATUS = new Set(['done', 'cancelled']);
+
+/** A block in text: "3450–3459" or "3450-3459" (en dash or hyphen, spaces allowed). The end can be short ("3450–59"). */
+const BLOCK_PATTERN = /(?<!\d)(\d+)\s*[–-]\s*(\d+)(?!\d)/;
+
+/**
+ * "3450–3459" (en dash or hyphen, possibly with text around it) → { from: 3450, to: 3459 }, otherwise null. A short
+ * end number ("2340–49") is filled in from the start.
+ */
+function blockInterval(text) {
+  const m = BLOCK_PATTERN.exec(String(text ?? ''));
+  if (!m) return null;
+  const from = Number(m[1]);
+  let to = Number(m[2]);
+  if (to < from) {
+    const s = String(from);
+    to = Number(s.slice(0, Math.max(0, s.length - m[2].length)) + m[2]);
+  }
+  return to >= from ? { from, to } : null;
+}
+
+/**
+ * All blocks named in a text (a prompt file), as intervals. Only lines that say "migration block" count, so line
+ * ranges and dates elsewhere in the mission are never read as a block.
+ */
+function blocksInText(text) {
+  const out = [];
+  for (const line of String(text ?? '').split(/\r?\n/)) {
+    if (!/migration block/i.test(line)) continue;
+    for (const m of line.matchAll(new RegExp(BLOCK_PATTERN.source, 'g'))) {
+      const b = blockInterval(m[0]);
+      if (b) out.push(b);
+    }
+  }
+  return out;
+}
+
+/** The last part of a path (/ or \). */
+const fileName = (p) =>
+  String(p ?? '')
+    .split(/[\\/]/)
+    .pop();
+
+/** The task id a prompt file belongs to: "prompt-A-4.md" and "prompt-A-4-r2.md" → "A-4". */
+function promptTask(name, tasks = []) {
+  const m = /^prompt-(.+)\.md$/.exec(fileName(name));
+  if (!m) return null;
+  const ids = new Set(tasks.map((o) => o.id));
+  if (ids.has(m[1])) return m[1];
+  const without = m[1].replace(/-r\d+$/, '');
+  return ids.has(without) ? without : m[1];
+}
+
+/**
+ * The blocks that are taken, as { from, to, source }. `fileNrs`: the numbers of the migration files in the main tree
+ * (the first group in migrations.filePattern). `prompts`: [{ name, text }] from the scratchpad; a prompt file counts
+ * when its task is not done or cancelled (an unknown id counts too: rather one block too many than a collision).
+ * `except`: the task itself (for move and start).
+ */
+function takenBlocks({ tasks = [], fileNrs = [], prompts = [], except = null } = {}) {
+  const taken = [];
+  for (const n of fileNrs) {
+    const v = Number(n);
+    if (Number.isFinite(v) && v > 0) taken.push({ from: v, to: v, source: 'migration file' });
+  }
+  for (const o of tasks) {
+    if (o.id === except || MIGR_FREE_STATUS.has(o.status)) continue;
+    const b = blockInterval(o.migr_block);
+    if (b) taken.push({ ...b, source: `task ${o.id}` });
+  }
+  const status = new Map(tasks.map((o) => [o.id, o.status]));
+  for (const p of prompts) {
+    const id = promptTask(p.name, tasks);
+    if (!id || id === except || MIGR_FREE_STATUS.has(status.get(id))) continue;
+    for (const b of blocksInText(p.text)) taken.push({ ...b, source: fileName(p.name) });
+  }
+  return taken;
+}
+
+/**
+ * Assigns the block for a start (common for `start`, `fill` and `pick`): the next free one from `queue.next_migr`
+ * past `taken`, and moves `next_migr` past it (never backward). The new block is added to `taken`, so several starts in
+ * the same call get different blocks.
+ * @returns {{ block: string|null, skipped: object[] }}
+ */
+function assignStartBlock(queue, o, taken = [], migrations = cfg().migrations) {
+  const b = assignMigrBlock(
+    Number(queue.next_migr),
+    migrTens(o, migrations),
+    migrations?.blockSize,
+    taken,
+  );
+  if (b.from == null) return { block: null, skipped: [] };
+  queue.next_migr = Math.max(Number(queue.next_migr) || 0, b.nextAvailable);
+  taken.push({ from: b.from, to: b.to, source: `task ${o.id}` });
+  return { block: migrBlockText(b), skipped: b.skipped ?? [] };
+}
+
+/**
+ * `queue.mjs migr move <id> <block>`: "3470" or "3470-3479" → { from, to }. With only the start given the block gets
+ * as many blocks of `size` as the task has (`tens`, at least 1). Error: { error }.
+ */
+function parseMoveBlock(text, tens = 1, size = 10) {
+  const s = String(text ?? '').trim();
+  const z = Number(size) > 0 ? Math.floor(Number(size)) : 10;
+  const m = /^(\d+)(?:\s*[–-]\s*(\d+))?$/.exec(s);
+  if (!m) return { error: `invalid block "${s}" (e.g. 3470 or 3470-3479)` };
+  const from = Number(m[1]);
+  const b =
+    m[2] != null ? blockInterval(s) : { from, to: from + Math.max(1, Number(tens) || 1) * z - 1 };
+  if (!b || b.from % z !== 0 || (b.to + 1) % z !== 0)
+    return {
+      error: `the block ${b ? `${b.from}–${b.to}` : s} must cover whole blocks of ${z} (start on a multiple of ${z}, end just before one)`,
+    };
+  return b;
+}
+
+/**
+ * Swaps the block in a prompt file: the "Migration block:" line and every mention of the old block (en dash or
+ * hyphen, any spacing). The old block is both the queue's and the one the file itself names (an earlier move by hand
+ * only stands in the file). No String.replace with a replacement string ("$'" duplicates text): callbacks only.
+ */
+function moveBlockInText(text, old, fresh) {
+  const freshText = migrBlockText(fresh);
+  let t = String(text ?? '');
+  const inFile = blockInterval((/^Migration block:.*$/m.exec(t) ?? [''])[0]);
+  t = t.replace(/^Migration block:.*$/m, () => `Migration block: ${freshText}`);
+  const olds = [old, inFile].filter((g) => g && !(g.from === fresh.from && g.to === fresh.to));
+  if (!olds.length) return t;
+  return t.replace(new RegExp(BLOCK_PATTERN.source, 'g'), (hit) => {
+    const b = blockInterval(hit);
+    return b && olds.some((g) => g.from === b.from && g.to === b.to) ? freshText : hit;
+  });
+}
+
 /**
  * Is the queue out of work? Empty = nothing running and nothing can be started. Also returns what is blocked.
  * With `dailyUsage` (USD today, from timeCost.js) and a daily budget that is used up, nothing can
@@ -1868,7 +2019,11 @@ function migrTens(o, migrations = cfg().migrations) {
  * Night pause: with nightRun off and `now` inside the night window, nothing can be started either
  * (stop: 'nightPause', night: the message), the same way as the budget guard.
  */
-function state(queue, dailyUsage, { uncommitted = [], now = Date.now(), cursor = null } = {}) {
+function state(
+  queue,
+  dailyUsage,
+  { uncommitted = [], now = Date.now(), cursor = null, load = null } = {},
+) {
   const tasks = queue.tasks ?? [];
   // Active = what the orchestrator waits on (running or to be merged). A picked task does not keep the loop going:
   // the person or session that picked it delivers (review) or merges it itself.
@@ -1877,7 +2032,7 @@ function state(queue, dailyUsage, { uncommitted = [], now = Date.now(), cursor =
   // The batch queue is counted separately (it waits to be packed, not to be started).
   const waiting = tasks.filter((o) => o.status === 'waiting' && !isBatched(o));
   const batched = tasks.filter(inBatchQueue);
-  const guard = startGuard(queue, dailyUsage, { now, cursor });
+  const guard = startGuard(queue, dailyUsage, { now, cursor, load });
   const canStart = guard ? [] : selectNext(queue, now, { uncommitted });
   const guardBlocker = guard?.stop === 'dailyBudget' ? 'the daily budget is used up' : guard?.summary;
   const rk = rankingContext(queue, now);
@@ -1913,6 +2068,7 @@ function state(queue, dailyUsage, { uncommitted = [], now = Date.now(), cursor =
     ...(guard?.stop === 'dailyBudget' ? { stop: 'dailyBudget', budget: guard.message } : {}),
     ...(guard?.stop === 'nightPause' ? { stop: 'nightPause', night: guard.message } : {}),
     ...(guard?.stop === 'windDown' ? { stop: 'windDown', windDown: guard.message } : {}),
+    ...(guard?.stop === 'load' ? { stop: 'load', load: guard.message } : {}),
     blocked,
     ownerQuestion: [...question.entries()]
       .sort((a, b) => b[1] - a[1])
@@ -2016,12 +2172,17 @@ function nightGuard(queue, now = Date.now(), tz = NIGHT_TZ) {
 }
 
 /**
- * Does the budget guard, night guard or wind-down guard stop new starts now? The budget first (exit 4), then the night
- * (exit 5), then the wind-down (exit 6; requires `cursor`, the orchestrator cursor). `force` (owner's word,
- * `start --force`) overrides all three. Used by `next`, `start`, `fill`, `show` and `state`.
- * @returns {{ code: 4|5|6, stop: 'dailyBudget'|'nightPause'|'windDown', summary?: string, message: string } | null}
+ * Does the budget guard, night guard, wind-down guard or load guard stop new starts now? The budget first (exit 4),
+ * then the night (exit 5), then the wind-down (exit 6; requires `cursor`, the orchestrator cursor), then the load
+ * (exit 7; requires `load`, the measurement). `force` (owner's word, `start --force`) overrides all four. Used by
+ * `next`, `start`, `fill`, `show` and `state`.
+ * @returns {{ code: 4|5|6|7, stop: 'dailyBudget'|'nightPause'|'windDown'|'load', summary?: string, message: string } | null}
  */
-function startGuard(queue, dailyUsage, { now = Date.now(), force = false, cursor = null } = {}) {
+function startGuard(
+  queue,
+  dailyUsage,
+  { now = Date.now(), force = false, cursor = null, load = null } = {},
+) {
   if (force) return null;
   const b = budgetGuard(queue, dailyUsage);
   if (b.stop) return { code: 4, stop: 'dailyBudget', message: b.message };
@@ -2029,7 +2190,64 @@ function startGuard(queue, dailyUsage, { now = Date.now(), force = false, cursor
   if (n.stop) return { code: 5, stop: 'nightPause', summary: n.summary, message: n.message };
   const by = windDownGuard(cursor, now);
   if (by.stop) return { code: 6, stop: 'windDown', summary: by.summary, message: by.message };
+  // The machine is full (exit 7). Only with a measurement (`load`); without it the guard is off.
+  const lg = loadGuard(queue, load);
+  if (lg.stop) return { code: 7, stop: 'load', summary: lg.summary, message: lg.message };
   return null;
+}
+
+// ---- Load guard ---------------------------------------------------------------------------------------------------
+
+/**
+ * The load limit in effect: `limits.minFreeMemoryPct` in the queue file when it is set there (also "off", which is
+ * stored as null), otherwise `loadGuard.minFreeMemoryPct` in queue.config.json. null or 0 = off (default).
+ */
+function minFreeMemoryFor(queue) {
+  if (queue?.limits && Object.hasOwn(queue.limits, 'minFreeMemoryPct'))
+    return queue.limits.minFreeMemoryPct;
+  try {
+    return cfg().loadGuard?.minFreeMemoryPct ?? null;
+  } catch {
+    return null; // no config: off
+  }
+}
+
+/**
+ * Is the machine too full to start another track? When many tracks run at once, gates can go red from timeouts and
+ * lack of memory, not from code errors. With a limit set (minFreeMemoryFor: percent free memory, os.freemem /
+ * os.totalmem), no new start happens while free memory is below the limit. A measurement that is null (unknown)
+ * never stops. Running tracks finish; only new starts wait. `start --force` and `fill --over-load` override.
+ * @param {object} queue the queue
+ * @param {{ freeMemoryPct: number|null } | null} load the measurement (queue.mjs measureLoad)
+ * @returns {{ active: boolean, stop: boolean, reasons?: string[], summary?: string, message?: string }}
+ */
+function loadGuard(queue, load) {
+  const raw = minFreeMemoryFor(queue);
+  const min = Number(raw);
+  const on = raw != null && Number.isFinite(min) && min > 0;
+  if (!load || !on) return { active: on, stop: false };
+  const free = load.freeMemoryPct == null ? NaN : Number(load.freeMemoryPct);
+  if (!(Number.isFinite(free) && free < min)) return { active: true, stop: false };
+  const reasons = [`free memory ${Math.round(free * 10) / 10} % (below ${min} %)`];
+  return {
+    active: true,
+    stop: true,
+    reasons,
+    summary: `the machine is full: ${reasons.join(', ')}`,
+    message:
+      `THE MACHINE IS FULL: ${reasons.join(' and ')}. No new tracks are started until the load goes down; running ` +
+      'tracks finish, and delivered tracks are received and merged as usual. The owner can change the limit ' +
+      '(cq limit minFreeMemoryPct <number|off>) or start one task with start <id> --force.',
+  };
+}
+
+/** Interprets the load limit: integer 1-100 (percent free memory), "off"/0 = null. */
+function parseLoadLimit(name, s) {
+  if (['off', 'no', 'null', 'none', '0'].includes(s.toLowerCase())) return { val: null };
+  if (!/^\d+$/.test(s)) return { error: `${name} must be an integer or "off"` };
+  const v = Number(s);
+  if (v > 100) return { error: `${name} must be between 1 and 100 (percent) or "off"` };
+  return { val: v };
 }
 
 // ---- Wind-down guard -----------------------------------------------------------------------------
@@ -2092,7 +2310,7 @@ const LIMIT_NAME = [
  * the settings panel on the board, queueBoard.SETTINGS, is unchanged). parallelThreshold: the share of maxConcurrent below
  * which fill, receive and pulse write a quick queue diagnosis (queueDiagnose.js); default 0.7, 0 = off.
  */
-const LIMIT_EXTRA = ['parallelThreshold'];
+const LIMIT_EXTRA = ['parallelThreshold', 'minFreeMemoryPct'];
 
 /** A limit value as text: null = "off", true/false = "on"/"off". */
 function limitText(name, v) {
@@ -2115,6 +2333,7 @@ function parseLimit(name, raw, current) {
   // Interpreted in queueDiagnose (loaded here, not at the top, because queueDiagnose itself uses this file).
   if (name === 'parallelThreshold') return require('./queueDiagnose.js').parseThreshold(raw);
   const s = String(raw ?? '').trim();
+  if (name === 'minFreeMemoryPct') return parseLoadLimit(name, s);
   if (name === 'dailyBudget') {
     if (['off', 'none', 'null'].includes(s.toLowerCase())) return { val: null };
     const v = Number(s.replace(',', '.'));
@@ -2588,7 +2807,13 @@ function pickable(queue, { label, project, maxMin, uncommitted = [] } = {}, now 
 function pick(
   queue,
   id,
-  { by, force = false, now = new Date().toISOString(), migrations = cfg().migrations } = {},
+  {
+    by,
+    force = false,
+    now = new Date().toISOString(),
+    migrations = cfg().migrations,
+    taken = [],
+  } = {},
 ) {
   const o = (queue.tasks ?? []).find((x) => x.id === id);
   if (!o) return { error: `unknown task ${id}` };
@@ -2621,9 +2846,8 @@ function pick(
     else {
       if (!Number.isFinite(Number(queue.next_migr)))
         return { error: 'the queue is missing next_migr; cannot assign a migration block' };
-      const b = assignMigrBlock(Number(queue.next_migr), tens, migrations?.blockSize);
-      queue.next_migr = b.nextAvailable;
-      block = migrBlockText(b);
+      // Past blocks that are already taken (the caller gives `taken`, see takenBlocks).
+      block = assignStartBlock(queue, o, taken, migrations).block;
     }
   }
   o.status = 'picked';
@@ -4278,7 +4502,7 @@ const SUMMARY_STATUSES = ['running', 'review', 'picked'];
  */
 function summaryView(
   queue,
-  { now = Date.now(), uncommitted = [], dailyUsage, width = 110, cursor = null } = {},
+  { now = Date.now(), uncommitted = [], dailyUsage, width = 110, cursor = null, load = null } = {},
 ) {
   const tasks = queue.tasks ?? [];
   const cut = (s) => (s.length > width ? `${s.slice(0, width - 1)}…` : s);
@@ -4304,7 +4528,7 @@ function summaryView(
     );
   }
 
-  const guard = startGuard(queue, dailyUsage, { now, cursor });
+  const guard = startGuard(queue, dailyUsage, { now, cursor, load });
   const startable = guard ? [] : selectNext(queue, now, { uncommitted });
   out.push(
     `STARTABLE NOW (${startable.length}${startable.length ? '; cq fill starts them' : ''}):`,
@@ -4320,7 +4544,7 @@ function summaryView(
   }
   if (guard) out.push(cut(`  ${guard.message}`));
 
-  const t = state(queue, dailyUsage, { uncommitted, now, cursor });
+  const t = state(queue, dailyUsage, { uncommitted, now, cursor, load });
   // The focus line and the warning (only when a focus is set).
   if (t.focus) {
     out.push(cut(`FOCUS${t.focus.name ? ` "${t.focus.name}"` : ''}: ${t.focus.text}`));
@@ -5483,8 +5707,8 @@ function lastLine(out, pattern = null, max = 140) {
   return l.length > max ? `${l.slice(0, max - 1)}…` : l;
 }
 
-/** Exit codes from `fill` that are not errors: dailyBudget (4), nightPause (5), windDown (6). */
-const FILL_STOP_CODES = new Set([4, 5, 6]);
+/** Exit codes from `fill` that are not errors: dailyBudget (4), nightPause (5), windDown (6), the machine is full (7). */
+const FILL_STOP_CODES = new Set([4, 5, 6, 7]);
 
 /**
  * Runs the steps in `merge` in order and stops at the first error. Does no I/O itself: `run({ step })` runs one
@@ -5751,17 +5975,19 @@ function activeLines(queue, now = Date.now()) {
 function highestBlockNr(queue) {
   let max = 0;
   for (const o of queue?.tasks ?? []) {
-    const m = /–(\d+)\s*$/.exec(String(o.migr_block ?? ''));
-    if (m) max = Math.max(max, Number(m[1]));
+    // Via blockInterval, so a hyphen or a short end number ("3450–59") is read the same way as in takenBlocks.
+    const b = blockInterval(o.migr_block);
+    if (b) max = Math.max(max, b.to);
   }
   return max;
 }
 
 /**
  * Guard for `next-migr <n>`: refuses to go backward (below the current next_migr) and down into a used number (highest
- * migration file in the series or highest assigned block). Returns { ok, error } (error = null when ok).
+ * migration file in the series or highest assigned block). `taken` (takenBlocks) also refuses a number inside a taken
+ * block, e.g. a block moved by hand that only stands in the prompt file. Returns { ok, error } (error = null when ok).
  */
-function nextMigrGuard({ now, new: fresh, highestFile = 0, highestBlock = 0 }) {
+function nextMigrGuard({ now, new: fresh, highestFile = 0, highestBlock = 0, taken = [] }) {
   if (!Number.isInteger(fresh) || fresh <= 0)
     return { ok: false, error: `invalid number "${fresh}" (integer above 0)` };
   if (Number.isInteger(now) && fresh < now)
@@ -5771,6 +5997,12 @@ function nextMigrGuard({ now, new: fresh, highestFile = 0, highestBlock = 0 }) {
     return {
       ok: false,
       error: `${fresh} is not above the highest used number ${used} (migration file ${highestFile || 0}, block ${highestBlock || 0})`,
+    };
+  const inside = taken.find((t) => t.from <= fresh && t.to >= fresh);
+  if (inside)
+    return {
+      ok: false,
+      error: `${fresh} lies in a taken block ${inside.from}–${inside.to} (${inside.source})`,
     };
   return { ok: true, error: null };
 }
@@ -6083,6 +6315,15 @@ module.exports = {
   selectNext,
   assignMigrBlock,
   migrTens,
+  // Taken migration blocks (start, fill, pick, next-migr, migr move)
+  MIGR_FREE_STATUS,
+  blockInterval,
+  blocksInText,
+  promptTask,
+  takenBlocks,
+  assignStartBlock,
+  parseMoveBlock,
+  moveBlockInText,
   resetConfig,
   baseBranch,
   branchPrefix,
@@ -6095,6 +6336,8 @@ module.exports = {
   nightGuard,
   startGuard,
   windDownGuard,
+  loadGuard,
+  minFreeMemoryFor,
   limitText,
   parseLimit,
   isAgentSource,

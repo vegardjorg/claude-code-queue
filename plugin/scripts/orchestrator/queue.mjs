@@ -28,10 +28,12 @@
 //                                                                  the proposals separately at the bottom; --all/--grouped/
 //                                                                  --project also give the full one)
 //   node scripts/orchestrator/queue.mjs next                         (what can start now, without changing anything; exit 4 when
-//                                                                  the daily budget is used up, exit 5 during the night pause)
+//                                                                  the daily budget is used up, exit 5 during the night pause,
+//                                                                  exit 7 when the machine is full)
 //   node scripts/orchestrator/queue.mjs start <id> [--agent <name>] [--force]   (marks running, assigns branch and, if any,
 //                                                                  migration block; --force = the owner wants it first,
-//                                                                  also overrides the daily budget and the night pause)
+//                                                                  also overrides the daily budget, the night pause and
+//                                                                  the load guard)
 //   node scripts/orchestrator/queue.mjs set <id> <proposed|waiting|running|review|done|cancelled> [--remark "..."]
 //   node scripts/orchestrator/queue.mjs edit <id> --json '{"value":8,"priority_bonus":50}'
 //   node scripts/orchestrator/queue.mjs state                      (exit 3 when the queue is empty of work, also when
@@ -93,14 +95,14 @@
 //   node scripts/orchestrator/queue.mjs diagnose [--json]             (the whole diagnosis regardless of parallelism; read-only)
 //
 // The orchestrator's routine as a script and the cost per task (the pure logic is in lib/queueLogic.js):
-//   node scripts/orchestrator/queue.mjs fill --scratchpad <folder> [--max N] [--ids <id …>] [--over-quota]
+//   node scripts/orchestrator/queue.mjs fill --scratchpad <folder> [--max N] [--ids <id …>] [--over-quota] [--over-load]
 //        (next -> start -> trackFile -> make-queue-common -> make-mission in one call. Writes <folder>/prompt-<id>.md and
 //         <folder>/queue-fill.json [{ id, class, subagent_type, prompt, message, branch, migr_block }], and one line +
 //         the agent message per track. Saves head_start (HEAD on baseBranch, --wave-base for merge-track) and scratchpad
 //         on the task. --ids: only these; one that is already running only gets new prompt files (after an error).
 //         QUEUE_SCRATCHPAD can replace --scratchpad. Without --ids, fill prints a quota line when the forecast
 //         empties weeklyQuota before the reset; with capacity --mode cap at most that many new ones start, and --over-quota
-//         overrides.)
+//         overrides. The load guard (exit 7, the machine is full) stops new starts; --over-load overrides.)
 //   node scripts/orchestrator/queue.mjs receive <id> [--scratchpad <folder>] [--result "RESULT …"] [--force]
 //        (the track has delivered: status review, and the review package as PLAIN FILES in <folder>/rev-<id>/: 00-package.md
 //         (resultLine, changed DB objects if any, diff statistics), diff.patch, files/ (changed files in full version
@@ -149,7 +151,11 @@
 //                                                                  head_start, age)
 //   node scripts/orchestrator/queue.mjs next-migr [<n>]              (only with the migration flow: show or set; refuses
 //                                                                  going backward and down into a used number: the highest
-//                                                                  migration file or assigned block)
+//                                                                  migration file or assigned block, and into a taken block)
+//   node scripts/orchestrator/queue.mjs migr move <id> <block> [--scratchpad <folder>] [--force]
+//         (only with the migration flow: moves the block (3470 or 3470-3479) in the queue and in the prompt files
+//         ("Migration block:" line and mentions); refuses a taken block. start, fill and pick skip taken blocks by
+//         themselves: a migration file, the block of a task that is not finished, or one named in an active prompt file.)
 //   Test: QUEUE_MERGE_RUNNING=<module> injects the runner into merge (no real merge, push or gates).
 //
 // Project, feature, picking and visual QA:
@@ -354,6 +360,12 @@
 // `orchestrator pulse --session "<new name>"` (the new session takes the cursor) or `orchestrator stop` also resets.
 // `start --force` (the owner's word) overrides.
 //
+// Load guard: with a free memory limit set (`queue.mjs limit minFreeMemoryPct 15`, or loadGuard.minFreeMemoryPct in
+// queue.config.json; the queue's value wins), `next`, `start` and `fill` refuse new starts (exit 7, "THE MACHINE IS
+// FULL: ...") while free memory (os.freemem / os.totalmem) is below the limit. `show` and `state` show the reason.
+// Running tracks finish. `start --force` and `fill --over-load` override. Default: off.
+// QUEUE_LOAD="free=<pct>" replaces the measurement (tests).
+//
 //   node scripts/orchestrator/queue.mjs handover archive [--dry]   (moves dated log entries older than 24 h from
 //                                                                  <dataFolder>/handover-ongoing.md to
 //                                                                  handover-archive/<year-month>.md and warns when "Now"
@@ -364,7 +376,7 @@
 //
 // Exit codes: 0 ok, 1 error, 3 empty queue (state), 4 the daily budget is used up (next, start), 5 night pause (next,
 // start), 6 the orchestrator is in windDown (next, start, fill) or the queue has changed since the preview
-// (--expect-changed).
+// (--expect-changed), 7 the machine is full (the load guard; next, start, fill).
 //
 // Task fields (see queueLogic.validate): id, title, domain, class (K|D|D+|U), mission (path to a track description
 // or the text itself), value (1-10, default 5), content_min (min for a K track, default 30), migr_tens (number of
@@ -1805,6 +1817,73 @@ function highestMigr(root = MAIN_TREE) {
   return max;
 }
 
+/**
+ * The blocks that are taken (queueLogic.takenBlocks): the migration files in the main tree, the blocks of tasks that
+ * are not finished, and the blocks in the prompt files (`prompt-*.md`) in the scratchpads of active tasks and in
+ * `scratch`. A file that cannot be read is skipped (the error never stops a start). Empty without a migration flow.
+ */
+function takenForMigr(queue, { scratch = null, except = null } = {}) {
+  if (!MIGR.folder) return [];
+  const fileNrs = [];
+  try {
+    const pattern = new RegExp(MIGR.filePattern ?? '^(\\d+)_.*\\.sql$');
+    for (const f of fs.readdirSync(path.join(GIT_ROOT, MIGR.folder))) {
+      const m = pattern.exec(f);
+      if (m && Number.isSafeInteger(Number(m[1]))) fileNrs.push(Number(m[1]));
+    }
+  } catch {
+    // no migration folder yet: only the queue and the prompt files
+  }
+  const folders = new Set(
+    [scratch, ...queue.tasks.filter((o) => !L.MIGR_FREE_STATUS.has(o.status)).map((o) => o.scratchpad)]
+      .filter(Boolean)
+      .map((m) => path.resolve(m)),
+  );
+  const prompts = [];
+  for (const m of folders) {
+    let names = [];
+    try {
+      names = fs.readdirSync(m).filter((f) => /^prompt-.+\.md$/.test(f));
+    } catch {
+      continue;
+    }
+    for (const n of names) {
+      try {
+        prompts.push({ name: n, text: fs.readFileSync(path.join(m, n), 'utf8') });
+      } catch {
+        // locked or gone: skip
+      }
+    }
+  }
+  return L.takenBlocks({ tasks: queue.tasks, fileNrs, prompts, except });
+}
+
+/** "3450–3459 task A-1, 3460–3469 prompt-B.md" for the blocks a start skipped or a move hit. */
+const blockList = (list) => [...new Set(list.map((h) => `${h.from}–${h.to} ${h.source}`))].join(', ');
+
+/**
+ * The load now for the load guard (queueLogic.loadGuard): free memory in percent. An error in the measurement gives
+ * null, and null never stops. QUEUE_LOAD="free=<pct>" replaces the measurement (tests).
+ * @returns {{ freeMemoryPct: number|null }}
+ */
+function measureLoad() {
+  const env = process.env.QUEUE_LOAD;
+  if (env) {
+    const out = { freeMemoryPct: null };
+    for (const part of env.split(',')) {
+      const [k, v] = part.split('=').map((x) => x.trim());
+      if (k === 'free' && v !== '' && Number.isFinite(Number(v))) out.freeMemoryPct = Number(v);
+    }
+    return out;
+  }
+  try {
+    const total = os.totalmem();
+    return { freeMemoryPct: total > 0 ? Math.round((os.freemem() / total) * 1000) / 10 : null };
+  } catch {
+    return { freeMemoryPct: null };
+  }
+}
+
 const minutes = (from, to) => Math.round((Date.parse(to) - Date.parse(from)) / 60_000);
 
 /**
@@ -1987,13 +2066,14 @@ function deliveryWarning({ update = false } = {}) {
 
 /** The fields `start` and `fill` set (under the lock): status, branch and, if any, migration block. */
 function markStarted(queue, o, { agent = null, head = null, scratchpad = null } = {}) {
-  const b = L.assignMigrBlock(queue.next_migr, L.migrTens(o, MIGR), MIGR.blockSize);
-  if (b.from != null) queue.next_migr = b.nextAvailable;
+  // Past blocks that are already taken (a file, a task that is not finished, an active prompt file).
+  const t = L.assignStartBlock(queue, o, takenForMigr(queue, { scratch: scratchpad, except: o.id }), MIGR);
+  if (t.skipped.length) console.error(`${o.id}: skipped taken blocks (${blockList(t.skipped)})`);
   o.status = 'running';
   o.started = new Date().toISOString();
   o.branch = branchFor(o.id);
   o.agent = agent ?? o.agent ?? null;
-  o.migr_block = L.migrBlockText(b);
+  o.migr_block = t.block;
   // HEAD on baseBranch at start (--wave-base for merge-track) and the scratchpad (receive finds the report there).
   if (head) o.head_start = head;
   if (scratchpad) o.scratchpad = scratchpad;
@@ -2308,6 +2388,7 @@ if (command === 'init') {
     dailyUsage: dailyUsageFor(queue),
     width: WIDTH,
     cursor: readCursor(),
+    load: measureLoad(),
   }))
     console.log(l);
   // Loose waits (free text or an unregistered question, or an answer that still blocks).
@@ -2436,7 +2517,7 @@ if (command === 'init') {
     }
   }
   const usage = dailyUsageFor(queue);
-  const t = L.state(queue, usage, { uncommitted, cursor: readCursor() });
+  const t = L.state(queue, usage, { uncommitted, cursor: readCursor(), load: measureLoad() });
   console.log(`\n${L.stateLine(t)}`);
   if (t.focus)
     console.log(cut(`FOCUS${t.focus.name ? ` "${t.focus.name}"` : ''}: ${t.focus.text}`, WIDTH));
@@ -2452,8 +2533,9 @@ if (command === 'init') {
   // Budget guard: over the daily budget nothing is proposed (exit 4, so a loop does not take it for "empty queue").
   // Night guard: nightRun off and inside the night window gives exit 5 for the same reason.
   // Wind-down guard: the orchestrator in windDown (hook-context, about 350k) gives exit 6.
+  // Load guard: the machine is full gives exit 7.
   const usage = dailyUsageFor(queue);
-  const guard = L.startGuard(queue, usage, { cursor: readCursor() });
+  const guard = L.startGuard(queue, usage, { cursor: readCursor(), load: measureLoad() });
   if (guard) die(guard.message, guard.code);
   const b = L.budgetGuard(queue, usage);
   // Tasks that own an uncommitted file in the main tree are skipped (another session is working in the file).
@@ -2488,14 +2570,19 @@ if (command === 'init') {
   // git status (uncommitted files in the main tree).
   const usage = dailyUsageFor(read());
   const uncommitted = uncommittedPaths();
+  const load = a.includes('--force') ? null : measureLoad();
   const r = edit((queue) => {
     const o = queue.tasks.find((x) => x.id === id);
     if (!o) die(`Unknown task ${id}`);
     const h = L.blockers(o, queue.tasks, queue.resolved);
     if (h.length) die(`${id} cannot be started: ${h.join(' · ')}`);
-    // Budget guard (exit 4) and night guard (exit 5): --force (the owner's word) overrides, as for the other
-    // limits.
-    const guard = L.startGuard(queue, usage, { force: a.includes('--force'), cursor: readCursor() });
+    // Budget guard (exit 4), night guard (exit 5) and load guard (exit 7): --force (the owner's word) overrides, as
+    // for the other limits.
+    const guard = L.startGuard(queue, usage, {
+      force: a.includes('--force'),
+      cursor: readCursor(),
+      load,
+    });
     if (guard) die(guard.message, guard.code);
     // --force: the owner has asked for the task to go first. Overrides only the priority order in selectNext and
     // the pause on the project, never the blockers above (dependencies, ownership, owner questions).
@@ -2774,6 +2861,12 @@ if (command === 'init') {
   for (const n of L.LIMIT_NAME) console.log(`  ${n.padEnd(14)} ${L.limitText(n, g[n])}`);
   // The threshold for low parallelism (not a slot limit; default in queueDiagnose).
   console.log(`  ${'parallelThreshold'.padEnd(14)} ${D.thresholdFor(queue)}`);
+  // The load limit (machine memory; the queue's value, otherwise queue.config.json) and the measurement now.
+  console.log(`  ${'minFreeMemoryPct'.padEnd(14)} ${L.limitText('minFreeMemoryPct', L.minFreeMemoryFor(queue))}`);
+  const lm = measureLoad();
+  console.log(`  load now: free memory ${lm.freeMemoryPct ?? '?'} %`);
+  const lg = L.loadGuard(queue, lm);
+  if (lg.stop) console.log(lg.message);
   const b = L.budgetGuard(queue, dailyUsageFor(queue));
   if (b.active) console.log(b.message);
   const night = L.nightGuard(queue);
@@ -2807,6 +2900,7 @@ if (command === 'init') {
   const t = L.state(queue, dailyUsageFor(queue), {
     uncommitted: uncommittedPaths(),
     cursor: readCursor(),
+    load: measureLoad(),
   });
   // A separate list of loose waits (always included; empty list when everything is in order).
   t.resolveWaits = L.resolveWaits(queue);
@@ -2851,6 +2945,8 @@ if (command === 'init') {
   if (!head) die(`Could not find baseBranch ${BASE} in the main tree (git rev-parse ${BASE}).`);
   const usage = dailyUsageFor(read());
   const uncommitted = uncommittedPaths();
+  // Measured before the lock; --over-load (the owner's word) overrides the load guard.
+  const load = a.includes('--over-load') ? null : measureLoad();
   let quotaMessage = null;
   // Under the lock: select (selectNext, or --ids) and mark started. With --ids a task that is already running gets
   // only new prompt files (e.g. after make-mission failed); a pending one must be startable now (otherwise start --force
@@ -2867,6 +2963,9 @@ if (command === 'init') {
           // The wind-down also stops new starts via --ids (new prompt files for running ones still work).
           const by = L.windDownGuard(readCursor());
           if (by.stop) die(`${by.message} Nothing was started.`, 6);
+          // The load guard also stops new starts via --ids (--over-load overrides).
+          const lg = L.loadGuard(queue, load);
+          if (lg.stop) die(`${lg.message} Nothing was started.`, 7);
           out.push({ o, new: true });
         } else
           die(
@@ -2875,7 +2974,7 @@ if (command === 'init') {
           );
       }
     } else {
-      const guard = L.startGuard(queue, usage, { cursor: readCursor() });
+      const guard = L.startGuard(queue, usage, { cursor: readCursor(), load });
       if (guard) die(guard.message, guard.code);
       // The quota forecast (soft). Mode notice: just a line. Mode cap: at most so many new ones that the number of concurrent
       // tracks keeps the quota until the next reset; --over-quota overrides. An error in the forecast never stops fill.
@@ -3335,6 +3434,7 @@ if (command === 'init') {
         new: fresh,
         highestFile: highFile,
         highestBlock: L.highestBlockNr(queue),
+        taken: takenForMigr(queue, { scratch: scratchpadFor() }),
       });
       if (!v.ok) die(`Nothing changed: ${v.error}`);
       const f = queue.next_migr;
@@ -3343,6 +3443,77 @@ if (command === 'init') {
     });
     console.log(`next_migr ${previous} → ${fresh}`);
   }
+} else if (command === 'migr') {
+  // ---- `migr move <id> <block>` moves the block in the queue and in the prompt files ----
+  if (!MIGR.folder)
+    die('The project has no migration flow (config().migrations.folder is not set); migr does not apply.');
+  const [sub, id, blockArg] = positional(1, ['--scratchpad']);
+  if (sub !== 'move' || !id || !blockArg)
+    die('migr move <id> <block> [--scratchpad <folder>] [--force]   (block: 3470 or 3470-3479)');
+  const scratch = scratchpadFor();
+  const r = edit((queue) => {
+    const o = queue.tasks.find((x) => x.id === id);
+    if (!o) die(`Unknown task ${id}`);
+    if (L.MIGR_FREE_STATUS.has(o.status)) die(`${id} is ${o.status}; a finished task is not moved.`);
+    const size = Number(MIGR.blockSize) > 0 ? Math.floor(Number(MIGR.blockSize)) : 10;
+    const old = L.blockInterval(o.migr_block);
+    const tens = old ? (old.to - old.from + 1) / size : Math.max(1, Number(o.migr_tens ?? 0));
+    const fresh = L.parseMoveBlock(blockArg, tens, size);
+    if (fresh.error) die(`Nothing changed: ${fresh.error}`);
+    const hit = takenForMigr(queue, { scratch, except: id }).filter(
+      (t) => t.from <= fresh.to && t.to >= fresh.from,
+    );
+    if (hit.length && !a.includes('--force'))
+      die(
+        `Nothing changed: ${fresh.from}–${fresh.to} is taken (${blockList(hit)}); --force only on the owner's word`,
+      );
+    const previous = o.migr_block ?? null;
+    o.migr_block = L.migrBlockText(fresh);
+    const nextBefore = queue.next_migr;
+    queue.next_migr = Math.max(Number(queue.next_migr) || 0, fresh.to + 1);
+    const now = new Date().toISOString();
+    o.remarks = [...(o.remarks ?? []), `${now} migr move: ${previous ?? 'none'} → ${o.migr_block}`];
+    return {
+      o: { ...o },
+      old,
+      fresh,
+      previous,
+      nextBefore,
+      next: queue.next_migr,
+      scratchpad: o.scratchpad,
+    };
+  });
+  console.log(`${id}: migr_block ${r.previous ?? 'none'} → ${r.o.migr_block}`);
+  if (r.next !== r.nextBefore) console.log(`next_migr ${r.nextBefore} → ${r.next}`);
+  // The prompt files (prompt-<id>.md and fix rounds prompt-<id>-rN.md) in the task's scratchpad and in --scratchpad.
+  const folders = [...new Set([scratch, r.scratchpad].filter(Boolean).map((m) => path.resolve(m)))];
+  const own = (f) => L.promptTask(f, [r.o]) === id;
+  let count = 0;
+  for (const m of folders) {
+    let files = [];
+    try {
+      files = fs.readdirSync(m).filter((f) => /^prompt-.+\.md$/.test(f) && own(f));
+    } catch {
+      continue;
+    }
+    for (const f of files) {
+      const p = path.join(m, f);
+      const before = fs.readFileSync(p, 'utf8');
+      let after = L.moveBlockInText(before, r.old, r.fresh);
+      const note = `The migration block has been moved to ${r.o.migr_block} (cq migr move). Use only the new block.`;
+      if (!after.includes(note)) after = `${after.replace(/\s*$/, '')}\n\n${note}\n`;
+      if (after !== before) {
+        fs.writeFileSync(p, after);
+        count += 1;
+        console.log(`wrote ${p}`);
+      }
+    }
+  }
+  if (!count) console.log('Found no prompt file to update (--scratchpad <folder> points there).');
+  if (r.o.status === 'running' || r.o.status === 'picked')
+    console.log(
+      `${id} is running: send the track the new block with SendMessage ("The migration block has been moved to ${r.o.migr_block}").`,
+    );
 } else if (command === 'capacity') {
   // ---- Weekly quota on the subscription (lib/queueCapacity.js; reset and planName in config().capacity). Changes
   // are written under the lock in queue.json
@@ -3655,7 +3826,12 @@ if (command === 'init') {
   const id = a[1];
   if (!id || id.startsWith('--')) die('pick <id> --by "<who>" [--force]');
   const r = edit((queue) => {
-    const s = L.pick(queue, id, { by: val('--by'), force: a.includes('--force') });
+    const s = L.pick(queue, id, {
+      by: val('--by'),
+      force: a.includes('--force'),
+      // Past blocks that are already taken (a file, a task that is not finished, an active prompt file).
+      taken: takenForMigr(queue, { scratch: scratchpadFor(), except: id }),
+    });
     if (s.error) die(s.error);
     return s;
   });
@@ -4719,7 +4895,7 @@ if (command === 'init') {
   die(
     'Use: cq <init|add|approve|show|next|start|set|edit|resolve|resolutions|question|limit|state|trackFile|' +
       'projects|project|edit-many|pickable|pick|deliver|release|qa|external|orchestrator|cloud|cloud-package|batch|' +
-      'area|areas|focus|park|continue|rank|undo|classify|plan|fill|receive|merge|info|activeOnes|next-migr|' +
+      'area|areas|focus|park|continue|rank|undo|classify|plan|fill|receive|merge|info|activeOnes|next-migr|migr|' +
       'capacity|compact|diagnose|cost|handover|deliveries|resume> ...  (see the top of the file)',
     command ? 1 : 0,
   );

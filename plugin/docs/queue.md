@@ -66,7 +66,8 @@ or `cancelled` (cancelled). Tasks added by an agent start as `proposed` and need
 | `edit <id> --json '{…}'` | Changes fields |
 | `info <id>` | Short view of one task |
 | `question` / `resolve <q> --answer "…"` | Owner questions / answer one (waiting tasks get the answer in their mission) |
-| `limit [<name> <value>]` | Limits: `maxConcurrent`, `maxDPlus`, `maxPerDomain`, `dailyBudget`, night window |
+| `limit [<name> <value>]` | Limits: `maxConcurrent`, `maxDPlus`, `maxPerDomain`, `dailyBudget`, night window, `minFreeMemoryPct` |
+| `next-migr [<n>]` / `migr move <id> <block>` | Migration flow only: show or set the next number / move a task's block in the queue and its prompt files |
 | `cost` | Cost statistics per class (median, average) from the measured track sessions |
 | `projects`, `project <pid> …` | Projects: progress, pause, prefixes |
 | `focus set <steps>` | Focus period: only these steps are started |
@@ -83,6 +84,12 @@ or `cancelled` (cancelled). Tasks added by an agent start as `proposed` and need
 - Two tasks that own the same file or DB object never run at the same time.
 - `dailyBudget <usd>` stops new starts when the day's measured spend (API-equivalent) is used up. The night window
   (`nightRun`, `nightWindow`) can pause starts at night.
+- The load guard (`limit minFreeMemoryPct 15`, or `loadGuard.minFreeMemoryPct` in the config) stops new starts with
+  exit 7 ("THE MACHINE IS FULL") while free memory is below the limit. Off by default. Running tracks finish;
+  `start --force` and `fill --over-load` override.
+- With a migration flow, `start`, `fill` and `pick` skip taken blocks: a migration file, the block of a task that is
+  not finished, or a block named on a "migration block" line in an active prompt file (a move by hand).
+  `next-migr` refuses a number inside a taken block.
 - Times are the machine's local time: the night window, the day the daily budget counts, the weekly quota reset
   and the statistics per day. To use another time zone, set the `TZ` environment variable (for example
   `TZ=America/New_York`) for Claude Code.
@@ -106,6 +113,7 @@ reviewer agents per class. Missing values fall back to safe defaults.
 | `readGuard` | built-in lists | Extra agent types, auto-loaded files and large-file globs for the reading guard |
 | `cloudHidden` | `[]` | Paths a cloud session cannot see (missions pointing there are stopped) |
 | `capacity` | Tuesday 19:00 local time | Weekly quota reset for `cq capacity` |
+| `loadGuard.minFreeMemoryPct` | `null` (off) | Load guard: no new starts while free memory (percent) is below it; `cq limit minFreeMemoryPct` overrides per queue |
 | `excludeBranches` | `["main","master"]` | Branches never treated as external work |
 | `protectedPaths` | `.claude/`, `scripts/orchestrator/`, plugin hooks/agents/skills, `queue.config.json`, `CLAUDE.queue.md`, `package.json` … | Merge guard: a track may only change these when its task owns them; `[]` turns it off |
 | `modules`, `projectModuleSuggestion`, `priorityRules`, `documentFolders`, `indexFile`, `documents`, `planBackup` | see `queue.config.example.json` | Plan register (see `plan-register.md`) |

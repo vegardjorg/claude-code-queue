@@ -104,6 +104,12 @@ const STANDARD = Object.freeze({
     'package.json',
     'package-lock.json',
   ],
+  // Load guard (queueLogic.loadGuard): `next`, `start` and `fill` refuse new starts (exit 7) while free memory
+  // (os.freemem / os.totalmem, percent) is below minFreeMemoryPct. null = off. `queue.mjs limit minFreeMemoryPct`
+  // sets the value for the queue and wins over this one.
+  loadGuard: {
+    minFreeMemoryPct: null,
+  },
   // Branches never counted as queue branches (in addition to baseBranch).
   excludeBranches: ['main', 'master'],
   // Paths a cloud session cannot see (e.g. gitignored folders); a mission that points there is stopped.
