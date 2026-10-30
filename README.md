@@ -201,6 +201,15 @@ and at 400k the message is stopped so a long chat does not keep paying for its w
 (`/compact`), or start the message with `continue:` to send it anyway. The limits can be changed with environment
 variables ([orchestration](plugin/docs/orchestration.md)).
 
+**Status line and handover.** `cq setup --settings` adds a status line with context, cost, quota and running
+tracks (run it again after a plugin update). The orchestrator keeps a handover note; after compaction it reads only
+the "Now" part, and a new orchestrator chat can adopt tracks that are still running (`cq deliveries`, `cq resume`).
+
+**Follow-ups and QA evidence.** `cq follow add` tracks something over a period (board page `/follow`), and tracks
+write an `EVIDENCE` line that `cq qa auto --run` uses to close QA entries that are green.
+
+**Changes per version:** [CHANGELOG](CHANGELOG.md).
+
 **Local time.** The night pause, the daily budget and the statistics per day use the machine's time zone. Set the
 `TZ` environment variable to use another.
 
@@ -242,6 +251,8 @@ cq merge <ID>                # merge it
 cq cost                      # measured cost per class
 cq plan show                 # plan register
 cq board                     # the board: prints a local link with a key
+cq follow                    # follow-up entries
+cq handover now              # the "Now" part of the handover note
 cq help                      # all commands
 ```
 
