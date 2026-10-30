@@ -1,3 +1,5 @@
 # The plugin's shell shim must keep LF endings, also in Windows checkouts (autocrlf), or sh fails on "\r".
 plugin/bin/cq text eol=lf
 plugin/bin/*.cmd text eol=crlf
+# Scripts with a shebang must keep LF endings, also in Windows checkouts (autocrlf): vitest cannot parse "#!...\r".
+*.mjs text eol=lf
