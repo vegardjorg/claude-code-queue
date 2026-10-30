@@ -7,10 +7,12 @@
   "timeLog": "scripts/.queue/times.jsonl",
   "branchPrefix": "queue/",
   "sharedLinks": ["node_modules"],
-  "_gates": "Shell commands the tracks run before delivery (gates.mjs --quick / --full). Empty lists = no gates.",
+  "_gates": "Shell commands the tracks run before delivery (gates.mjs --quick / --full). Empty lists = no gates. precheck (gates.mjs --precheck) runs first and stops at the first red check; null = the standard checks, or a list where {changed} = the changed files and {file} = once per file.",
   "gates": {
     "quick": ["npm test"],
-    "full": ["npm run lint", "npm test"]
+    "full": ["npm run lint", "npm test"],
+    "precheck": null,
+    "precheckBudgetSec": 120
   },
   "_migrations": "Optional numbered migrations. folder = null turns the whole migration flow off.",
   "migrations": {

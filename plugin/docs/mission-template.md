@@ -146,6 +146,9 @@ Pure logic goes where it can be unit tested. No secrets or personal data in logs
 
 **Gates** (`cq gates`; NEVER write your own check script; one line per gate and the full log in
 the log folder, so read the log file of a red gate instead of running it again):
+- Precheck first, every time: `cq gates --precheck` (the cheapest checks on your changed files, stops at the first red
+  one, a few minutes). Only a green precheck goes on to the class's full gate below; on RED fix the first error and
+  run the precheck again. TIMEOUT (exit 3) means a check was only slow: go on to the full gate.
 - While working: `cq gates --quick`.
 <!-- class: K U -->
 - Before delivery, K and U: `cq gates --quick --log "<folder>\gates"`. The orchestrator runs

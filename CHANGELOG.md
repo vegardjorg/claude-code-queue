@@ -12,6 +12,13 @@ and `package.json`.
   orchestrator is still not affected.
 
 ### Added
+- **Fail-fast precheck**: `cq gates --precheck` runs the cheapest checks first, in a fixed order, only on the files
+  changed against `baseBranch`, and stops at the first red one. The checks are `gates.precheck` (commands or
+  `{ name, command, files, budgetSec }`, with `{changed}` or `{file}`); the default `null` gives `node --check` on the
+  changed JS files, `tsc --noEmit`, eslint on the changed files and the related tests (vitest or jest) when the project
+  has them locally. A check with no relevant changed file is skipped, each check has a time budget
+  (`gates.precheckBudgetSec`, 120 s; exit 3 over it), and `--json` gives a machine-readable summary. The mission
+  template and the `track`/`track-d` agents run it before the class's full gate, which is unchanged.
 - **Custom helper agents**: `cq helpers add <file.md> [--name] [--classes/--labels/--paths]` (or **Add a custom
   helper** in the board's Helper agents tab) copies an agent file to `.claude/agents/<name>.md` and registers it in
   `queue.json` as `source: custom` with its sha256, off. Nothing in the file is run, and a builtin name is refused.

@@ -208,6 +208,35 @@ receive and merge the same track. Compaction is still the usual path for a long 
 - The worktree rule: never `npm install` inside a worktree (shared folders are links to the main tree), and clean up
   worktrees only with `cleanup-worktree.mjs`.
 
+## Gates and the precheck
+
+`cq gates` (`gates.mjs`) runs the project's checks from `gates` in `queue.config.json`, in the track's own worktree:
+`--quick` (tracks of class K and U, and `cq merge` after merging) and `--full` (D and D+, and the orchestrator before a
+batch push). One line per gate with GREEN/RED and the time; `--log <file>` keeps the full output.
+
+**Precheck (fail fast).** Before the class's full gate a track runs `cq gates --precheck`. It runs the cheapest checks
+first, in a fixed order, only on the files changed against `baseBranch` (committed since the fork point, staged,
+unstaged and untracked; deleted files are left out), and stops at the first red one, so a red error shows up in a few
+minutes instead of after a long full run. Only a green precheck goes on to the full gate, which is unchanged.
+
+- The checks are `gates.precheck`: a list of shell commands, or objects `{ name, command, files, budgetSec }`. In a
+  command `{changed}` is replaced by the relevant changed files (quoted), and `{file}` runs the command once per file.
+  `files` are path patterns (as for the helpers: `*.ts`, `src/`, `**`); without them every changed file is relevant.
+- A check is skipped (SKIP) when no changed file is relevant, for example only `.md` changed: no tests run. When
+  nothing changed against the base branch, everything is skipped.
+- `gates.precheck: null` (the default) gives the standard checks the project has, in this order: `node --check` on
+  each changed `.js`/`.mjs`/`.cjs` file; `npx tsc --noEmit` when `tsconfig.json` and a local `tsc` exist; `npx eslint`
+  on the changed code files when an eslint config and a local `eslint` exist; and the tests related to the changed
+  code files (`vitest related --run`, or `jest --findRelatedTests`) when a local vitest or jest exists. Only local
+  tools in `node_modules/.bin`, so `npx` never fetches from the network. `[]` turns the precheck off.
+- Each check has a time budget (`budgetSec`, default `gates.precheckBudgetSec`, 120 s; the standard checks have 60 to
+  180 s). Over the budget the check and its child processes are ended, the line says TIMEOUT with the reason, and the
+  precheck stops with exit 3. That is a slow check, not a code error: the track goes on to the full gate.
+- Output: one line per check (GREEN, RED, SKIP, TIMEOUT or NOT RUN, with the time); under a red one the command and its
+  first error lines; then a final line. Exit 0 green, 1 red, 3 timeout, 2 setup error (for example the base branch was
+  not found; `--base <ref>` picks another ref). `--json` gives the same as one JSON object (`ok`, `status`,
+  `stoppedAt`, `base`, `changed`, `totalSec`, `checks`). The logic lives in `lib/gatePrecheck.js`.
+
 ## Hardening against prompt injection
 
 A track reads text the owner did not write: files, PDFs, web pages, other agents' reports. If it follows an

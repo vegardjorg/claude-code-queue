@@ -208,7 +208,9 @@ orchestration rules, and `/cq:start` to open a session cheaply before you paste 
 1. Each task gets a mission file: the shared rules from `docs/queue/mission-template.md`, filtered for its class,
    plus the task's own description.
 2. The track works in its own worktree and branch, runs the checks (`gates` in `queue.config.json`), and ends with
-   one machine-readable `RESULT` line.
+   one machine-readable `RESULT` line. A fail-fast precheck (`cq gates --precheck`: syntax, type check, lint and the
+   related tests, only on the changed files, stopping at the first red one) runs before the full gate, so a red
+   error shows up in minutes.
 3. The orchestrator builds a review package, runs the reviewer agents the class needs, and starts a fresh agent for
    any fix round.
 4. When the review is clean, it merges the branch, runs the quick checks and fills the free slot.

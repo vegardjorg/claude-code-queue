@@ -35,6 +35,12 @@ const STANDARD = Object.freeze({
   gates: {
     quick: [],
     full: [],
+    // The fail-fast precheck before the full gate (`gates.mjs --precheck`, lib/gatePrecheck.js): the cheapest checks
+    // first, stop at the first red one. A list of commands (or { name, command, files, budgetSec }) where {changed} is
+    // the changed files against baseBranch and {file} runs once per file. null = the standard checks the project has
+    // (node --check, tsc --noEmit, eslint and related tests on the changed files); [] = no precheck.
+    precheck: null,
+    precheckBudgetSec: 120, // time budget per check (seconds) when the check does not set budgetSec
   },
   // Optional migration flow (e.g. database migrations that must be numbered and pushed after merge).
   // With folder = null everything to do with migrations is turned off (no number blocks, no push in merge).

@@ -24,8 +24,10 @@ branch, merging and pushing; you only do your track.
   handover and PARTIAL, as the mission describes.
 - Shared folders (e.g. `node_modules`) are linked into the worktree by `prepare-track`: NEVER `npm install` or
   `npm ci` in the worktree.
-- Gates by class, as the mission says (K and U: `cq gates --quick`; D and D+: `cq gates --full`). Never write your own
-  check script. Read the log file of a red gate instead of running it again.
+- Gates: run the precheck first (`cq gates --precheck`: the cheapest checks on the changed files, stops at the
+  first red one). Only a green precheck goes on to the class's full gate, as the mission says (K and U:
+  `cq gates --quick`; D and D+: `cq gates --full`). Never write your own check script. Read the log file of a red
+  gate instead of running it again.
 - Commit only on your own branch with `git commit -- <files>`. NEVER push, merge your branch into the base branch, run
   migrations against shared environments, start dev servers or previews.
 - Your answer to the orchestrator (last answer) is at most about 1,500 characters: the RESULT line first, at most 5
