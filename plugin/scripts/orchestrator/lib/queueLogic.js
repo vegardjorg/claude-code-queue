@@ -247,6 +247,9 @@ function validateNewField(o, register, { stringProject = true } = {}) {
   return error;
 }
 
+/** The fast index while queueLogic.withIndex runs (see "The fast index" below), otherwise null. Declared here, before first use. */
+let fastIndex = null;
+
 // ---- Project and feature -----------------------------------------------------------------------------
 
 /**
@@ -256,6 +259,16 @@ function validateNewField(o, register, { stringProject = true } = {}) {
  */
 function projectFor(o, register) {
   if (typeof o?.project === 'string' && o.project) return o.project;
+  // Inside withIndex each id is looked up once per register (the board asks many times per card).
+  const ix = fastIndex;
+  if (ix && register && typeof register === 'object') {
+    ix.project ??= new WeakMap();
+    let perId = ix.project.get(register);
+    if (!perId) ix.project.set(register, (perId = new Map()));
+    const id = String(o?.id ?? '');
+    if (!perId.has(id)) perId.set(id, longestPrefix(id, register)?.pid ?? WITHOUT_PROJECT);
+    return perId.get(id);
+  }
   return longestPrefix(o?.id, register)?.pid ?? WITHOUT_PROJECT;
 }
 
@@ -1469,9 +1482,11 @@ function fileOverlap(a, b) {
  */
 function conflictPart(candidate, active) {
   // A record outside the queue (external add) is named after the session or person, so the blocker says who is working.
-  const owner = isExternalRow(active)
-    ? `${active.id} (work outside the queue: ${active.external_name ?? '?'})`
-    : active.id;
+  // The text is built only when there actually is a conflict (conflictPart is called for every pair).
+  const ownerText = () =>
+    isExternalRow(active)
+      ? `${active.id} (work outside the queue: ${active.external_name ?? '?'})`
+      : active.id;
   for (const f of candidate.owned_files ?? []) {
     for (const g of active.owned_files ?? []) {
       if (fileOverlap(f, g))
@@ -1479,18 +1494,30 @@ function conflictPart(candidate, active) {
           type: 'file',
           name: norm(f),
           with: active.id,
-          text: `file ${norm(f)} is owned by ${owner}`,
+          text: `file ${norm(f)} is owned by ${ownerText()}`,
         };
     }
   }
-  const dbActive = new Set((active.owner_db ?? []).map((s) => s.toLowerCase()));
-  for (const d of candidate.owner_db ?? []) {
+  // The sets are built only when the candidate has something to compare (most have empty lists).
+  const dbCandidate = candidate.owner_db ?? [];
+  const dbActive = dbCandidate.length
+    ? new Set((active.owner_db ?? []).map((s) => s.toLowerCase()))
+    : null;
+  for (const d of dbCandidate) {
     if (dbActive.has(d.toLowerCase()))
-      return { type: 'db', name: d, with: active.id, text: `DB function ${d} is owned by ${owner}` };
+      return {
+        type: 'db',
+        name: d,
+        with: active.id,
+        text: `DB function ${d} is owned by ${ownerText()}`,
+      };
   }
   // One dynamic patch of each shared function at a time (e.g. a common export or anonymization function).
-  const patchActive = new Set((active.shared_patch ?? []).map((s) => s.toLowerCase()));
-  for (const d of candidate.shared_patch ?? []) {
+  const patchCandidate = candidate.shared_patch ?? [];
+  const patchActive = patchCandidate.length
+    ? new Set((active.shared_patch ?? []).map((s) => s.toLowerCase()))
+    : null;
+  for (const d of patchCandidate) {
     if (patchActive.has(d.toLowerCase()))
       return {
         type: 'patch',
@@ -1521,7 +1548,7 @@ function blockerParts(o, tasks, resolved = []) {
   // A task in the batch queue is never started or picked alone; it is packed into a track (queue.mjs batch pack).
   if (isBatched(o)) return [{ type: 'batched', text: BATCHED_BLOCKER }];
   const h = [];
-  const perId = new Map(tasks.map((x) => [x.id, x]));
+  const perId = perIdFor(tasks);
   for (const dep of o.depends_on ?? []) {
     const d = perId.get(dep);
     if (!d) h.push({ type: 'depends_on', id: dep, status: null, text: `depends on unknown ${dep}` });
@@ -1537,11 +1564,33 @@ function blockerParts(o, tasks, resolved = []) {
   for (const sp of o.waiting_on ?? []) {
     if (!resolvedSet.has(sp)) h.push({ type: 'question', sp, text: `waiting on answer: ${sp}` });
   }
-  for (const a of tasks.filter((x) => ACTIVE.has(x.status))) {
-    const k = conflictPart(o, a);
-    if (k) h.push({ type: 'conflict', conflict: k, text: k.text });
-  }
+  // Copy, so a caller that changes a blocker never changes the buffered answer (conflictsWithActive).
+  for (const k of conflictsWithActive(o, tasks))
+    h.push({ type: 'conflict', conflict: { ...k }, text: k.text });
   return h;
+}
+
+/**
+ * The conflicts between the candidate and each active task (conflictPart), in the order of the active ones. The board
+ * asks blockerParts for the same card from several views (the card, nextUp, the plan basis, the areas, selectNext),
+ * and each call walked all the active ones again. Inside withIndex the answer is therefore computed once per candidate
+ * and reused (same condition as the rest of the fast index: the queue does not change while fn runs). Outside the
+ * index it is computed again.
+ */
+function conflictsWithActive(o, tasks) {
+  const ix = indexFor(tasks);
+  if (ix) {
+    ix.conflicts ??= new Map();
+    const stored = ix.conflicts.get(o);
+    if (stored) return stored;
+  }
+  const out = [];
+  for (const a of activeFor(tasks)) {
+    const k = conflictPart(o, a);
+    if (k) out.push(k);
+  }
+  if (ix) ix.conflicts.set(o, out);
+  return out;
 }
 
 /** Why can the task not be started now? Empty list = it can. (The limits are checked in selectNext.) */
@@ -1549,8 +1598,73 @@ function blockers(o, tasks, resolved = []) {
   return blockerParts(o, tasks, resolved).map((h) => h.text);
 }
 
+// ---- The fast index ------------------------------------------------------------------------------------------------
+// blockerParts, successors and score were called once per card, and each call built the lookups for the WHOLE queue
+// again (the id map, the active ones, childrenMap and the transitive successor list). With 3 000 tasks the board was
+// then quadratic (close to a minute). withIndex(tasks, fn) lets fn use lookups that are built ONCE and reused, but only
+// for exactly this task list and only while fn runs: outside (and for another list) everything is built again as
+// before, so a mutation of the queue (queue.mjs changes status, depends_on …) can never meet a stale lookup. The
+// requirement on fn is therefore that it does not change the tasks (the list, status or depends_on) or the project
+// register while it runs; the board and the views only read. (The variable fastIndex is declared at the top, before
+// projectFor.)
+
+/**
+ * Run fn with the fast index for `tasks` (see above). Nested calls reuse the outer index. Synchronous fn only.
+ * @template T
+ * @param {object[]} tasks
+ * @param {() => T} fn
+ * @returns {T}
+ */
+function withIndex(tasks, fn) {
+  if (fastIndex) return fn();
+  fastIndex = {
+    tasks,
+    perId: null,
+    active: null,
+    children: null,
+    after: new Map(),
+    project: null,
+    conflicts: null,
+  };
+  try {
+    return fn();
+  } finally {
+    fastIndex = null;
+  }
+}
+
+/** The index when it applies to exactly this list, otherwise null. */
+function indexFor(tasks) {
+  return fastIndex && fastIndex.tasks === tasks ? fastIndex : null;
+}
+
+/** id → task (from the index when it applies; otherwise a new map). */
+function perIdFor(tasks) {
+  const ix = indexFor(tasks);
+  if (!ix) return new Map(tasks.map((x) => [x.id, x]));
+  ix.perId ??= new Map(tasks.map((x) => [x.id, x]));
+  return ix.perId;
+}
+
+/** The tasks with an active status (ACTIVE), in queue order (from the index when it applies). */
+function activeFor(tasks) {
+  const ix = indexFor(tasks);
+  if (!ix) return tasks.filter((x) => ACTIVE.has(x.status));
+  ix.active ??= tasks.filter((x) => ACTIVE.has(x.status));
+  return ix.active;
+}
+
 /** The successors per task: id → the ids that have it in `depends_on` (for successors; build it once for many calls). */
 function childrenMap(tasks) {
+  const ix = indexFor(tasks);
+  if (ix) {
+    ix.children ??= buildChildrenMap(tasks);
+    return ix.children;
+  }
+  return buildChildrenMap(tasks);
+}
+
+function buildChildrenMap(tasks) {
   const children = new Map();
   for (const o of tasks) {
     for (const d of o.depends_on ?? []) {
@@ -1568,7 +1682,18 @@ function childrenMap(tasks) {
  * @param {Map<string, string[]>} [children] childrenMap(tasks), when many tasks are looked up
  * @returns {string[]} the ids in the order they were found
  */
-function successors(id, tasks, children = childrenMap(tasks)) {
+function successors(id, tasks, children) {
+  // With the fast index (and the index's own childrenMap) each id is computed only once; the copy protects against the
+  // caller sorting or changing the list (unlocksOf on the board sorts it).
+  const ix = indexFor(tasks);
+  if (ix && (children === undefined || children === childrenMap(tasks))) {
+    if (!ix.after.has(id)) ix.after.set(id, computeSuccessors(id, tasks, childrenMap(tasks)));
+    return [...ix.after.get(id)];
+  }
+  return computeSuccessors(id, tasks, children ?? childrenMap(tasks));
+}
+
+function computeSuccessors(id, tasks, children) {
   const set = new Set();
   const stack = [...(children.get(id) ?? [])];
   while (stack.length) {
@@ -1578,7 +1703,7 @@ function successors(id, tasks, children = childrenMap(tasks)) {
     stack.push(...(children.get(x) ?? []));
   }
   // Only tasks that still need doing count.
-  const perId = new Map(tasks.map((o) => [o.id, o]));
+  const perId = perIdFor(tasks);
   return [...set].filter((x) => !['done', 'cancelled'].includes(perId.get(x)?.status));
 }
 
@@ -5666,6 +5791,7 @@ module.exports = {
   blockers,
   blockerParts,
   childrenMap,
+  withIndex,
   successors,
   lockUpCount,
   score,

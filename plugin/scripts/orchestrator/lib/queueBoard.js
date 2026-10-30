@@ -215,8 +215,16 @@ function aging(o, ageLimits, now = Date.now()) {
  *   (<remote>/<baseBranch>, the paths changed locally since then, the mission text) for queueLogic.cloudSuitable on the cards in the queue and in
  *   cloud sessions. Without `cloud` the cards get no suitability.
  */
-function board(
+function board(queue, option = {}) {
+  // The lookups for the whole queue (id map, active ones, successors, conflicts) are built once for the board, not per
+  // card (queueLogic.withIndex). The board does not change the queue, so the index cannot go stale while it is built.
+  const tasks = queue.tasks ?? [];
+  return L.withIndex(tasks, () => buildBoard(queue, tasks, option));
+}
+
+function buildBoard(
   queue,
+  tasks,
   {
     now = Date.now(),
     uncommitted = [],
@@ -227,7 +235,6 @@ function board(
     branchPrefix = BRANCH_PREFIX,
   } = {},
 ) {
-  const tasks = queue.tasks ?? [];
   const register = queue.projects ?? {};
   const lanes = projectLanes(queue);
   const colorFor = new Map(lanes.map((b) => [b.pid, b.color]));
