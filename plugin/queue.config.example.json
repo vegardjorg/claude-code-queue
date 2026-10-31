@@ -49,6 +49,8 @@
   "_protectedPaths": "Merge guard: paths a track may only change when its task owns them (owned_files/shared_patch); otherwise merge-track stops with exit 4 (--allow-guard overrides). \"folder/\", \"dir/file\" or a bare file name (any folder). Leave the field out for the default list in queueConfig.js; [] turns the guard off.",
   "_loadGuard": "Load guard: next, start and fill refuse new starts (exit 7, THE MACHINE IS FULL) while free memory is below minFreeMemoryPct percent. null = off. cq limit minFreeMemoryPct <n|off> overrides it for the queue.",
   "loadGuard": { "minFreeMemoryPct": null },
+  "_proposals": "Auto-accept of agent proposals (default off): a proposal that fits the rules is approved by the queue itself, logged and can be undone (cq proposals). Never D or D+, never with waiting_on, legal/owner labels, open legal points or protected paths. cq proposals auto and the board write the queue's own rules, which win.",
+  "proposals": { "autoAccept": { "enabled": false, "classes": ["K"], "maxEstimateMin": 60, "maxValue": null } },
   "_qa": "QA evidence: tracks write EVIDENCE <type>[=<ref>] in report.md and receive stores it. autoTypes are closed by cq qa auto --run when autoCommand is green ({refs} = the refs, {id} = the task id; a string or { type: command }). evidenceLabels = labels receive warns for when the line is missing.",
   "qa": {
     "evidenceTypes": ["screenshot", "test", "manual"],

@@ -29,11 +29,13 @@ The Queue workspace has these tabs:
   reorder them.
 - **Project lanes:** the same cards with one row per project; drag a lane to change the project's priority.
 - **Focus:** the order the queue takes work in, as Now, Next, Later and Waiting. Drag areas, projects and features
-  between the columns. "Areas …" creates and names the areas.
+  between the columns. "Areas …" creates and names the areas. A **Forecast** box above the columns says when the
+  remaining tasks in the focus are done at 50, 85 and 95 % (the same as `cq forecast`; the saved focus counts).
 - **Dependencies:** a graph of which tasks wait on which.
 - **Cloud:** tasks that can run in a cloud session, and the cloud sessions (off by default, see [Modules](#modules)).
 - **Statistics:** done per day, added versus finished, time per class, cost per day (API-equivalent USD), context at
-  the end of tracks, key figures (including usage today), and the legend for the badges on the cards.
+  the end of tracks, key figures (including usage today), the forecast line, and the legend for the badges on the
+  cards.
 
 **Waiting on you** (the button at the top) collects what needs the owner: owner questions, proposals to approve,
 QA (done tasks with the label `visual` that wait for a manual check, `qa ok` / `qa deviation`) and what is stuck.
@@ -43,8 +45,10 @@ what waits on you. **Plan entries** shows the entries as a list, a priority map,
 filters and the details of the selected entry. **Documents and agreements**, **Legal**, **Decisions** and **Launch**
 show the documents, the legal points, the owner decisions and what stands between the plan and launch.
 
-The gear holds the settings and the help, in two tabs. **General**: theme, mascot, the queue's limits and the
-read-only setup. **Helper agents**: one row per [helper agent](orchestration.md#helper-agents) with what it does,
+The gear holds the settings and the help, in two tabs. **General**: theme, mascot, the queue's limits, **Auto-accept
+proposals** (the switch, the classes K and U, max estimate and max value, saved together through `cq proposals auto`
+via `/api/proposals`, and the log of what was auto-accepted with an Undo button per row, `/api/proposals-undo` =
+`cq proposals undo <id>`; see [queue.md](queue.md#auto-accept-of-proposals)) and the read-only setup. **Helper agents**: one row per [helper agent](orchestration.md#helper-agents) with what it does,
 when it runs (classes, labels, paths in plain text), an on/off switch (a checkbox with role switch; Space toggles it)
 and what it has cost: runs, median and total minutes, tokens and USD, its share of the task cost, and H/M/L findings
 per run ("No runs yet" until it has run). The switch is saved through `cq helpers on|off <agent>` (the board posts

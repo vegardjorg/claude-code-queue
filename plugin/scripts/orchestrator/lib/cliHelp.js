@@ -55,8 +55,8 @@ const GROUPS = [
 const QUEUE_COMMANDS = [
   'activeOnes', 'add', 'approve', 'area', 'areas', 'batch', 'capacity', 'classify', 'cloud', 'cloud-bundles',
   'cloud-package', 'compact', 'continue', 'cost', 'deliver', 'deliveries', 'diagnose', 'edit', 'edit-many', 'external',
-  'fill', 'focus', 'follow', 'handover', 'helpers', 'info', 'init', 'limit', 'merge', 'migr', 'next', 'next-migr',
-  'orchestrator', 'park', 'pick', 'pickable', 'plan', 'project', 'projects', 'qa', 'question', 'rank', 'receive',
+  'fill', 'focus', 'follow', 'forecast', 'handover', 'helpers', 'info', 'init', 'limit', 'merge', 'migr', 'next', 'next-migr',
+  'orchestrator', 'park', 'pick', 'pickable', 'plan', 'project', 'projects', 'proposals', 'qa', 'question', 'rank', 'receive',
   'release', 'resolutions', 'resolve', 'resume', 'set', 'show', 'start', 'state', 'trackFile', 'undo',
 ];
 

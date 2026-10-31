@@ -12,6 +12,16 @@ and `package.json`.
   cost-guard-statistics, context-measure, statusline) under "Internal"; `cq help <command>` prints one command in full,
   or a script's header. An unknown command prints `Unknown command "shwo". Did you mean "show"? See cq help.` (edit
   distance up to 2, or a prefix; nothing when nothing is close; exit code unchanged). The logic is in `lib/cliHelp.js`.
+- **Forecast**: `cq forecast [--project <pid>] [--days 28] [--json]` says when the remaining tasks (the focus stages,
+  otherwise all open work) are done at 50, 85 and 95 %, from a Monte Carlo over the daily throughput in the window
+  (zero days included), with the sample size and the expected cost (remaining x median measured cost). "Not enough
+  data" under 5 done. The board shows it as a box in the Focus view and a line in Statistics (`lib/queueForecast.js`).
+- **Auto-accept of proposals** (default off): `cq proposals auto on|off [--classes K,U] [--max-estimate <min|none>]
+  [--max-value <1-10|none>]`, `cq proposals log` and `cq proposals undo <id>`. A proposal that fits the rules is
+  approved by `cq add` and `cq orchestrator pulse` through the approve path, with a remark and a log entry
+  (`auto_accepted`). Never D or D+, `waiting_on`, legal/owner labels, a plan entry with open legal points or a
+  protected path. Config default `proposals.autoAccept`; the board's gear has the switch, the rules and the log with
+  Undo (`lib/queueProposals.js`).
 - **Started without agent**: `cq show`, `cq state` (`withoutAgent`) and `cq orchestrator pulse` warn about tracks
   marked running for more than 15 minutes whose branch no worktree has checked out and that have no report, with the
   fix (`cq set <id> waiting`, then `cq fill --ids <id>`). `fill` only marks tracks; when it ran where nobody read the

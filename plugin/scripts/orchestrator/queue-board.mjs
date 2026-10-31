@@ -23,6 +23,10 @@
 //     or the date changes.
 //   - SETTINGS: the limits are written with `queue.mjs limit <name> <val>` (same lock and validation); the setup
 //     (migrations when they are turned on, orchestrator, model, hooks and skills) is read only.
+//     "Auto-accept proposals" (lib/queueProposals.js) saves with POST /api/proposals (= `queue.mjs proposals auto ...`) and
+//     undoes one with POST /api/proposals-undo { id } (= `queue.mjs proposals undo <id>`).
+//   - FORECAST: the state and the statistics carry `forecast` (lib/queueForecast.js, Monte Carlo over the daily throughput,
+//     a fixed seed), shown as a box in the Focus view and a line in Statistics.
 //   - GUARD RULES: every write call runs queueBoard.assess first. stop → 422, warning → 409 until the call sends
 //     `confirm: true`, info → the action is done and the texts are sent with the response. queue.mjs still refuses on its own.
 //   - MASCOT: GET /mascot sends the phrases from the optional <dataFolder>/mascot-phrases.json (or the neutral default
@@ -114,6 +118,9 @@ const FEATURES = KK.features(CONFIG);
 const HELP = require('./lib/queueHelpers.js');
 // The custom helpers' files (sha256 against the approval); only read and hashed, never run.
 const HF = require('./lib/helperFiles.js');
+// The forecast box (Focus view, Statistics) and the "Auto-accept proposals" section in the gear.
+const FC = require('./lib/queueForecast.js');
+const PR = require('./lib/queueProposals.js');
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 // The project root (two folders above scripts/orchestrator/). The queue lives in the main tree, as for queue.mjs: if the board runs from a
 // worktree, config().root already points to the main tree.
@@ -408,6 +415,8 @@ function state() {
     update,
     // The module switches (lib/queueConfig.js features): the board hides the tabs, buttons and rows of those that are off.
     features: FEATURES,
+    // The forecast box in the Focus view (lib/queueForecast.js, a fixed seed so the version stays stable).
+    forecast: boardForecast(showQueue),
   };
   // Each stage gets status and rests; a stage with only rests shows them in the title (the focus line and the cards
   // read the title), not as an empty stage.
@@ -460,13 +469,27 @@ function timeLogRows() {
   return logCache;
 }
 
+/** The forecast for the board; an error never stops the state or the statistics (the box is then left out). */
+function boardForecast(queue) {
+  try {
+    return FC.boardForecast(queue);
+  } catch (e) {
+    console.error(`the forecast failed: ${e?.message ?? e}`);
+    return null;
+  }
+}
+
 let statCache = null;
 function statistics() {
   const log = timeLogRows();
   const key = `${log.key}|${fs.statSync(FILE).mtimeMs}|${TK.dayFor(new Date().toISOString())}`;
   if (statCache?.key === key) return statCache;
   const queue = JSON.parse(fs.readFileSync(FILE, 'utf8'));
-  const data = { ...S.statistics(queue, log.rows), timeLogError: log.error };
+  const data = {
+    ...S.statistics(queue, log.rows),
+    timeLogError: log.error,
+    forecast: boardForecast(queue),
+  };
   const version = crypto.createHash('sha1').update(JSON.stringify(data)).digest('hex').slice(0, 16);
   statCache = { key, version, data };
   return statCache;
@@ -1535,6 +1558,18 @@ async function write(filePath, b) {
   }
   // "Add helper": a pasted path goes to `cq helpers add` (queue.mjs reads, copies, hashes and scans the file; the helper
   // stays off). Approving is never possible from the board: that is Claude's review and the owner's yes, in the CLI.
+  // "Auto-accept proposals" in the gear: the rules go through `cq proposals auto ...` and Undo through
+  // `cq proposals undo <id>` (queue.json under the lock, the same validation as the CLI).
+  if (filePath === '/api/proposals') {
+    const h = PR.boardArgs(b);
+    if (h.error) return no(h.error);
+    return run(h.args, `proposals auto ${h.args[2]}`);
+  }
+  if (filePath === '/api/proposals-undo') {
+    const id = idOrNull(b.id);
+    if (!id) return no('invalid id');
+    return run(['proposals', 'undo', id], `proposals undo ${id}`);
+  }
   if (filePath === '/api/helper-add') {
     const h = T.helperAddArgs(b);
     if (h.error) return no(h.error);
@@ -2042,6 +2077,8 @@ const server = http.createServer(async (req, res) => {
           // The "Helper agents" tab: one row per helper with the switch, when it runs and the measurement.
           // A custom helper is checked against its approved sha256 (Needs review, Changed since approval).
           helpers: HELP.helperRows(CONFIG, queue, { hashes: HF.currentHashes(CONFIG, queue, MAIN_TREE) }),
+          // "Auto-accept proposals": the rules in force and the log with Undo per row (lib/queueProposals.js).
+          autoAccept: PR.boardData(CONFIG.proposals?.autoAccept, queue),
         });
       } catch (e) {
         return json(res, 503, {

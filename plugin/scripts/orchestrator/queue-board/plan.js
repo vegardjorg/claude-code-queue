@@ -165,6 +165,7 @@
         'div',
         { class: 'plan-view' },
         toolbar(p),
+        forecastBox(d.forecast),
         el(
           'div',
           { class: 'plan-columns' },
@@ -177,6 +178,27 @@
       main
         .querySelector(`.plan-element[data-key="${CSS.escape(template)}"]`)
         ?.focus({ preventScroll: !s.boosted });
+  }
+
+  /**
+   * The forecast box: when the remaining tasks in the focus (or the whole queue without a focus) are done at 50, 85 and
+   * 95 %, from the daily throughput (the server computes it, lib/queueForecast.js; the same as `cq forecast`).
+   */
+  function forecastBox(f) {
+    if (!f?.text) return null;
+    const how = !f.enough
+      ? 'Needs a few done tasks in the window before it can say anything.'
+      : f.remaining
+        ? `Monte Carlo: ${f.runs} runs drawing a day's throughput from the last ${f.windowDays} days (zero days ` +
+          'included). The saved focus counts, not the draft.'
+        : 'Nothing left in the focus.';
+    return el(
+      'section',
+      { class: 'plan-forecast', 'aria-labelledby': 'plan-forecast-title' },
+      el('h3', { id: 'plan-forecast-title', class: 'plan-forecast-title', text: 'Forecast' }),
+      el('p', { class: 'plan-forecast-text', text: f.text }),
+      el('p', { class: 'plan-forecast-how', text: how }),
+    );
   }
 
   function toolbar(p) {
