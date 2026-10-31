@@ -25,8 +25,8 @@ The switch at the top left changes between two workspaces, **Queue** and **Plans
 The Queue workspace has these tabs:
 - **Flat:** the columns **In queue** (ready now, blocked, proposed by agents and the batch queue), **In progress**,
   **Review** and **Built**. Each card shows class, estimate, value, blockers and owner questions. Click a card for
-  its details and actions (to the top of the queue, pick, put on hold, add to the batch queue). Drag cards to
-  reorder them.
+  its details and actions (to the top of the queue, pick, put on hold, add to the batch queue, edit, cancel task,
+  and decline for a proposal). Drag cards to reorder them.
 - **Project lanes:** the same cards with one row per project; drag a lane to change the project's priority.
 - **Focus:** the order the queue takes work in, as Now, Next, Later and Waiting. Drag areas, projects and features
   between the columns. "Areas …" creates and names the areas. A **Forecast** box above the columns says when the
@@ -36,6 +36,15 @@ The Queue workspace has these tabs:
 - **Statistics:** done per day, added versus finished, time per class, cost per day (API-equivalent USD), context at
   the end of tracks, key figures (including usage today), the forecast line, and the legend for the badges on the
   cards.
+
+**Cancel, decline and edit.** For a waiting task (also on hold or in the batch queue) the detail panel has **Edit**
+(value 1-10, content minutes and class, checked like `cq add` / `cq edit`) and **Cancel task**; for a proposal it has
+**Edit** and **Decline**. Cancel and decline ask first, with an optional one-line reason, and run `cq cancel <id>
+--remark "cancelled: …"` or `"declined: …"` (the same result as `cq set <id> cancelled --remark …`, but logged).
+Edit runs `cq edit <id> --json '{…}'`. All three go through `/api/task-edit` and give **Undo** for 30 seconds. A
+running, picked or review task is never cancelled from the board, since an agent or a person may be working on it:
+the panel shows `cq set <id> cancelled --remark "<why>"` instead. **Waiting on you** has **Decline** next to
+**Approve** for each proposal; it opens the task with the confirm step.
 
 **Waiting on you** (the button at the top) collects what needs the owner: owner questions, proposals to approve,
 QA (done tasks with the label `visual` that wait for a manual check, `qa ok` / `qa deviation`) and what is stuck.

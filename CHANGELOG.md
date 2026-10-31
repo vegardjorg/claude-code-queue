@@ -22,6 +22,13 @@ and `package.json`.
   (`auto_accepted`). Never D or D+, `waiting_on`, legal/owner labels, a plan entry with open legal points or a
   protected path. Config default `proposals.autoAccept`; the board's gear has the switch, the rules and the log with
   Undo (`lib/queueProposals.js`).
+- **Cancel, decline and edit from the board**: the detail panel has **Edit** (value 1-10, content minutes, class;
+  checked like `cq add` / `cq edit`) and **Cancel task** for waiting tasks, and **Edit** and **Decline** for
+  proposals (also in **Waiting on you**). Cancel and decline ask first, take an optional reason (saved as a remark)
+  and show **Undo**. Running and review tasks are not cancelled from the board; the panel shows the CLI command
+  instead of "No actions for this status". New `cq cancel <id> [--remark "…"] [--json]`: the same result as
+  `cq set <id> cancelled --remark`, but logged in the changelog so `cq undo` puts the task back; `cq edit` takes
+  `--answer-json`. The board posts to `/api/task-edit`; the rules are in `lib/queueTaskEdit.js`.
 - **Started without agent**: `cq show`, `cq state` (`withoutAgent`) and `cq orchestrator pulse` warn about tracks
   marked running for more than 15 minutes whose branch no worktree has checked out and that have no report, with the
   fix (`cq set <id> waiting`, then `cq fill --ids <id>`). `fill` only marks tracks; when it ran where nobody read the

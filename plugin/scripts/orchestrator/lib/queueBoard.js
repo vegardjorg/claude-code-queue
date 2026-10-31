@@ -299,6 +299,8 @@ function buildBoard(
       domain: o.domain ?? null,
       estimate: L.estimate(o),
       value: Number(o.value ?? 5),
+      // The content estimate as set on the task (the "Edit" form in the detail panel starts from it).
+      content_min: o.content_min == null ? null : Number(o.content_min),
       project: pid,
       color: colorFor.get(pid) ?? WITHOUT_PROJECT_COLOR,
       feature: typeof o.feature === 'string' && o.feature.trim() ? o.feature.trim() : null,

@@ -45,6 +45,9 @@
 //     `queue.mjs edit-many`, `rank` or `batch pack`. dry = preview (--dry, or
 //     queueBoard.packPreview on a copy), otherwise it is written with --expect-changed (exit 6 → 409 outdated).
 //     POST /api/undo { show? , nr? } = `queue.mjs undo [--show] [--nr <n>] --json`.
+//   - CANCEL, DECLINE, EDIT (the detail panel): POST /api/task-edit { type: cancel|decline|edit, id, reason?, form? } runs
+//     `queue.mjs cancel <id> --remark …` or `queue.mjs edit <id> --json {value, content_min, class}` with --by theBoard
+//     (rules in lib/queueTaskEdit.js: only waiting and proposed tasks). Both are logged, so the answer's `log` goes to /api/undo.
 //   - PLANS (see docs/plan-register.md): the Plans workspace (queue-board/plans/). GET /api/plans reads plans.json and
 //     queue.json (read only) and sends what queuePlanView.plansData makes, with a version so unchanged data is not sent
 //     again. The same response has the document register for the Documents and agreements view. The priority map saves a draft with
@@ -110,6 +113,8 @@ const KAP = require('./lib/queueCapacity.js');
 const F = require('./lib/queueFollow.js');
 // The update banner (a newer plugin version, or setup not run after an update). Served to the browser as /queueUpdate.js.
 const U = require('./lib/queueUpdate.js');
+// Cancel, decline and edit one task from the detail panel (the rules; queue.mjs cancel / edit write).
+const TE = require('./lib/queueTaskEdit.js');
 
 const CONFIG = KK.config();
 // The modules that are on (features in queue.config.json, resolved once at start): sent with the state, so the board
@@ -909,6 +914,56 @@ async function undo(b) {
   };
 }
 
+/**
+ * "Cancel task", "Decline" and "Edit" from the detail panel. The body: { type: 'cancel'|'decline'|'edit', id, reason?,
+ * form?: { value?, content_min?, class? }, expect? }. The rules are in lib/queueTaskEdit.js (only waiting and proposed;
+ * decline only a proposal; the edit checked with queueLogic.validate). The write is `queue.mjs cancel` or `queue.mjs edit`
+ * with --by theBoard (and --expect-changed when the board sends it), both logged in the changelog: the answer has `log`,
+ * which "Undo" sends back as { nr } to /api/undo, as after a bulk action.
+ */
+async function taskEdit(b, queueNow) {
+  const no = (message) => ({ status: 400, answer: { ok: false, message } });
+  const type = String(b.type ?? '');
+  const id = idOrNull(b.id);
+  if (!id) return no('invalid id');
+  const expectValue = b.expect == null ? null : String(b.expect);
+  if (expectValue != null && !Number.isFinite(Date.parse(expectValue))) return no('invalid expect');
+  const fv = expectValue ? ['--expect-changed', expectValue] : [];
+  const queue = queueNow();
+  const o = (queue.tasks ?? []).find((x) => x.id === id);
+  let args;
+  if (type === 'cancel' || type === 'decline') {
+    const f = TE.cancelError(o);
+    if (f) return no(f === 'unknown task' ? `unknown task ${id}` : f);
+    if (type === 'decline' && o.status !== 'proposed') return no(`${id} is not a proposal (it is ${o.status})`);
+    const remark = TE.cancelRemark(b.reason, { declined: type === 'decline' });
+    args = ['cancel', id, '--remark', remark, '--by', 'theBoard', '--json', ...fv];
+  } else if (type === 'edit') {
+    const p = TE.editPlan(queue, id, b.form);
+    if (p.error.length) return no(p.error.join('\n'));
+    args = ['edit', id, '--json', JSON.stringify(p.field), '--by', 'theBoard', '--answer-json', ...fv];
+  } else return no(`unknown action ${type}`);
+  const r = await queueJson(args);
+  quick = null;
+  console.log(
+    `${new Date().toLocaleTimeString('en-GB')} ${type} ${id}: ${r.ok && r.data?.ok === true ? 'ok' : `failed (${errorText(r, '?')})`}`,
+  );
+  if (!r.ok || r.data?.ok !== true) {
+    const outdated = r.code === 6 || r.data?.outdated === true;
+    return {
+      status: 409,
+      answer: {
+        ok: false,
+        outdated,
+        message: outdated
+          ? 'The queue has changed since you opened the task. Look at it again.'
+          : errorText(r, `cq ${args[0]} failed`),
+      },
+    };
+  }
+  return { status: 200, answer: { ok: true, log: r.data.log ?? null } };
+}
+
 /** A stage from the plan view: area:<oid>, project:<pid> or feature:<pid>/<name> (queue.mjs validates the rest). */
 const STEP =
   /^(area|project):[a-z0-9]+(?:-[a-z0-9]+)*$|^feature:[a-z0-9]+(?:-[a-z0-9]+)*\/[^\u0000-\u001f\u007f]{1,80}$/;
@@ -1487,6 +1542,8 @@ async function write(filePath, b) {
   // Bulk actions from the selection bar and "Undo".
   if (filePath === '/api/bulk') return bulk(b, queueNow);
   if (filePath === '/api/undo') return undo(b);
+  // "Cancel task", "Decline" and "Edit" in the detail panel (logged, so the same "Undo" works).
+  if (filePath === '/api/task-edit') return taskEdit(b, queueNow);
   // The plan view ("Save focus") and areas.
   if (filePath === '/api/focus') return focus(b, queueNow);
   if (filePath === '/api/area') return area(b, queueNow);

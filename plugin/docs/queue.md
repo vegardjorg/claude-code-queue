@@ -69,7 +69,8 @@ With [auto-accept](#auto-accept-of-proposals) on, the queue approves the proposa
 | `resume <id> --reason fix\|context` | Writes `prompt-<id>-r<N>.md` for a new agent on the same branch (fix round or continuation of an adopted track) |
 | `merge <id>` | Merges the track branch into the base branch (after review). Exit 4: the merge guard stopped it (protected paths the task does not own); `--allow-guard` overrides |
 | `set <id> <status>` | Sets status by hand |
-| `edit <id> --json '{…}'` | Changes fields |
+| `cancel <id> [--remark "…"]` | Cancels a waiting or proposed task (decline a proposal with `--remark "declined: …"`); logged, so `undo` puts it back. Running and review tasks: `set <id> cancelled` |
+| `edit <id> --json '{…}'` | Changes fields (logged; `undo` rolls it back) |
 | `info <id>` | Short view of one task |
 | `question` / `resolve <q> --answer "…"` | Owner questions / answer one (waiting tasks get the answer in their mission) |
 | `limit [<name> <value>]` | Limits: `maxConcurrent`, `maxDPlus`, `maxPerDomain`, `dailyBudget`, night window, `minFreeMemoryPct` |

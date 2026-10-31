@@ -43,7 +43,12 @@
 //                                                                  also overrides the daily budget, the night pause and
 //                                                                  the load guard)
 //   node scripts/orchestrator/queue.mjs set <id> <proposed|waiting|running|review|done|cancelled> [--remark "..."]
-//   node scripts/orchestrator/queue.mjs edit <id> --json '{"value":8,"priority_bonus":50}'
+//   node scripts/orchestrator/queue.mjs edit <id> --json '{"value":8,"priority_bonus":50}' [--by "..."] [--answer-json]
+//        (logged in the changelog, so `undo` rolls it back; --answer-json: the answer as JSON with the changelog no.)
+//   node scripts/orchestrator/queue.mjs cancel <id> [--remark "..."] [--by "..."] [--expect-changed <iso>] [--json]
+//        (a waiting (also on hold or batched) or proposed task -> cancelled, the same result as set <id> cancelled
+//         --remark, but logged in the changelog so `undo` puts it back. Declining a proposal is cancel with the
+//         remark "declined: <reason>". Running, picked and review tasks are refused: use set <id> cancelled.)
 //   node scripts/orchestrator/queue.mjs state                      (exit 3 when the queue is empty of work, also when
 //                                                                  the daily budget or the night pause stops new tasks;
 //                                                                  the field stop says which)
@@ -2846,6 +2851,30 @@ if (command === 'init') {
   );
   focusCleanOut();
   if (orchestratorStep) pulseCursor(`set ${id} ${status}`);
+} else if (command === 'cancel') {
+  // Cancel (or decline) one waiting or proposed task, logged so `undo` can put it back (lib/queueTaskEdit.js).
+  const TE = require('./lib/queueTaskEdit.js');
+  const [, id] = a;
+  if (!id || id.startsWith('--')) die('cancel <id> [--remark "..."] [--by "..."] [--expect-changed <iso>] [--json]');
+  const json = a.includes('--json');
+  const remark = val('--remark') ?? null;
+  editLogged('cancel', (queue) => {
+    const o = queue.tasks.find((x) => x.id === id);
+    const r = TE.cancelTask(o, { remark, now: new Date().toISOString() });
+    if (r.error) {
+      if (!json) die(`Not cancelled: ${o ? r.error : `unknown task ${id}`}`);
+      console.log(JSON.stringify({ ok: false, error: [o ? r.error : `unknown task ${id}`] }));
+      if (hasLock) fs.rmSync(LOCK, { recursive: true, force: true });
+      process.exit(1);
+    }
+    autoCleanFocus(queue, `cancel ${id}`);
+  });
+  if (json) console.log(JSON.stringify({ ok: true, id, log: lastEntry?.nr ?? null }));
+  else {
+    console.log(`${id}: cancelled`);
+    focusCleanOut();
+    if (undoHint()) console.log(undoHint());
+  }
 } else if (command === 'edit') {
   const [, id] = a;
   const field = JSON.parse(val('--json') ?? '{}');
@@ -2901,12 +2930,17 @@ if (command === 'init') {
     }
   });
   const changedField = [...Object.keys(field), ...(bonus != null ? ['bonus', 'remarks'] : [])];
-  console.log(`${id} changed: ${changedField.join(', ')}`);
-  if (bonus != null)
-    console.log(
-      'The addition is in the track block from now on (cq trackFile / fill --ids). If the track is already running: send it with SendMessage.',
-    );
-  if (undoHint()) console.log(undoHint());
+  // --answer-json (the board): one JSON line with the changelog no., so "Undo" rolls back exactly this edit.
+  if (a.includes('--answer-json'))
+    console.log(JSON.stringify({ ok: true, id, changed: changedField, log: lastEntry?.nr ?? null }));
+  else {
+    console.log(`${id} changed: ${changedField.join(', ')}`);
+    if (bonus != null)
+      console.log(
+        'The addition is in the track block from now on (cq trackFile / fill --ids). If the track is already running: send it with SendMessage.',
+      );
+    if (undoHint()) console.log(undoHint());
+  }
 } else if (command === 'resolve') {
   const sp = positional(1, ['--answer', '--by']);
   if (!sp.length) die('resolve <question> [...] [--answer "..."] [--by "..."]');
