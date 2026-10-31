@@ -5436,6 +5436,15 @@ const UNDO_BLOCKED = new Set([
   'external_name',
   'done_outside_queue',
 ]);
+/**
+ * The one status change undo may roll back: a logged `queue.mjs cancel` (the board's "Cancel task" and "Decline") of a
+ * task that was waiting or proposed. Other status changes belong to their own commands and stay blocked.
+ */
+const undoableCancel = (entry, e) =>
+  entry?.action === 'cancel' &&
+  e.field === 'status' &&
+  e.after === 'cancelled' &&
+  (e.before === 'waiting' || e.before === 'proposed');
 
 /** Deep copy of a JSON value; undefined becomes null. */
 function cloneJson(x) {
@@ -5565,7 +5574,7 @@ function undoEntry(queue, { by = null, now = new Date().toISOString(), show = fa
   let focusAffected = false;
   for (const e of entry.changes ?? []) {
     const who = changeWho(e);
-    if (e.id != null && UNDO_BLOCKED.has(e.field)) {
+    if (e.id != null && UNDO_BLOCKED.has(e.field) && !undoableCancel(entry, e)) {
       error.push(`${who}: ${e.field} cannot be undone (use the command that owns the field)`);
       continue;
     }

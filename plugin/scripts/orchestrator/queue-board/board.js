@@ -373,7 +373,7 @@
 
   // The write calls that are the owner's actions (approve, resolve, mark, bulk, move, focus). After a successful call the
   // mascot may say something (the night line on an owner action); a dry run or a preview does not count.
-  const OWNER_ACTIONS = new Set(['/api/action', '/api/bulk', '/api/move', '/api/focus']);
+  const OWNER_ACTIONS = new Set(['/api/action', '/api/bulk', '/api/move', '/api/focus', '/api/task-edit']);
   async function api(filePath, body) {
     const init = { headers: { 'X-Queue-Key': t.key ?? '' } };
     if (body) {
@@ -4190,6 +4190,18 @@
                     drawInbox(true);
                   },
                 }),
+                // "Decline" opens the task with the confirm step (an optional reason); "Undo" afterwards.
+                el('button', {
+                  type: 'button',
+                  class: 'button button-outline',
+                  text: 'Decline',
+                  'aria-label': `Decline ${f.id}`,
+                  onclick: () => {
+                    t.taskForm = { id: f.id, mode: 'decline', values: {} };
+                    openPanel(f.id, { fromInbox: true });
+                    panel.querySelector('#cancel-reason')?.focus();
+                  },
+                }),
               ),
             ),
           ),
@@ -4718,12 +4730,227 @@
         );
       }
     }
+    // Cancel, decline and edit (waiting and proposed), or the CLI hint for running and review.
+    const edit = taskEditActions(k);
+    if (edit) box.append(...[].concat(edit));
     // Select and act (same dialog with preview as the selection bar).
     const mark = markButtons(k, col);
     if (mark) box.append(mark);
     if (!box.children.length)
       box.append(el('p', { class: 'none', text: 'No actions for this status.' }));
     return box;
+  }
+
+  // ---- Cancel, decline and edit one task (the detail panel) ----
+  // Only waiting (also on hold or in the batch queue) and proposed tasks; the server checks again (lib/queueTaskEdit.js)
+  // and writes with `queue.mjs cancel` or `queue.mjs edit`, both logged, so "Undo" is ready for 30 seconds afterwards.
+  // A running, picked or review task is never cancelled from the board: the panel shows the CLI command instead.
+  // The open form lives in t.taskForm ({ id, mode: edit|cancel|decline, values }), so a redraw (polling) keeps it open.
+  const TASK_EDIT_STATUSES = new Set(['waiting', 'proposed']);
+  const TASK_CLASSES = ['K', 'D', 'D+', 'U'];
+  function taskEditActions(k) {
+    if (['running', 'picked', 'review'].includes(k.status))
+      return el(
+        'p',
+        { class: 'none task-cli-hint' },
+        'An agent or a person may be working on this task, so it is not cancelled from the board. To cancel it: ',
+        el('code', { text: `cq set ${k.id} cancelled --remark "<why>"` }),
+      );
+    if (!TASK_EDIT_STATUSES.has(k.status)) return null;
+    const f = t.taskForm?.id === k.id ? t.taskForm : null;
+    const stop = k.status === 'proposed' ? 'decline' : 'cancel';
+    const open = (mode) => {
+      t.taskForm = f?.mode === mode ? null : { id: k.id, mode, values: {} };
+      drawPanel(true);
+      panel.querySelector(mode === 'edit' ? '#edit-value' : '#cancel-reason')?.focus();
+    };
+    const parts = [
+      el('button', {
+        type: 'button',
+        class: 'button button-outline',
+        text: 'Edit',
+        'aria-expanded': String(f?.mode === 'edit'),
+        title: 'Change the value, the content minutes and the class. "Undo" is ready afterwards.',
+        onclick: () => open('edit'),
+      }),
+      el('button', {
+        type: 'button',
+        class: 'button button-outline',
+        text: stop === 'decline' ? 'Decline' : 'Cancel task',
+        'aria-expanded': String(f?.mode === stop),
+        title:
+          stop === 'decline'
+            ? 'Decline the proposal: it is cancelled with your reason as a remark. You confirm first.'
+            : 'The task is cancelled (status cancelled) with your reason as a remark. You confirm first.',
+        onclick: () => open(stop),
+      }),
+    ];
+    if (f?.mode === 'edit') parts.push(editForm(k, f));
+    else if (f) parts.push(cancelForm(k, f));
+    return parts;
+  }
+  /** Closes the open form and puts focus back on the button that opened it. */
+  function closeTaskForm(text) {
+    t.taskForm = null;
+    drawPanel(true);
+    [...panel.querySelectorAll('.actions button')].find((b) => b.textContent === text)?.focus();
+  }
+  /** Escape in an open form closes it (and does not close the panel). */
+  function escapeCloses(form, text) {
+    form.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      closeTaskForm(text);
+    });
+  }
+  /** The "Edit" form: value (1-10), content minutes and class, starting from the task as it is. */
+  function editForm(k, f) {
+    const v = f.values;
+    const keep = (name) => (e) => (v[name] = e.target.value);
+    const value = el('input', {
+      id: 'edit-value',
+      type: 'number',
+      min: '1',
+      max: '10',
+      step: '1',
+      value: v.value ?? String(k.value ?? ''),
+    });
+    value.addEventListener('input', keep('value'));
+    const content = el('input', {
+      id: 'edit-content',
+      type: 'number',
+      min: '1',
+      max: '1000',
+      step: '1',
+      value: v.content_min ?? String(k.content_min ?? ''),
+    });
+    content.addEventListener('input', keep('content_min'));
+    const klass = el(
+      'select',
+      { id: 'edit-class' },
+      TASK_CLASSES.map((c) => el('option', { value: c, text: c })),
+    );
+    klass.value = v.class ?? k.class ?? 'K';
+    klass.addEventListener('change', keep('class'));
+    const form = el(
+      'form',
+      { class: 'task-edit' },
+      el(
+        'fieldset',
+        null,
+        el('legend', { text: `Edit ${k.id}` }),
+        el('div', { class: 'field' }, el('label', { for: 'edit-value', text: 'Value (1-10)' }), value),
+        el(
+          'div',
+          { class: 'field' },
+          el('label', { for: 'edit-content', text: 'Content minutes' }),
+          content,
+        ),
+        el('div', { class: 'field' }, el('label', { for: 'edit-class', text: 'Class' }), klass),
+        el(
+          'div',
+          { class: 'task-edit-buttons' },
+          el('button', { type: 'submit', class: 'button button-filled', text: 'Save' }),
+          el('button', {
+            type: 'button',
+            class: 'button button-outline',
+            text: 'Close',
+            onclick: () => closeTaskForm('Edit'),
+          }),
+        ),
+      ),
+    );
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      taskWrite(
+        {
+          type: 'edit',
+          id: k.id,
+          form: { value: value.value, content_min: content.value, class: klass.value },
+        },
+        `${k.id} is changed`,
+      );
+    });
+    escapeCloses(form, 'Edit');
+    return form;
+  }
+  /** The confirm step for "Cancel task" and "Decline": an optional one-line reason, then yes or keep. */
+  function cancelForm(k, f) {
+    const declined = f.mode === 'decline';
+    const opener = declined ? 'Decline' : 'Cancel task';
+    const reason = el('input', {
+      id: 'cancel-reason',
+      type: 'text',
+      maxlength: '300',
+      autocomplete: 'off',
+      value: f.values.reason ?? '',
+    });
+    reason.addEventListener('input', (e) => (f.values.reason = e.target.value));
+    const form = el(
+      'form',
+      { class: 'task-edit' },
+      el(
+        'fieldset',
+        null,
+        el('legend', { text: declined ? `Decline the proposal ${k.id}?` : `Cancel ${k.id}?` }),
+        el('p', {
+          class: 'task-edit-text',
+          text:
+            (declined
+              ? 'The proposal is cancelled and never started. '
+              : 'The task is cancelled and never started. ') +
+            'The reason is saved as a remark. "Undo" is ready for 30 seconds afterwards.',
+        }),
+        el(
+          'div',
+          { class: 'field' },
+          el('label', { for: 'cancel-reason', text: 'Reason (optional, one line)' }),
+          reason,
+        ),
+        el(
+          'div',
+          { class: 'task-edit-buttons' },
+          el('button', {
+            type: 'submit',
+            class: 'button button-fare',
+            text: declined ? 'Yes, decline' : 'Yes, cancel the task',
+          }),
+          el('button', {
+            type: 'button',
+            class: 'button button-outline',
+            text: declined ? 'Keep the proposal' : 'Keep the task',
+            onclick: () => closeTaskForm(opener),
+          }),
+        ),
+      ),
+    );
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      taskWrite(
+        { type: f.mode, id: k.id, reason: reason.value.trim() || undefined },
+        declined ? `The proposal ${k.id} is declined` : `${k.id} is cancelled`,
+      );
+    });
+    escapeCloses(form, opener);
+    return form;
+  }
+  /** Sends a cancel, decline or edit and offers "Undo" for exactly that change (the changelog no. in the answer). */
+  async function taskWrite(body, ok) {
+    const release = busyButton(lastButton);
+    lastButton = null;
+    try {
+      const answer = await api('/api/task-edit', body);
+      t.taskForm = null;
+      t.details.delete(body.id);
+      if (answer?.log) undoToast(answer.log, ok);
+      else message(ok);
+    } catch (e) {
+      message(e.message, true);
+    }
+    release();
+    await update(true);
+    if (t.selected && t.perId.has(t.selected)) drawPanel(true);
   }
 
   /**

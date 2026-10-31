@@ -93,7 +93,21 @@ push), **Cloud** and **Statistics**.
 <p align="center"><img src="assets/screenshots/light-05-task-detail.jpg" alt="A task opened in the side panel" width="800"></p>
 
 Click a card to open it: the mission, the files it owns, what it waits on, cost and time so far, and the actions
-(approve, pause, cancel, change priority). The chain of tasks before and after it is highlighted on the board.
+for its status. The chain of tasks before and after it is highlighted on the board.
+
+- **Waiting:** *To the top of the queue*, *Pick* (a person takes it), *Put on hold* / *Take off hold*, *Add to
+  batch queue* / *Take out of batch queue*, *Edit* (value 1-10, content minutes and class) and *Cancel task* (you
+  confirm first, with an optional reason saved as a remark). Cloud-suitable tasks also get *Copy cloud package* and
+  *Started in cloud*.
+- **Proposed** (added by an agent): *Edit*, *Decline* (cancels the proposal, with an optional reason), on hold and
+  batch queue. Approve proposals in **Waiting on you**, where each one also has *Decline*.
+- **Running and review:** nothing that stops the work, since an agent may be working on it. The panel shows the
+  command to cancel it from the CLI (`cq set <id> cancelled --remark "<why>"`).
+- **Picked:** *Release*. **In a cloud session:** *Completed in cloud* and *Cancel cloud*. **Built with a visual
+  check:** *QA ok* and *QA deviation*.
+
+Edit, cancel, decline and the bulk actions show **Undo** for 30 seconds afterwards (and *Undo last* in the gear).
+Change the priority by dragging cards (or with the keyboard), or select several cards and move them together.
 
 ### Waiting on you
 

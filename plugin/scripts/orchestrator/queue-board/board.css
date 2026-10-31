@@ -989,6 +989,57 @@ code {
   font-size: var(--text-xs);
 }
 
+/* "Edit", "Cancel task" and "Decline" in the detail panel: the open form takes a whole row. */
+.actions .task-edit {
+  flex: 1 1 100%;
+}
+
+.actions .task-edit fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--distance-sm);
+  margin: 0;
+  padding: var(--distance-md);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-lg);
+}
+
+.actions .task-edit legend {
+  padding: 0 var(--distance-xs);
+  font-weight: 600;
+}
+
+.actions .task-edit .field {
+  flex: 1 1 120px;
+}
+
+.actions .task-edit select {
+  min-height: 44px;
+  padding: var(--distance-sm) var(--distance-md);
+  border: 1px solid var(--color-outline);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-container-lowest);
+  color: var(--color-on-surface);
+}
+
+.actions .task-edit-text {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--color-on-surface-variant);
+}
+
+.actions .task-edit-buttons {
+  display: flex;
+  gap: var(--distance-sm);
+}
+
+.actions .task-cli-hint {
+  flex: 1 1 100%;
+  overflow-wrap: anywhere;
+}
+
 .button {
   min-height: 44px;
   padding: 0 var(--distance-lg);
