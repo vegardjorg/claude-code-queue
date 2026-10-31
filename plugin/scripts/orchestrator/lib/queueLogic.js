@@ -2531,9 +2531,10 @@ const LIMIT_NAME = [
 /**
  * Limits that `queue.mjs limit` also sets, but that are not slot limits (not in LIMIT_NAME, so
  * the settings panel on the board, queueBoard.SETTINGS, is unchanged). parallelThreshold: the share of maxConcurrent below
- * which fill, receive and pulse write a quick queue diagnosis (queueDiagnose.js); default 0.7, 0 = off.
+ * which fill, receive and pulse write a quick queue diagnosis (queueDiagnose.js); default 0.7, 0 = off. silentMin: the
+ * minutes without a sign of life before a running track is SILENT (silentTracks); default 20, 0 = off.
  */
-const LIMIT_EXTRA = ['parallelThreshold', 'minFreeMemoryPct'];
+const LIMIT_EXTRA = ['parallelThreshold', 'minFreeMemoryPct', 'silentMin'];
 
 /** A limit value as text: null = "off", true/false = "on"/"off". */
 function limitText(name, v) {
@@ -6454,6 +6455,163 @@ function withoutAgentLines(list) {
   ];
 }
 
+// ---- Silent tracks and blocker reasons ----------------------------------------------------------------------
+
+/**
+ * Silent tracks ("SILENT"): running, an agent has the branch checked out in a worktree (so not STARTED WITHOUT
+ * AGENT), but no sign of life for `limitMin` minutes. The sign of life is measured by the caller (queue.mjs and the
+ * board server, with lib/trackActivity.js) as the newest of: the last commit on the branch, the newest mtime in the
+ * worktree, the track folder in the scratchpad and the agent transcript. `lastActivity` maps id -> that time in ms
+ * (missing = nothing found). The start time counts as activity too, so a new track always gets the whole limit.
+ * Picked tasks, cloud sessions and delivered tracks (report.md) are left out. limits.silentMin sets the limit
+ * (`cq limit silentMin <n>`, 0 = off).
+ */
+const SILENT_DEFAULT_MIN = 20;
+
+/** The silence limit in minutes: limits.silentMin, otherwise the default. 0 turns the check off. */
+function silentMinFor(queue) {
+  const raw = queue?.limits?.silentMin;
+  const v = Number(raw);
+  return raw != null && Number.isFinite(v) && v >= 0 ? v : SILENT_DEFAULT_MIN;
+}
+
+/** The tracks the silence check measures: running, not picked or cloud, with a branch some worktree has checked out. */
+function silentCandidates(queue, worktreeBranches) {
+  const branches = worktreeBranches ?? new Set();
+  return (queue?.tasks ?? []).filter(
+    (o) => o.status === 'running' && !o.picked_by && !o.cloud && o.branch && branches.has(o.branch),
+  );
+}
+
+function silentTracks(
+  queue,
+  { worktreeBranches, lastActivity = {}, hasReport = () => false, now = Date.now(), limitMin } = {},
+) {
+  const limit = limitMin ?? silentMinFor(queue);
+  if (!(limit > 0)) return [];
+  const activity = lastActivity instanceof Map ? Object.fromEntries(lastActivity) : (lastActivity ?? {});
+  return silentCandidates(queue, worktreeBranches)
+    .map((o) => {
+      const started = Date.parse(o.started ?? '');
+      const seen = Number(activity[o.id]);
+      const last = Math.max(
+        Number.isFinite(started) ? started : -Infinity,
+        Number.isFinite(seen) ? seen : -Infinity,
+      );
+      return { o, last };
+    })
+    .filter(({ last }) => Number.isFinite(last) && now - last >= limit * 60_000)
+    .filter(({ o }) => !hasReport(o))
+    .map(({ o, last }) => ({
+      id: o.id,
+      branch: o.branch,
+      last_activity: new Date(last).toISOString(),
+      silent_ms: now - last,
+    }));
+}
+
+/** The warning lines for `silentTracks` (show, orchestrator pulse). Empty list when all is well. */
+function silentLines(list) {
+  if (!list?.length) return [];
+  return [
+    `SILENT (${list.length}): running with an agent worktree, but no commit, file change or transcript write for a ` +
+      'while (the agent may have hung or run out of context). For each: check the track (its worktree and ' +
+      'transcript), then cq resume <id> --reason context and start the new agent, or stop it (cq set <id> waiting; ' +
+      'cq block <id> silent records why).',
+    ...list.map((x) => `  ${x.id}  ${x.branch}  silent for ${ageText(x.silent_ms)}`),
+  ];
+}
+
+/**
+ * The blocker reasons: one fixed table, so `cq blockers` and the board's statistics can cluster on them. A task has
+ * `blocks: [{ code, from, to?, note? }]`, with at most one open (no `to`). `cq block` / `cq unblock` set them by hand;
+ * `cq merge` opens merge-conflict or gate-red when it stops in that step, and closes the open one after a merge.
+ */
+const BLOCK_CODES = [
+  { code: 'merge-conflict', text: 'the merge step stopped (conflict or merge guard)' },
+  { code: 'gate-red', text: 'the gates failed after the merge' },
+  { code: 'context', text: 'the agent ran out of context' },
+  { code: 'quota', text: 'the usage quota or budget stopped it' },
+  { code: 'owner-question', text: 'waiting on an owner answer' },
+  { code: 'dependency', text: 'waiting on another task' },
+  { code: 'no-agent', text: 'marked running without an agent' },
+  { code: 'silent', text: 'the agent went silent' },
+  { code: 'other', text: 'something else (say what in the note)' },
+];
+const BLOCK_NOTE_MAX = 200;
+
+/** The open block on a task (no `to`), or null. */
+function openBlockOf(o) {
+  return (Array.isArray(o?.blocks) ? o.blocks : []).find((b) => b && !b.to) ?? null;
+}
+
+/**
+ * Opens a block on the task (mutates `o`). An open block with another code is closed at the same moment, so a task has
+ * at most one open block; the same code again keeps the open one and its start (a new note replaces the old).
+ * @returns {{ block: object, closed: object|null, kept: boolean } | { error: string }}
+ */
+function openBlock(o, code, { now = Date.now(), note = null } = {}) {
+  if (!BLOCK_CODES.some((b) => b.code === code))
+    return { error: `unknown blocker code ${code} (${BLOCK_CODES.map((b) => b.code).join(', ')})` };
+  const text = note == null ? '' : String(note).replace(/\s+/g, ' ').trim().slice(0, BLOCK_NOTE_MAX);
+  const open = openBlockOf(o);
+  if (open && open.code === code) {
+    if (text) open.note = text;
+    return { block: open, closed: null, kept: true };
+  }
+  const at = new Date(now).toISOString();
+  if (open) open.to = at;
+  const block = { code, from: at, ...(text ? { note: text } : {}) };
+  o.blocks = [...(Array.isArray(o.blocks) ? o.blocks : []), block];
+  return { block, closed: open, kept: false };
+}
+
+/** Closes the open block on the task (mutates `o`). @returns the closed block, or null when none was open. */
+function closeBlock(o, { now = Date.now() } = {}) {
+  const open = openBlockOf(o);
+  if (!open) return null;
+  open.to = new Date(now).toISOString();
+  return open;
+}
+
+/**
+ * Per code: how many blocks overlap the last `days` days and the blocked time inside that window (an open block counts
+ * up to now). Sorted by time, then count; codes without blocks are left out.
+ * @returns {{ code: string, count: number, ms: number, open: number }[]}
+ */
+function blockerSummary(queue, { now = Date.now(), days = 7 } = {}) {
+  const windowFrom = now - days * 86_400_000;
+  const per = new Map();
+  for (const o of queue?.tasks ?? []) {
+    // A block left open on a finished task stops counting when the task was done (it no longer blocks anything).
+    const finished = o?.status === 'done' && o.done ? Date.parse(o.done) : NaN;
+    for (const b of Array.isArray(o?.blocks) ? o.blocks : []) {
+      const from = Date.parse(b?.from ?? '');
+      const open = !b?.to && !Number.isFinite(finished);
+      const to = b?.to ? Date.parse(b.to) : Number.isFinite(finished) ? finished : now;
+      if (!Number.isFinite(from) || !Number.isFinite(to) || to < windowFrom || from > now) continue;
+      const r = per.get(b.code) ?? { code: b.code, count: 0, ms: 0, open: 0 };
+      r.count += 1;
+      r.ms += Math.max(0, Math.min(to, now) - Math.max(from, windowFrom));
+      if (open) r.open += 1;
+      per.set(b.code, r);
+    }
+  }
+  return [...per.values()].sort((x, y) => y.ms - x.ms || y.count - x.count || x.code.localeCompare(y.code));
+}
+
+/** `cq blockers` as text lines. */
+function blockerLines(summary, { days = 7 } = {}) {
+  if (!summary?.length) return [`No blockers recorded in the last ${days} days.`];
+  return [
+    `Blockers in the last ${days} days (count, blocked time; top first):`,
+    ...summary.map(
+      (r) =>
+        `  ${r.code.padEnd(15)} ${String(r.count).padStart(3)}  ${ageText(r.ms)}${r.open ? `  (${r.open} open)` : ''}`,
+    ),
+  ];
+}
+
 /** Highest used number in the queue's migration blocks ("3600–3609" → 3609). */
 function highestBlockNr(queue) {
   let max = 0;
@@ -7037,6 +7195,17 @@ module.exports = {
   startedWithoutAgent,
   withoutAgentLines,
   NO_AGENT_GRACE_MIN,
+  SILENT_DEFAULT_MIN,
+  silentMinFor,
+  silentCandidates,
+  silentTracks,
+  silentLines,
+  BLOCK_CODES,
+  openBlockOf,
+  openBlock,
+  closeBlock,
+  blockerSummary,
+  blockerLines,
   highestBlockNr,
   nextMigrGuard,
   // Adoption of running tracks (deliveries, resume)

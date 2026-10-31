@@ -197,6 +197,17 @@ started them. A new session adopts them without that notification:
   Fix: `cq set <ID> waiting`, then `cq fill --ids <ID>` and start what it lists in the same turn (fill checks the
   migration block again). Run `cq merge` where you read the output; in a chain or a background job use `--without-fill`
   and run fill yourself afterwards.
+- **Silent:** a running track whose branch a worktree HAS checked out (so the agent started), but that has shown no
+  sign of life for `limits.silentMin` minutes (default 20, `cq limit silentMin <n>`, 0 = off). The sign of life is the
+  newest of: the last commit on the branch, the newest mtime in the worktree (node_modules and .git skipped, a capped
+  walk), the track folder in the scratchpad, and the agent transcript and time log rows tied to the task. `cq show`
+  (right after STARTED WITHOUT AGENT), `cq state` (`silent`) and `cq orchestrator pulse` print `SILENT`, and the board
+  marks the card "silent". Check the track, then `cq resume <ID> --reason context` and start the new agent, or stop it.
+- **Blocker reasons:** `cq block <ID> <code> [--note "…"]` / `cq unblock <ID>` record why a task is stuck, with codes
+  from one fixed table (`merge-conflict`, `gate-red`, `context`, `quota`, `owner-question`, `dependency`, `no-agent`,
+  `silent`, `other`). `cq merge` opens `merge-conflict` (a stop in the merge step) or `gate-red` (a stop in the gates)
+  by itself and closes the open one after the next successful merge. `cq blockers [--days 7]` clusters them: count and
+  blocked time per code, top first (also in the board's Statistics).
 
 An emergency rotation therefore needs no quiet window. Stop the old session first, so two orchestrators do not
 receive and merge the same track. Compaction is still the usual path for a long session.

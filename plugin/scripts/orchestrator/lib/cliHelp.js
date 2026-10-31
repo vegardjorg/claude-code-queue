@@ -53,11 +53,11 @@ const GROUPS = [
 
 /** The command words queue.mjs dispatches on (`command === '...'`); the test keeps this list in step with queue.mjs. */
 const QUEUE_COMMANDS = [
-  'activeOnes', 'add', 'approve', 'area', 'areas', 'batch', 'cancel', 'capacity', 'classify', 'cloud', 'cloud-bundles',
+  'activeOnes', 'add', 'approve', 'area', 'areas', 'batch', 'block', 'blockers', 'cancel', 'capacity', 'classify', 'cloud', 'cloud-bundles',
   'cloud-package', 'compact', 'continue', 'cost', 'deliver', 'deliveries', 'diagnose', 'edit', 'edit-many', 'external',
   'fill', 'focus', 'follow', 'forecast', 'handover', 'helpers', 'info', 'init', 'limit', 'merge', 'migr', 'next', 'next-migr',
   'orchestrator', 'park', 'pick', 'pickable', 'plan', 'project', 'projects', 'proposals', 'qa', 'question', 'rank', 'receive',
-  'release', 'resolutions', 'resolve', 'resume', 'set', 'show', 'start', 'state', 'trackFile', 'undo',
+  'release', 'resolutions', 'resolve', 'resume', 'set', 'show', 'start', 'state', 'trackFile', 'unblock', 'undo',
 ];
 
 /** Short names cq.mjs maps to a script file (cq board = queue-board.mjs). */

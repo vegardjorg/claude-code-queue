@@ -73,7 +73,9 @@ With [auto-accept](#auto-accept-of-proposals) on, the queue approves the proposa
 | `edit <id> --json '{…}'` | Changes fields (logged; `undo` rolls it back) |
 | `info <id>` | Short view of one task |
 | `question` / `resolve <q> --answer "…"` | Owner questions / answer one (waiting tasks get the answer in their mission) |
-| `limit [<name> <value>]` | Limits: `maxConcurrent`, `maxDPlus`, `maxPerDomain`, `dailyBudget`, night window, `minFreeMemoryPct` |
+| `limit [<name> <value>]` | Limits: `maxConcurrent`, `maxDPlus`, `maxPerDomain`, `dailyBudget`, night window, `minFreeMemoryPct`, `silentMin` (minutes before a running track is SILENT; default 20, 0 = off) |
+| `block <id> <code> [--note "…"]` / `unblock <id>` | Opens / closes a blocker reason on the task (`blocks`; one open at a time). Codes: `merge-conflict`, `gate-red`, `context`, `quota`, `owner-question`, `dependency`, `no-agent`, `silent`, `other`. `merge` opens `merge-conflict` or `gate-red` when it stops in that step and closes the open one after a successful merge |
+| `blockers [--days 7] [--json]` | Per blocker code: count and blocked time in the period, top first |
 | `next-migr [<n>]` / `migr move <id> <block>` | Migration flow only: show or set the next number / move a task's block in the queue and its prompt files |
 | `cost` | Cost statistics per class (median, average) from the measured track sessions |
 | `projects`, `project <pid> …` | Projects: progress, pause, prefixes |

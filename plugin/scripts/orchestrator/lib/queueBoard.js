@@ -213,7 +213,8 @@ function aging(o, ageLimits, now = Date.now()) {
  *   tasks (for "old"). `ageLimits`: queueStatistics.ageBounds (aging work). `dailyUsage`: USD today
  *   (only when a dailyQuota is set; for "Next up"). `cloud`: { pushedHead, changed, mission(o) → { text, path } }
  *   (<remote>/<baseBranch>, the paths changed locally since then, the mission text) for queueLogic.cloudSuitable on the cards in the queue and in
- *   cloud sessions. Without `cloud` the cards get no suitability.
+ *   cloud sessions. Without `cloud` the cards get no suitability. `silent`: queueLogic.silentTracks (the server measures
+ *   it, cached); the card gets `silent: { minutes, last_activity }` or null.
  */
 function board(queue, option = {}) {
   // The lookups for the whole queue (id map, active ones, successors, conflicts) are built once for the board, not per
@@ -233,8 +234,16 @@ function buildBoard(
     dailyUsage,
     cloud,
     branchPrefix = BRANCH_PREFIX,
+    silent = [],
   } = {},
 ) {
+  // SILENT tracks per id, for the small badge on the card (queueLogic.silentTracks, measured by the server).
+  const silentFor = new Map(
+    (silent ?? []).map((x) => [
+      x.id,
+      { minutes: Math.round(x.silent_ms / 60_000), last_activity: x.last_activity ?? null },
+    ]),
+  );
   const register = queue.projects ?? {};
   const lanes = projectLanes(queue);
   const colorFor = new Map(lanes.map((b) => [b.pid, b.color]));
@@ -339,6 +348,8 @@ function buildBoard(
       start,
       old,
       aging: agingState,
+      // SILENT: running with an agent worktree but no sign of life (only running cards can be in the list).
+      silent: silentFor.get(o.id) ?? null,
       // "Unlocks N" and the chain (only when they exist, so the response does not grow for cards without a chain).
       unlocks: lockState.count
         ? { count: lockState.count, minutes: lockState.minutes, direct: lockState.direct }

@@ -350,6 +350,62 @@ function mascotNumbers(queue) {
   }
 }
 
+// ---- SILENT tracks (the badge on the card): the same rule as queue.mjs show (queueLogic.silentTracks), measured with
+// lib/trackActivity.js. The measurement (git, a capped mtime walk per running track) is cached for 60 s per task set, so a
+// refresh of the board does not walk the worktrees again.
+let silentCache = { time: 0, key: null, list: [] };
+function silentNow(queue) {
+  const limitMin = L.silentMinFor(queue);
+  const running = (queue.tasks ?? []).filter((o) => o.status === 'running');
+  const key = `${limitMin}|${running.map((o) => `${o.id}:${o.started ?? ''}`).join(',')}`;
+  if (silentCache.key === key && Date.now() - silentCache.time < 60_000) return silentCache.list;
+  let list = [];
+  try {
+    if (limitMin > 0 && running.length) {
+      const ACT = require('./lib/trackActivity.js');
+      const worktrees = G.readWorktrees(gitRead).filter((w) => w.branch);
+      const worktreeBranches = new Set(worktrees.map((w) => w.branch));
+      const candidates = L.silentCandidates(queue, worktreeBranches);
+      if (candidates.length) {
+        const now = Date.now();
+        let rows = [];
+        try {
+          rows = TK.readRows(fs.readFileSync(TIME_LOG, 'utf8'));
+        } catch {
+          /* no time log: the other sources still count */
+        }
+        const agents = ACT.agentsByTask(
+          rows,
+          candidates.map((o) => o.id),
+        );
+        const root = ACT.transcriptsRoot(MAIN_TREE);
+        const lastActivity = {};
+        for (const o of candidates)
+          lastActivity[o.id] = ACT.lastActivity({
+            branch: o.branch,
+            worktree: worktrees.find((w) => w.branch === o.branch)?.path ?? null,
+            trackDirs: o.scratchpad ? [path.join(o.scratchpad, o.id)] : [],
+            agents: agents.get(o.id) ?? null,
+            findTranscript: (agentId) => ACT.findTranscript(root, agentId),
+            git: gitRead,
+            freshMs: now - limitMin * 60_000,
+          }).ms;
+        list = L.silentTracks(queue, {
+          worktreeBranches,
+          lastActivity,
+          hasReport: (o) => !!L.findTrackReport(o.id, o.scratchpad ? [o.scratchpad] : []).report,
+          now,
+          limitMin,
+        });
+      }
+    }
+  } catch (e) {
+    console.error(`the silence check failed: ${e?.message ?? e}`);
+  }
+  silentCache = { time: Date.now(), key, list };
+  return list;
+}
+
 // ---- The state (cheap: rebuilt only when queue.json, git status or the logo has changed) -----------------------------
 // git status is read again every minute, so the state (age, night pause, "Next up") is recomputed at least that often.
 let quick = null;
@@ -400,6 +456,8 @@ function state() {
       branchPrefix: BRANCH_PREFIX,
       // Aging work against p85 for the class (only from queue.json).
       ageLimits: S.ageBounds(queue),
+      // SILENT tracks (the badge on the card; cached 60 s).
+      silent: silentNow(queue),
       dailyUsage: s?.data.keyFigures.usageToday,
       // Suitability with the same rules as queue.mjs cloud-package (queueLogic.cloudSuitable).
       cloud: {
@@ -492,6 +550,8 @@ function statistics() {
   const queue = JSON.parse(fs.readFileSync(FILE, 'utf8'));
   const data = {
     ...S.statistics(queue, log.rows),
+    // "Blockers last 7 days" (queueLogic.blockerSummary, the same numbers as cq blockers).
+    blockers: L.blockerSummary(queue, { days: 7 }),
     timeLogError: log.error,
     forecast: boardForecast(queue),
   };
