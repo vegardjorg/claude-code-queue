@@ -5370,6 +5370,13 @@ if (command === 'init') {
 } else if (command === 'follow') {
   // ---- The "Follow up" entries (see the top of the file and lib/queueFollow.js) ----
   followCommand();
+} else if (command && command !== 'help') {
+  // A mistyped command: one line with the closest known command (lib/cliHelp.js), same exit code as before.
+  const scripts = fs
+    .readdirSync(HERE)
+    .filter((f) => f.endsWith('.mjs') && !f.startsWith('hook-') && f !== 'cq.mjs')
+    .map((f) => f.slice(0, -'.mjs'.length));
+  die(require('./lib/cliHelp.js').unknownCommandMessage(command, require('./lib/cliHelp.js').knownCommands(scripts), CQ), 1);
 } else {
   die(
     'Use: cq <init|add|approve|show|next|start|set|edit|resolve|resolutions|question|limit|state|trackFile|' +

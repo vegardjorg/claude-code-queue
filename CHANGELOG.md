@@ -6,6 +6,12 @@ and `package.json`.
 ## Unreleased
 
 ### Added
+- **`cq help` in groups, and "Did you mean"**: `cq help` prints 14 key commands in four groups (Get started, Daily,
+  Owner, Orchestrator) instead of about 200 lines; `cq help all` prints every command with its full description (the
+  old filter cut many off mid-sentence) and puts the internal scripts (make-queue-common, make-mission,
+  cost-guard-statistics, context-measure, statusline) under "Internal"; `cq help <command>` prints one command in full,
+  or a script's header. An unknown command prints `Unknown command "shwo". Did you mean "show"? See cq help.` (edit
+  distance up to 2, or a prefix; nothing when nothing is close; exit code unchanged). The logic is in `lib/cliHelp.js`.
 - **Started without agent**: `cq show`, `cq state` (`withoutAgent`) and `cq orchestrator pulse` warn about tracks
   marked running for more than 15 minutes whose branch no worktree has checked out and that have no report, with the
   fix (`cq set <id> waiting`, then `cq fill --ids <id>`). `fill` only marks tracks; when it ran where nobody read the
