@@ -172,7 +172,7 @@ describe('cq', () => {
         encoding: 'utf8',
         env: { ...process.env, QUEUE_ROOT: project, QUEUE_FOLDER: path.join(base, 'cq-queue') },
       });
-    expect(run('help').stdout).toContain('prepare-track');
+    expect(run('help', 'all').stdout).toContain('prepare-track');
     const init = run('init');
     expect(init.status, init.stderr).toBe(0);
     expect(fs.existsSync(path.join(base, 'cq-queue', 'queue.json'))).toBe(true);

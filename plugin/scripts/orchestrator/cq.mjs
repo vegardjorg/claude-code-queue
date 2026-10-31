@@ -9,7 +9,9 @@
 //   cq board [args]               queue-board.mjs
 //   cq takeover [args]            queue-takeover.mjs
 //   cq <script> [args]            <script>.mjs, e.g. `cq prepare-track EX-1 --branch queue/EX-1 --scratchpad <dir>`
-//   cq help                       this list
+//   cq help                       the key commands in groups (lib/cliHelp.js)
+//   cq help all                   every command
+//   cq help <command>             one queue command in full, or a script's header
 //
 // In a plugin, bin/cq (and bin/cq.cmd on Windows) calls this file; the plugin's bin/ folder is on the Bash tool's PATH.
 // In a vendored install there is no `cq` on PATH; there the command is `node scripts/orchestrator/cq.mjs <...>`
@@ -20,11 +22,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
+const HELP = createRequire(import.meta.url)('./lib/cliHelp.js');
 
 // Short names for scripts whose file name is long or starts with "queue-".
-const ALIASES = { queue: 'queue', board: 'queue-board', takeover: 'queue-takeover' };
+const ALIASES = HELP.ALIASES;
 
 /** The scripts a user or agent may start (hooks are started by Claude Code, not by hand). */
 function scripts() {
@@ -38,21 +42,20 @@ function scripts() {
 const [first, ...rest] = process.argv.slice(2);
 
 if (!first || first === 'help' || first === '--help' || first === '-h') {
-  console.log(
-    'cq: the work queue (claude-code-queue).\n\n' +
-      '  cq <queue command> [args]   e.g. cq show, cq next, cq fill --scratchpad <dir>, cq plan show\n' +
-      '  cq board                    the board (queue-board.mjs)\n' +
-      '  cq takeover                 status picture for a new orchestrator (queue-takeover.mjs)\n' +
-      `  cq <script> [args]          one of: ${scripts().join(', ')}\n\n` +
-      'The queue commands (from the top of queue.mjs):\n',
-  );
-  // The usage list lives as the comment at the top of queue.mjs: print those lines, with the long path shortened to cq.
-  const usage = fs
-    .readFileSync(path.join(HERE, 'queue.mjs'), 'utf8')
-    .split(/\r?\n/)
-    .filter((l) => /^\/\/\s+node scripts\/orchestrator\/queue\.mjs\b|^\/\/\s{20,}\S/.test(l))
-    .map((l) => l.replace(/^\/\/ ?/, '').replace('node scripts/orchestrator/queue.mjs', 'cq'));
-  console.log(usage.join('\n'));
+  // The texts and the parsing are in lib/cliHelp.js; the full usage list lives as the comment at the top of queue.mjs.
+  const what = rest[0];
+  const source = () => fs.readFileSync(path.join(HERE, 'queue.mjs'), 'utf8');
+  let lines;
+  if (!what) lines = HELP.shortHelp();
+  else if (what === 'all') lines = HELP.fullHelp(source(), scripts());
+  else if (HELP.ALIASES[what] || scripts().includes(what)) {
+    lines = HELP.scriptHeader(fs.readFileSync(path.join(HERE, `${HELP.ALIASES[what] ?? what}.mjs`), 'utf8'));
+  } else lines = HELP.commandHelp(source(), what);
+  if (!lines) {
+    console.error(HELP.unknownCommandMessage(what, HELP.knownCommands(scripts())));
+    process.exit(1);
+  }
+  console.log(lines.join('\n'));
   process.exit(0);
 }
 

@@ -2,8 +2,11 @@
 
 The queue is a JSON file (`scripts/.queue/queue.json`, gitignored) with tasks, owner questions, projects, limits and cost
 data. It survives when the orchestrator's chat is compacted or restarted, because nothing important lives only in
-the chat. Every command is `cq <command>`; `cq help` prints the full usage list (the comment at the
-top of `queue.mjs`). The table below lists the important ones.
+the chat. Every command is `cq <command>`. `cq help` prints the key commands in four groups (Get started, Daily,
+Owner, Orchestrator), `cq help all` the full usage list (the comment at the top of `queue.mjs`, with the internal
+scripts under their own heading), and `cq help <command>` one command in full (or a script's header). A mistyped
+command gets one line with the closest match: `Unknown command "shwo". Did you mean "show"? See cq help.` (exit 1).
+The texts and the suggestion live in `lib/cliHelp.js`. The table below lists the important ones.
 
 Writes happen under a file lock (atomic `mkdir`) and via temp file plus rename, so two writers (the orchestrator and
 a track adding a proposal) cannot corrupt the file. `cq undo` undoes the last change.
