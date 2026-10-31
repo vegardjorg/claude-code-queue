@@ -375,7 +375,8 @@ function resumeText(mode) {
       `scratchpad path and open matters are there). Run \`${cq} handover archive\` first; grep the rest of the ` +
       'note and handover-archive/ only when you need an old detail.',
     `  2. ${cq} orchestrator pulse`,
-    `  3. Receive tracks that have delivered (report.md exists): ${cq} receive <id>`,
+    `  3. Receive tracks that have delivered (report.md exists): ${cq} receive <id>. Tracks under STARTED WITHOUT ` +
+      `AGENT have no agent: ${cq} set <id> waiting, then they come back in step 4.`,
     `  4. ${cq} fill --scratchpad <scratchpad from the note>, and start ALL the agents it ` +
       'lists in the same turn.',
     mode === 'auto'

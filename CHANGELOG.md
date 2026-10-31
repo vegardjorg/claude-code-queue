@@ -3,6 +3,16 @@
 All notable changes to claude-code-queue (the `cq` plugin). The version is in `plugin/.claude-plugin/plugin.json`
 and `package.json`.
 
+## Unreleased
+
+### Added
+- **Started without agent**: `cq show`, `cq state` (`withoutAgent`) and `cq orchestrator pulse` warn about tracks
+  marked running for more than 15 minutes whose branch no worktree has checked out and that have no report, with the
+  fix (`cq set <id> waiting`, then `cq fill --ids <id>`). `fill` only marks tracks; when it ran where nobody read the
+  output (a background `merge`, a chained merge script), tracks could stand for hours without an agent. The
+  after-compact resume text names the check, and `merge` ends its fill excerpt with a note to use `--without-fill`
+  when the output is not read.
+
 ## 0.4.0 (2026-10-31)
 
 ### Changed

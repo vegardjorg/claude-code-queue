@@ -2137,6 +2137,24 @@ function deliveryWarning({ update = false } = {}) {
   }
 }
 
+/**
+ * Running tracks without an agent (queueLogic.startedWithoutAgent): no worktree has the branch and there is no report.
+ * Read-only; `show`, `state` and `orchestrator pulse` use it, so the check also runs after every compaction (the
+ * after-compact hook includes `show`). An error never stops the command it is attached to.
+ */
+function findWithoutAgent(queue) {
+  try {
+    const worktreeBranches = new Set(G.readWorktrees(gitRead).map((w) => w.branch).filter(Boolean));
+    return L.startedWithoutAgent(queue, {
+      worktreeBranches,
+      hasReport: (o) => !!L.findTrackReport(o.id, trackRoots(o)).report,
+    });
+  } catch (e) {
+    console.error(`(The agent check failed: ${e?.message ?? e})`);
+    return [];
+  }
+}
+
 /** The fields `start` and `fill` set (under the lock): status, branch and, if any, migration block. */
 function markStarted(queue, o, { agent = null, head = null, scratchpad = null } = {}) {
   // Past blocks that are already taken (a file, a task that is not finished, an active prompt file).
@@ -2456,6 +2474,9 @@ if (command === 'init') {
   // The short view by default (active ones, startable and counts, under about 3,000 chars); the full table was
   // about 66,000 chars (about 20,000 tokens per call). `--summary` is also accepted. The full one: `show --full`.
   const queue = read();
+  // First, so it survives when the after-compact hook trims the show output.
+  const withoutAgent = L.withoutAgentLines(findWithoutAgent(queue));
+  if (withoutAgent.length) console.log(`${withoutAgent.join('\n')}\n`);
   for (const l of L.summaryView(queue, {
     uncommitted: uncommittedPaths(),
     dailyUsage: dailyUsageFor(queue),
@@ -2502,6 +2523,9 @@ if (command === 'init') {
   const under = (text, indent) => {
     console.log(`${' '.repeat(indent)}↳ ${cut(text, WIDTH - indent - 2)}`);
   };
+  // First, so it survives when the after-compact hook trims the show output.
+  const withoutAgent = L.withoutAgentLines(findWithoutAgent(queue));
+  if (withoutAgent.length) console.log(`${withoutAgent.join('\n')}\n`);
   if (a.includes('--grouped')) {
     // Tree: project -> feature -> tasks, narrow enough for a narrow terminal window.
     for (const p of L.groups(
@@ -3186,6 +3210,8 @@ if (command === 'init') {
   });
   // A separate list of loose waits (always included; empty list when everything is in order).
   t.resolveWaits = L.resolveWaits(queue);
+  // Running tracks without an agent (always included; empty list when all is well).
+  t.withoutAgent = findWithoutAgent(queue);
   // The parallelism (active ones, max, share, threshold, low) always; the findings only when it is low.
   const par = D.parallelDiagnose(queue);
   t.parallel = { ...par, findings: par.low ? par.findings : [] };
@@ -4419,6 +4445,8 @@ if (command === 'init') {
       );
     // Adoption: report.md files that came since the last pulse (an adopted track does not notify this session).
     deliveryWarning({ update: true });
+    // Tracks fill marked running whose agent was never started (fill run where nobody read the output).
+    for (const l of L.withoutAgentLines(findWithoutAgent(read()))) console.log(l);
     // Follow up: the pulse repeats due entries every time, until the report is written (cq follow report).
     for (const l of followLines({ pulse: true })) console.log(l);
     // The pulse runs every loop round, so low parallelism is checked now and then even without fill and receive.

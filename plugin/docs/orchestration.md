@@ -186,6 +186,16 @@ started them. A new session adopts them without that notification:
 - **`cq resume <ID> --reason fix|context`** writes `prompt-<ID>-r<N>.md` for a NEW agent on the same branch
   (`prepare-track --continue`, the paths to the report, handover, review package and `--findings-file`).
 
+- **Started without agent:** `fill` and `start` only MARK a track as running; the agent starts when the orchestrator
+  acts on the "Start these in the SAME turn" lines. If fill ran where nobody read the output (`cq merge` in the
+  background, or a script that chains several merges), the track stays "running" with no agent and the queue stalls
+  without an error. So `cq show` (first in the output, so it survives the after-compact trimming), `cq state`
+  (`withoutAgent`) and `cq orchestrator pulse` print `STARTED WITHOUT AGENT` for a running track older than 15 minutes
+  whose branch no worktree has checked out and that has no report.md. Picked tasks and cloud sessions are left out.
+  Fix: `cq set <ID> waiting`, then `cq fill --ids <ID>` and start what it lists in the same turn (fill checks the
+  migration block again). Run `cq merge` where you read the output; in a chain or a background job use `--without-fill`
+  and run fill yourself afterwards.
+
 An emergency rotation therefore needs no quiet window. Stop the old session first, so two orchestrators do not
 receive and merge the same track. Compaction is still the usual path for a long session.
 

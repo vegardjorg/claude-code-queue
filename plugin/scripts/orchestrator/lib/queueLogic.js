@@ -6241,11 +6241,21 @@ function fillExcerpt(out) {
     .split(/\r?\n/)
     .filter((l) => l.trim());
   const i = lines.findIndex((l) => /^FILLED /.test(l));
-  if (i >= 0) return [`fill: ${lines[i]}`, ...lines.slice(i + 1)];
+  // fill only MARKS the tracks running; the agents start only when someone reads this. Said last, where it is seen.
+  if (i >= 0)
+    return [
+      `fill: ${lines[i]}`,
+      ...lines.slice(i + 1),
+      `NOTE: the tracks above are only marked running. Start the agents now; ${FILL_NOTE}`,
+    ];
   return [`fill: ${lines[lines.length - 1] ?? 'no output'}`];
 }
 
 const SAME_TURN = 'Start these in the SAME turn:';
+/** Why merge must not run where nobody reads it (a background job, a script that chains merges). */
+const FILL_NOTE =
+  'never run merge where nobody reads the output (in the background or chained in a script): use --without-fill there ' +
+  'and run fill yourself afterwards. cq show and the pulse warn about tracks STARTED WITHOUT AGENT.';
 
 /**
  * The agent list the orchestrator starts in ONE turn (in parallel): one line per agent with subagent_type and the message
@@ -6395,6 +6405,44 @@ function activeLines(queue, now = Date.now()) {
       `${o.picked_by ? `  picked by ${o.picked_by}` : ''}`
     );
   });
+}
+
+/**
+ * Tracks marked running that no agent is working on. `fill` and `start` only MARK a track as running; the orchestrator
+ * must start the agent from the "Start these in the SAME turn" lines. When fill runs where nobody reads its output (a
+ * `merge` in the background, a script that chains several merges), the track stays "running" with no agent, and the
+ * queue stalls without any error. A real agent runs `prepare-track` within minutes, and that checks the branch out in
+ * its worktree. So: running, older than `graceMin`, no worktree has the branch, and no report.md = no agent.
+ * Picked tasks and cloud sessions are left out (they have no local worktree). `worktreeBranches` is a Set of branch
+ * names, `hasReport(o)` says whether the track has delivered.
+ */
+const NO_AGENT_GRACE_MIN = 15;
+function startedWithoutAgent(
+  queue,
+  { worktreeBranches, hasReport = () => false, now = Date.now(), graceMin = NO_AGENT_GRACE_MIN } = {},
+) {
+  const branches = worktreeBranches ?? new Set();
+  return (queue?.tasks ?? [])
+    .filter((o) => o.status === 'running' && !o.picked_by && !o.cloud && o.branch)
+    .map((o) => ({ o, from: Date.parse(o.started ?? '') }))
+    .filter(({ from }) => !Number.isNaN(from) && now - from >= graceMin * 60_000)
+    .filter(({ o }) => !branches.has(o.branch) && !hasReport(o))
+    .map(({ o, from }) => ({ id: o.id, branch: o.branch, migr_block: o.migr_block ?? null, age_ms: now - from }));
+}
+
+/** The warning lines for `startedWithoutAgent` (show, orchestrator pulse). Empty list when all is well. */
+function withoutAgentLines(list) {
+  if (!list?.length) return [];
+  return [
+    `STARTED WITHOUT AGENT (${list.length}): marked running, but no worktree has the branch and there is no report. ` +
+      'fill or start marked them and the agents were never started (was fill run where nobody read the output?). ' +
+      'For each: cq set <id> waiting, then cq fill --ids <id> and start what it lists in the SAME turn ' +
+      '(fill checks the migration block again).',
+    ...list.map(
+      (x) =>
+        `  ${x.id}  ${x.branch}  running for ${ageText(x.age_ms)}${x.migr_block ? `  migr ${x.migr_block}` : ''}`,
+    ),
+  ];
 }
 
 /** Highest used number in the queue's migration blocks ("3600–3609" → 3609). */
@@ -6977,6 +7025,9 @@ module.exports = {
   addToBonus,
   bonusBlock,
   activeLines,
+  startedWithoutAgent,
+  withoutAgentLines,
+  NO_AGENT_GRACE_MIN,
   highestBlockNr,
   nextMigrGuard,
   // Adoption of running tracks (deliveries, resume)
