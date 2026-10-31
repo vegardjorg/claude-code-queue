@@ -3,13 +3,16 @@
 All notable changes to claude-code-queue (the `cq` plugin). The version is in `plugin/.claude-plugin/plugin.json`
 and `package.json`.
 
-## Unreleased
+## 0.4.0 (2026-10-31)
 
 ### Changed
 - **The network guard covers reviewers and helper agents**: `curl`, `wget`, `iwr`, a pipe into a shell and an
   unknown `npx` package are now blocked (or asked about) for every reviewer and helper agent, builtin or custom, not
   only for `track` and `track-d`. The list is the read guard's (`queueAgentTypes`), also with the `cq:` prefix. The
   orchestrator is still not affected.
+- `reviewers.U` is empty by default; the challenger for U now comes from `helpers` (same result, but it can be
+  switched off). A config that lists `reviewer-challenger` under `reviewers.U` keeps it as a fixed reviewer.
+- The read guard also covers `reviewer-challenger` and every helper agent in the setup.
 
 ### Added
 - **Fail-fast precheck**: `cq gates --precheck` runs the cheapest checks first, in a fixed order, only on the files
@@ -53,10 +56,9 @@ and `package.json`.
   and the board says when the installed plugin differs from it (local, works with the check off). The vendored
   installer writes `scripts/orchestrator/cq-version.json` so the board knows that version too.
 
-### Changed
-- `reviewers.U` is empty by default; the challenger for U now comes from `helpers` (same result, but it can be
-  switched off). A config that lists `reviewer-challenger` under `reviewers.U` keeps it as a fixed reviewer.
-- The read guard also covers `reviewer-challenger` and every helper agent in the setup.
+### Upgrading
+Update the plugin, then run `cq setup --settings` once, and restart the session (or run `/agents`) so the new
+reviewer agents are picked up.
 
 ## 0.3.0 (2026-10-30)
 
