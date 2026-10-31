@@ -230,6 +230,7 @@
 //
 // Cloud: K/U tasks without migrations and DB can run in a cloud session on claude.ai (the owner pastes the package from the board, or
 // a routine does it). The cloud only sees what is pushed; suitability is decided in queueLogic.cloudSuitable.
+// Off by default: with features.cloud false in queue.config.json the cloud commands answer "Cloud is off" (exit 0).
 //   node scripts/orchestrator/queue.mjs cloud                            (the cloud sessions running, and the pending ones that are suitable)
 //   node scripts/orchestrator/queue.mjs cloud-package <id> [<id> ...] [--out <file>] [--force]   (self-contained message; stdout without
 //                                                                  --out; refuses with the reasons when a task is not suitable.
@@ -405,7 +406,8 @@
 //
 // "Follow up" entries (observations with a start, an end, goals, a log and a fixed report template; <dataFolder>/follow.json,
 // the same lock as the queue; the rules in lib/queueFollow.js). `show` and `orchestrator pulse` show the active ones and
-// TO REPORT (the day is the local calendar day):
+// TO REPORT (the day is the local calendar day). Off by default: with features.follow false in queue.config.json the
+// follow commands answer "Follow is off" (exit 0) and show and pulse print no follow-up lines:
 //   node scripts/orchestrator/queue.mjs follow                          (the list: status, period, number of log entries)
 //   node scripts/orchestrator/queue.mjs follow add --file <json>        ({ id: "F-...", title, why, start, end, owner,
 //                                                                  goals: [{ name, how, expected }], related?,
@@ -2284,6 +2286,15 @@ function sinceTime(s) {
   const t = Date.parse(s);
   if (Number.isNaN(t)) die(`Unknown time "${s}" (use e.g. 7d, 24h or 2026-10-01).`);
   return new Date(t).toISOString();
+}
+
+// ---- Switched-off modules (features in queue.config.json, lib/queueConfig.js) ------------------------------------
+// The commands of a module that is off answer that with exit 0 (not an error: the project chose it). The plan register
+// is never switched off here: skills use it, only the board hides Plans.
+const MODULE_COMMANDS = { cloud: 'cloud', 'cloud-package': 'cloud', 'cloud-bundles': 'cloud', follow: 'follow' };
+if (MODULE_COMMANDS[command] && !KK.featureOn(MODULE_COMMANDS[command], CONFIG)) {
+  console.log(KK.featureOffText(MODULE_COMMANDS[command]));
+  process.exit(0);
 }
 
 // ---- Commands ----------------------------------------------------------------------------------------------
@@ -5650,6 +5661,7 @@ function editFollow(fn) {
 }
 /** The follow-up lines for show and orchestrator pulse. An error (e.g. a broken follow.json) never stops the command. */
 function followLines({ pulse = false } = {}) {
+  if (!KK.featureOn('follow', CONFIG)) return []; // the module is off (features.follow)
   try {
     return F.shortLines(readFollow(), F.dayDate(new Date()), { pulse });
   } catch (e) {

@@ -58,7 +58,7 @@
 //     and GET /api/plans?wait=1 waits until plans.json or queue.json changes (live update, fs.watch).
 //   - FOLLOW UP: the read view /follow (its own page; the link is written in the terminal) with the follow-up entries from
 //     follow.json via GET /api/follow (behind the key). The rules (due date, statuses) are lib/queueFollow.js, the same
-//     as queue.mjs follow; the board never writes follow.json.
+//     as queue.mjs follow; the board never writes follow.json. Only with features.follow on (off by default).
 //   - UPDATE BANNER (lib/queueUpdate.js): at start, and at most once per 24 hours (cache <dataFolder>/update-check.json),
 //     the server fetches the published plugin.json from GitHub with a plain GET (no headers of its own, nothing about
 //     the user or the project, 3 s timeout); any error is silent. Off with board.updateCheck: false or DISABLE_UPDATES
@@ -108,6 +108,9 @@ const F = require('./lib/queueFollow.js');
 const U = require('./lib/queueUpdate.js');
 
 const CONFIG = KK.config();
+// The modules that are on (features in queue.config.json, resolved once at start): sent with the state, so the board
+// hides what is off. A change in the file needs a restart of the board, like the rest of the configuration.
+const FEATURES = KK.features(CONFIG);
 const HELP = require('./lib/queueHelpers.js');
 // The custom helpers' files (sha256 against the approval); only read and hashed, never run.
 const HF = require('./lib/helperFiles.js');
@@ -403,6 +406,8 @@ function state() {
     baseBranch: BASE,
     // The update banner (lib/queueUpdate.js): null, or a newer version and/or "run cq setup --settings".
     update,
+    // The module switches (lib/queueConfig.js features): the board hides the tabs, buttons and rows of those that are off.
+    features: FEATURES,
   };
   // Each stage gets status and rests; a stage with only rests shows them in the title (the focus line and the cards
   // read the title), not as an empty stage.
@@ -1909,7 +1914,7 @@ const server = http.createServer(async (req, res) => {
       if (filePath === '/theme.css')
         return send(res, 200, 'text/css; charset=utf-8', THEME_CSS, { 'Cache-Control': 'no-cache' });
       // Follow up: the read view (the shell without data; the data is fetched from /api/follow behind the key).
-      if (FOLLOW_PAGE[filePath]) {
+      if (FOLLOW_PAGE[filePath] && FEATURES.follow) {
         const [type, body] = FOLLOW_PAGE[filePath];
         return send(res, 200, type, body(), { 'Cache-Control': 'no-cache' });
       }
@@ -1967,7 +1972,7 @@ const server = http.createServer(async (req, res) => {
         });
       }
     }
-    if (req.method === 'GET' && filePath === '/api/follow') {
+    if (req.method === 'GET' && filePath === '/api/follow' && FEATURES.follow) {
       try {
         return json(res, 200, followData());
       } catch (e) {
@@ -2113,7 +2118,7 @@ server.listen(PORT, HOST, () => {
   if (!fs.existsSync(FILE)) console.log(`WARNING: could not find the queue ${FILE}.`);
   console.log(`Kanban board for the work queue is running (only on this machine).`);
   console.log(`Open: http://${HOST}:${PORT}/#key=${KEY}`);
-  console.log(`Follow up: http://${HOST}:${PORT}/follow#key=${KEY}`);
+  if (FEATURES.follow) console.log(`Follow up: http://${HOST}:${PORT}/follow#key=${KEY}`);
   console.log(`Queue: ${FILE}. Ctrl+C stops the board.`);
   // The update check: once now and then once a day (the cache keeps it to one fetch per 24 hours, also across restarts).
   refreshLatest().catch(() => {});

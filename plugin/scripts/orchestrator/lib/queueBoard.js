@@ -429,6 +429,8 @@ function buildBoard(
     // that can be undone ("Undo last").
     changed: queue.changed ?? null,
     undo: undoSummary(queue),
+    // Tasks that are not done or cancelled. 0 = nothing open: the board shows the first-run card instead of empty columns.
+    openTasks: tasks.filter((o) => o.status !== 'done' && o.status !== 'cancelled').length,
   };
 }
 

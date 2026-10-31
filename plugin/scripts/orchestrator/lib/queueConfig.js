@@ -15,6 +15,22 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { roots } = require('./projectRoot.js');
 
+/**
+ * The modules that can be switched off (`features` in queue.config.json). One line per module: the key and its
+ * default. A new switch is one more line here, plus a guard where the module is shown. A dotted key is a part of
+ * another module ("plans.legal" is the Legal surface inside Plans) and is only on when its parent is on too.
+ */
+const FEATURES = Object.freeze({
+  plans: true, // the Plans room on the board (the CLI plan register is never switched off: skills use it)
+  'plans.legal': false, // the Legal surface in Plans
+  'plans.launch': false, // the Launch surface in Plans
+  'plans.documents': false, // the Documents and agreements surface in Plans
+  focus: true, // the Focus tab on the board
+  statistics: true, // the Statistics tab on the board
+  cloud: false, // cloud sessions: the Cloud tab, the cloud filter and detail row, and the cloud commands
+  follow: false, // the follow-up entries: the /follow page, the follow commands and their lines in show and pulse
+});
+
 /** The default values. Edit them in queue.config.json, not here. */
 const STANDARD = Object.freeze({
   // The project name in texts (mission, agent messages, the board).
@@ -168,6 +184,8 @@ const STANDARD = Object.freeze({
     // CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC. The local "run cq setup --settings" notice works either way.
     updateCheck: true,
   },
+  // The modules that can be switched off (FEATURES above): { "cloud": true } turns one on. Unknown keys are ignored.
+  features: FEATURES,
 });
 
 function isObject(v) {
@@ -224,4 +242,44 @@ function timeLog() {
   return process.env.QUEUE_TIME_LOG ?? path.join(config().root, config().timeLog);
 }
 
-module.exports = { STANDARD, merge, findRoot, config, dataFolder, timeLog };
+/**
+ * The resolved module switches: FEATURES merged with `features` from the configuration. Only known keys and real
+ * booleans count (an unknown key or a value like "yes" is ignored without an error), and a part ("plans.legal") is
+ * off when its parent ("plans") is off.
+ * @param {object} [cfg] the configuration (default: config())
+ * @returns {Record<string, boolean>}
+ */
+function features(cfg = config()) {
+  const own = isObject(cfg?.features) ? cfg.features : {};
+  const out = {};
+  for (const [k, v] of Object.entries(FEATURES)) out[k] = typeof own[k] === 'boolean' ? own[k] : v;
+  for (const k of Object.keys(out)) {
+    const parent = k.includes('.') ? k.slice(0, k.indexOf('.')) : null;
+    if (parent && out[parent] === false) out[k] = false;
+  }
+  return out;
+}
+
+/** Is the module on? An unknown name is off. */
+function featureOn(name, cfg) {
+  return features(cfg)[name] === true;
+}
+
+/** The answer a switched-off module's command gives: "Cloud is off (features.cloud in queue.config.json)." */
+function featureOffText(name) {
+  const label = name.charAt(0).toUpperCase() + name.slice(1);
+  return `${label} is off (features.${name} in queue.config.json).`;
+}
+
+module.exports = {
+  STANDARD,
+  FEATURES,
+  merge,
+  findRoot,
+  config,
+  dataFolder,
+  timeLog,
+  features,
+  featureOn,
+  featureOffText,
+};

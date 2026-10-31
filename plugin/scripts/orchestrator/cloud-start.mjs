@@ -16,9 +16,14 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 const require = createRequire(import.meta.url);
-const { config } = require('./lib/queueConfig.js');
+const { config, featureOn, featureOffText } = require('./lib/queueConfig.js');
 const CQ = require('./lib/projectRoot.js').cqCommand();
 const K = config();
+// The cloud module is off (features.cloud in queue.config.json): say so, exit 0.
+if (!featureOn('cloud', K)) {
+  console.log(featureOffText('cloud'));
+  process.exit(0);
+}
 const ROOT = K.root;
 const QUEUE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'queue.mjs');
 const args = process.argv.slice(2);

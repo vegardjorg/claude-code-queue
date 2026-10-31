@@ -87,6 +87,9 @@ A follow-up entry (`F-…`) is something to watch over a period: an internal tes
 variable to measure. It lives in `<dataFolder>/follow.json` (under the queue's lock), not in the memory or the
 handover note.
 
+Follow-up entries are off by default: turn them on with `"features": { "follow": true }` in `queue.config.json`.
+While off, every `follow` command answers "Follow is off (features.follow in queue.config.json)." with exit 0.
+
 ```json
 { "id": "F-AUTOCOMPACT", "title": "Trial of automatic compaction", "why": "Is anything lost?",
   "start": "2026-10-08", "end": "2026-10-15", "owner": "orchestrator",
@@ -150,3 +153,4 @@ reviewer agents per class. Missing values fall back to safe defaults.
 | `modules`, `projectModuleSuggestion`, `priorityRules`, `documentFolders`, `indexFile`, `documents`, `planBackup` | see `queue.config.example.json` | Plan register (see `plan-register.md`) |
 | `board.port`, `board.title` | `2000`, `Queue board` | Board |
 | `board.updateCheck` | `true` | Board: look for a newer cq on GitHub at most once per 24 hours (see board.md, Update banner) |
+| `features` | `plans`, `focus`, `statistics` on; `cloud`, `follow`, `plans.legal`, `plans.launch`, `plans.documents` off | Modules that can be switched off. Off hides them on the board (tabs, buttons, routes; see board.md, Modules); `cloud*` and `follow*` commands answer "Cloud is off (features.cloud in queue.config.json)." with exit 0, and `show` and the pulse skip follow-up lines. `plans` only hides the board's Plans room: `cq plan` always works. A part (`plans.legal`) is off when its parent is off; unknown keys are ignored. Restart the board after a change |

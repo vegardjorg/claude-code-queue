@@ -329,6 +329,8 @@ describe('queue.mjs follow', () => {
   beforeEach(() => {
     folder = mkdtempSync(join(tmpdir(), 'queue-follow-'));
     writeFileSync(join(folder, 'queue.json'), JSON.stringify({ tasks: [], limits: { maxConcurrent: 5 }, next_migr: 100 }));
+    // The follow module is off by default (features.follow); these tests run with it on.
+    writeFileSync(join(folder, 'queue.config.json'), JSON.stringify({ features: { follow: true } }));
   });
   afterEach(() => rmSync(folder, { recursive: true, force: true }));
 
@@ -385,5 +387,20 @@ describe('queue.mjs follow', () => {
     const r = run(['show']);
     expect(r.code).toBe(0);
     expect(r.out).toMatch(/WARNING: could not read .*follow\.json/);
+  });
+
+  it('with features.follow off (the default) the commands say so and show and pulse print no follow lines', () => {
+    const file = join(folder, 'entry.json');
+    writeFileSync(file, JSON.stringify({ ...baseEntry(), start: '2026-01-01', end: '2026-01-08' }));
+    expect(run(['follow', 'add', '--file', file]).code).toBe(0); // a due entry, made while the module was on
+    expect(run(['show']).out).toMatch(/TO REPORT: F-TEST/);
+    rmSync(join(folder, 'queue.config.json')); // no config: the defaults, follow off
+    for (const args of [['follow'], ['follow', 'show', 'F-TEST'], ['follow', 'add', '--file', file]]) {
+      const r = run(args);
+      expect(r.code).toBe(0);
+      expect(r.out.trim()).toBe('Follow is off (features.follow in queue.config.json).');
+    }
+    expect(run(['show']).out).not.toMatch(/TO REPORT/);
+    expect(run(['orchestrator', 'pulse', '--session', 'test']).out).not.toMatch(/TO REPORT/);
   });
 });

@@ -70,6 +70,20 @@ agent"): it is copied, scanned, read by Claude and approved by you against its h
 and it turns off again if the file changes. See
 [custom helper agents](plugin/docs/orchestration.md#custom-helper-agents).
 
+## First run in 5 minutes
+
+1. **Install** (in Claude Code): `/plugin marketplace add vegardjorg/claude-code-queue`, then
+   `/plugin install cq@claude-code-queue`.
+2. **Set up the project:** open your project and run `/cq:setup` (it asks first), or do it by hand with
+   `cq setup --settings` and `cq init` (the config, the docs, the recommended settings and the empty queue).
+3. **Add a task:** say "add to the queue: <what you want done>", or write a JSON file and run `cq add --file task.json`.
+4. **Start the queue:** `/cq:queue`. It shows the state and asks before it starts any agent.
+5. **Open the board:** `/cq:board` gives you a local link. Answer questions under "Waiting on you"; an empty queue
+   shows the same three steps.
+
+Cloud sessions and follow-up entries are off by default, and so are the Legal, Launch and Documents surfaces in
+Plans. Turn them on with `features` in `queue.config.json` (see [configuration](plugin/docs/queue.md#configuration)).
+
 ## A tour of the board
 
 **Start it:** in Claude Code, run `/cq:board` (or say "start the board"). Claude starts it in the background and
@@ -233,8 +247,8 @@ variables ([orchestration](plugin/docs/orchestration.md)).
 tracks (run it again after a plugin update). The orchestrator keeps a handover note; after compaction it reads only
 the "Now" part, and a new orchestrator chat can adopt tracks that are still running (`cq deliveries`, `cq resume`).
 
-**Follow-ups and QA evidence.** `cq follow add` tracks something over a period (board page `/follow`), and tracks
-write an `EVIDENCE` line that `cq qa auto --run` uses to close QA entries that are green.
+**Follow-ups and QA evidence.** `cq follow add` tracks something over a period (board page `/follow`; off by
+default, turn it on with `"features": { "follow": true }`), and tracks write an `EVIDENCE` line that `cq qa auto --run` uses to close QA entries that are green.
 
 **Changes per version:** [CHANGELOG](CHANGELOG.md).
 
@@ -249,7 +263,8 @@ More detail: [orchestration](plugin/docs/orchestration.md), [queue reference](pl
 
 Tracks can also run in Claude Code's cloud sessions on claude.ai instead of on your machine. I built this to use the
 $250 in cloud credits I got from Anthropic, but it works just as well with pay-as-you-go: the cloud gives you more
-parallel tracks without more load on your own computer.
+parallel tracks without more load on your own computer. Cloud is off by default: turn it on with
+`"features": { "cloud": true }` in `queue.config.json`.
 
 - **What can go to the cloud:** ordinary code tasks (K and U) without migrations or database changes. The queue
   decides which tasks fit, and the board's **Cloud** tab lists them, grouped into bundles of up to 4 tasks per session.

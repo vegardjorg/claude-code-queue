@@ -137,6 +137,11 @@
 
   // ---- The room and the url ----
   const isPlans = () => s.state.room === 'plans';
+  // The modules that can be switched off (features in queue.config.json; board.js sets window.QueueFeatures from the
+  // state). The surfaces that belong to one; a surface that is off is not shown and its url falls back to the overview.
+  const featureOn = (name) => window.QueueFeatures?.on(name) ?? true;
+  const SURFACE_FEATURE = { jur: 'plans.legal', launch: 'plans.launch', doc: 'plans.documents' };
+  const surfaceOn = (id) => !SURFACE_FEATURE[id] || featureOn(SURFACE_FEATURE[id]);
 
   /**
    * New state: the url is updated (push = a new step in the history; otherwise the step is replaced, e.g. while you
@@ -199,7 +204,7 @@
   $('room-queue').addEventListener('click', () => selectRoom('queue'));
   // The room tabs: the arrow keys move focus, Enter or space selects (like the view tabs).
   $('room-option').addEventListener('keydown', (e) => {
-    const buttons = [$('room-plans'), $('room-queue')];
+    const buttons = [$('room-plans'), $('room-queue')].filter((b) => !b.hidden); // Plans can be off
     const i = buttons.indexOf(document.activeElement);
     if (i < 0) return;
     const j = window.QueueA11y.tabMeasure(buttons.length, i, e.key);
@@ -279,6 +284,8 @@
       return;
     }
     const d = s.data;
+    // A surface whose module is off (an old link or bookmark) shows the overview instead.
+    if (!surfaceOn(s.state.surface)) s.state = { ...s.state, surface: 'overview' };
     const t = s.state;
     // The overview is drawn by overview.js.
     if (t.surface === 'overview' && window.QueuePlanOverview) {
@@ -393,7 +400,7 @@
           buttons[j].focus();
         },
       },
-      ...V.SURFACES.map((f) =>
+      ...V.SURFACES.filter((f) => surfaceOn(f.id)).map((f) =>
         el(
           'button',
           {
@@ -1518,12 +1525,19 @@
   window.QueuePlans = {
     /** Marker on a queue card: switch to Plans with the entry open (the filters reset, so the entry is always in the list). */
     openEntry(id) {
+      if (!featureOn('plans')) return; // the Plans module is off (features.plans)
       useState({ ...V.readUrl('?room=plans'), entry: id, tab: 'summary' }, { scroll: true });
       room.querySelector('.plans-entry.selected .plans-entry-button')?.focus();
     },
     /** The title of a plan entry (for the marker on the queue card), or null before the register is fetched. */
     title(id) {
       return entryFor(id)?.title ?? null;
+    },
+    /** The module switches came with a new state (board.js): leave Plans when it is off, otherwise redraw the surfaces. */
+    featuresChanged() {
+      if (!isPlans()) return;
+      if (!featureOn('plans')) useState({ ...s.state, room: 'queue' }, { push: false });
+      else if (s.data) draw();
     },
   };
 

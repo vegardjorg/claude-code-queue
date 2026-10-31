@@ -12,6 +12,20 @@ and `package.json`.
   output (a background `merge`, a chained merge script), tracks could stand for hours without an agent. The
   after-compact resume text names the check, and `merge` ends its fill excerpt with a note to use `--without-fill`
   when the output is not read.
+- **Module switches**: `features` in `queue.config.json` (`plans`, `plans.legal`, `plans.launch`,
+  `plans.documents`, `focus`, `statistics`, `cloud`, `follow`; one table in `lib/queueConfig.js`, helpers
+  `features()` and `featureOn()`). The board hides the tabs, buttons, filter, detail row and routes of modules that
+  are off, and the gear shows a read-only **Modules** section. `cloud*` and `follow*` commands answer "Cloud is off
+  (features.cloud in queue.config.json)." (or Follow) with exit 0, and `show` and the pulse skip follow-up lines
+  when follow is off. The plan register is never gated in the CLI.
+- **First-run card**: a queue with nothing open shows three steps (add work, `/cq:queue`, "Waiting on you") and a
+  link to the help instead of empty columns. README: "First run in 5 minutes".
+
+### Changed
+- **Off by default**: cloud sessions, follow-up entries and the Legal, Launch and Documents surfaces in Plans. Set
+  `features.<name>` to `true` in `queue.config.json` to turn them on.
+- `cq diagnose` and the parallelism paragraph (fill, receive, pulse) no longer say LOW PARALLELISM when nothing can
+  start (the waiting tasks only wait on running work, a limit or a pause, and no finding would release one).
 
 ## 0.4.0 (2026-10-31)
 

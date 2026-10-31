@@ -49,10 +49,14 @@ type Suitable = { suitable: boolean; reasons: string[] };
 type Del = { o: Task; text: string; ownPath?: string | null };
 
 // The config the tests run with: the defaults (baseBranch main, remote origin, branchPrefix queue/) plus folders the cloud
-// does not see. Set before queueLogic reads the config the first time.
+// does not see, and the cloud module on (features.cloud is off by default). Set before queueLogic reads the config the
+// first time.
 const CONFIG_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'queue-cloud-config-'));
 const CONFIG_FILE = path.join(CONFIG_DIR, 'queue.config.json');
-fs.writeFileSync(CONFIG_FILE, JSON.stringify({ cloudHidden: ['docs/private', 'notes'] }));
+fs.writeFileSync(
+  CONFIG_FILE,
+  JSON.stringify({ cloudHidden: ['docs/private', 'notes'], features: { cloud: true } }),
+);
 process.env.QUEUE_CONFIG = CONFIG_FILE;
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports

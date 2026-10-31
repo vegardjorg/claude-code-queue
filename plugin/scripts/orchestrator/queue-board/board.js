@@ -37,6 +37,19 @@
   // the plan view (Now, Next, Later, Waiting) in plan.js. The tab is called "Focus" (the id `plan` is kept), so
   // it is not confused with the Plans room (the plan register, plans/plans.js).
   const VIEWS = ['flat', 'lanes', 'plan', 'graph', 'cloud', 'statistics'];
+  // The modules that can be switched off (features in queue.config.json, lib/queueConfig.js): the view tabs they own.
+  const VIEW_FEATURE = { plan: 'focus', cloud: 'cloud', statistics: 'statistics' };
+  // The names in the gear's "Modules" section (a key the board does not know shows as itself).
+  const FEATURE_LABEL = {
+    plans: 'Plans',
+    'plans.legal': 'Plans: Legal',
+    'plans.launch': 'Plans: Launch',
+    'plans.documents': 'Plans: Documents and agreements',
+    focus: 'Focus tab',
+    statistics: 'Statistics tab',
+    cloud: 'Cloud',
+    follow: 'Follow up',
+  };
   // Browser storage throws when it is blocked (some private modes, strict settings). Every read and write goes through
   // this wrapper, so the board still works then; the choices just are not remembered.
   const store = {
@@ -135,7 +148,7 @@
           matches: (k, col) =>
             (col !== 'queue' && col !== 'proposed' && col !== 'batch') || !!k.cloud?.suitable,
         },
-      ],
+      ].filter((x) => x.val !== 'cloud' || featureOn('cloud')),
     },
     {
       key: 'projects',
@@ -511,6 +524,7 @@
       if (!answer.unchanged) {
         t.data = answer.data;
         t.version = answer.version;
+        applyFeatures();
         indexes();
         drawLogo();
         drawUpdateBanner();
@@ -928,7 +942,7 @@
   }
 
   // ---- Cloud ----
-  const cloudFilterOn = () => !!t.filter.selected.show?.has('cloud');
+  const cloudFilterOn = () => featureOn('cloud') && !!t.filter.selected.show?.has('cloud');
 
   /** The checkbox on a cloud-suitable card (only with the "Suitable for cloud" filter). */
   function cloudSelect(k) {
@@ -1039,6 +1053,8 @@
 
   /** The cloud part of detailPanel: suitability and the cloud session. */
   function cloudFacts(k) {
+    // With the cloud module off only a task that really is (or was) in the cloud says so.
+    if (!featureOn('cloud') && !k.in_cloud && !k.cloud_session) return null;
     if (k.in_cloud) {
       const s = k.cloud_session ?? {};
       return [
@@ -1471,6 +1487,12 @@
       return;
     }
     drawFilter();
+    // A queue with nothing open (only done and cancelled tasks, or none): the onboarding card instead of empty columns.
+    if ((t.view === 'flat' || t.view === 'lanes') && t.data.openTasks === 0) {
+      main.append(onboardingCard());
+      drawStripe();
+      return;
+    }
     const k = t.data.columns;
     // The filters decide what is built; the search hides afterward (useSearch). The graph uses visible() with the search itself.
     const filtered = {};
@@ -3276,6 +3298,7 @@
           el('h3', { id: 'setting-setup', class: 'setting-title', text: 'Setup (read only)' }),
           el('dl', { class: 'facts' }, setupFacts(o)),
         ),
+        modulesSection(),
         el(
           'section',
           { class: 'setting', 'aria-labelledby': 'setting-rules' },
@@ -6370,6 +6393,91 @@
     );
   }
 
+  // ---- Modules (features in queue.config.json; the server sends them resolved with the state) ----
+  /** Is the module on? Without the field (a board server older than the switches) everything is on, as before. */
+  function featureOn(name) {
+    const f = t.data?.features;
+    return !f || f[name] === true;
+  }
+  /**
+   * Hides the tabs and the Plans button of the modules that are off, and leaves a view (or the Plans room) that was
+   * just switched off. Runs on every new state; cheap.
+   */
+  function applyFeatures() {
+    for (const [view, name] of Object.entries(VIEW_FEATURE)) $(`show-${view}`).hidden = !featureOn(name);
+    if (VIEW_FEATURE[t.view] && !featureOn(VIEW_FEATURE[t.view])) setView('flat');
+    $('room-plans').hidden = !featureOn('plans');
+    // Plans redraws only when the switches themselves changed (not on every poll).
+    const key = JSON.stringify(t.data?.features ?? null);
+    if (key !== t.featuresKey) {
+      t.featuresKey = key;
+      window.QueuePlans?.featuresChanged?.();
+    }
+  }
+  window.QueueFeatures = { on: featureOn };
+
+  /** The gear's "Modules" section: each module on or off, read only (the switch is the file). */
+  function modulesSection() {
+    const f = t.data?.features;
+    if (!f) return null;
+    return el(
+      'section',
+      { class: 'setting', 'aria-labelledby': 'setting-modules' },
+      el('h3', { id: 'setting-modules', class: 'setting-title', text: 'Modules (read only)' }),
+      el(
+        'dl',
+        { class: 'facts' },
+        // flatMap: el() flattens only one level, so each dt/dd pair is spread here.
+        Object.keys(f).flatMap((name) => [
+          el('dt', { text: FEATURE_LABEL[name] ?? name }),
+          el('dd', {
+            text: `${f[name] ? 'On' : 'Off'}: set features.${name} in queue.config.json to change`,
+          }),
+        ]),
+      ),
+      el('p', {
+        class: 'setting-source',
+        text: 'The board reads queue.config.json when it starts: restart it after a change.',
+      }),
+    );
+  }
+
+  /** The first-run card: the queue has nothing open, so the columns would only say "Nothing here.". */
+  function onboardingCard() {
+    const code = (text) => el('code', { text });
+    return el(
+      'section',
+      { class: 'onboarding', 'aria-labelledby': 'onboarding-title' },
+      el('h2', { id: 'onboarding-title', class: 'onboarding-title', text: 'The queue is empty' }),
+      el('p', { text: 'Three steps to get work flowing:' }),
+      el(
+        'ol',
+        { class: 'onboarding-steps' },
+        el(
+          'li',
+          null,
+          el('strong', { text: 'Add work: ' }),
+          'say "add to the queue" in Claude Code (or ',
+          code('cq add --file task.json'),
+          ').',
+        ),
+        el('li', null, el('strong', { text: 'Start the queue: ' }), code('/cq:queue'), '.'),
+        el(
+          'li',
+          null,
+          el('strong', { text: 'Answer questions ' }),
+          'here under "Waiting on you" when the queue needs you.',
+        ),
+      ),
+      el('button', {
+        type: 'button',
+        class: 'link-button',
+        text: 'How to use the board',
+        onclick: openHelp,
+      }),
+    );
+  }
+
   function setView(v) {
     t.view = v;
     store.setItem('queue-board-view', v);
@@ -6401,7 +6509,7 @@
   // The arrow keys, Home and End move focus between the tabs; Enter or Space selects (manual activation, because a
   // drawing of the board can take time).
   $('tabs').addEventListener('keydown', (e) => {
-    const tabs = VIEWS.map((x) => $(`show-${x}`));
+    const tabs = VIEWS.map((x) => $(`show-${x}`)).filter((b) => !b.hidden); // a module that is off has no tab
     const i = tabs.indexOf(document.activeElement);
     if (i < 0) return;
     const j = window.QueueA11y.tabMeasure(tabs.length, i, e.key);
