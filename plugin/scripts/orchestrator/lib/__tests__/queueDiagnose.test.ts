@@ -389,3 +389,40 @@ describe('the threshold and the output', () => {
     expect(JSON.stringify(kk)).toBe(before);
   });
 });
+
+// ---- Nothing could run: no LOW PARALLELISM when no task can start and no finding would release one -------------------
+describe('parallelDiagnose when nothing can start', () => {
+  const limits = { maxConcurrent: 6 };
+  it('is not low when the waiting tasks only wait on running work (idle, no paragraph)', () => {
+    const queue: Queue = {
+      tasks: [...runningOnes(1), up('B-1', { depends_on: ['ACT-0'] }), up('B-2', { depends_on: ['B-1'] })],
+      limits,
+    };
+    const d = D.parallelDiagnose(queue, { now: NOW }) as Diagnose & { idle: boolean };
+    expect(d.idle).toBe(true);
+    expect(d.low).toBe(false);
+    expect(D.diagnoseLines(d)).toEqual([]);
+    const full = D.diagnoseFull(d).join('\n');
+    expect(full).not.toMatch(/LOW PARALLELISM/);
+    expect(full).toMatch(/nothing can start now/);
+  });
+
+  it('is still low when a finding would release a task (a dependency on a cancelled task)', () => {
+    const queue: Queue = {
+      tasks: [...runningOnes(1), up('C-0', { status: 'cancelled' }), up('B-1', { depends_on: ['C-0'] })],
+      limits,
+    };
+    const d = D.parallelDiagnose(queue, { now: NOW }) as Diagnose & { idle: boolean };
+    expect(d.idle).toBe(false);
+    expect(d.low).toBe(true);
+    expect(D.diagnoseLines(d)[0]).toMatch(/^LOW PARALLELISM/);
+  });
+
+  it('is still low when a task could start now but the tracks are not used', () => {
+    const d = D.parallelDiagnose({ tasks: [...runningOnes(1), up('B-1')], limits }, { now: NOW }) as Diagnose & {
+      idle: boolean;
+    };
+    expect(d.idle).toBe(false);
+    expect(d.low).toBe(true);
+  });
+});

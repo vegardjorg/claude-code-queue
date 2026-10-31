@@ -242,6 +242,15 @@ textarea {
   border-left: 1px solid var(--color-outline);
 }
 
+/* A module that is off (features in queue.config.json) has no tab; the next one then starts the group. */
+.toggles-button[hidden] {
+  display: none;
+}
+
+.toggles-button:first-child[hidden] + .toggles-button {
+  border-left: 0;
+}
+
 .toggles-button[aria-pressed='true'],
 .toggles-button[aria-selected='true'] {
   background: var(--color-secondary-container);
@@ -3614,4 +3623,32 @@ fieldset.setting legend {
   .badge[role='button'] {
     min-height: 44px;
   }
+}
+
+/* ---- The first-run card (onboardingCard() in board.js): the queue has nothing open ---- */
+.onboarding {
+  grid-column: 1 / -1; /* the Flat view is a grid of four columns */
+  max-width: 640px;
+  width: 100%;
+  margin: var(--distance-lg) auto;
+  padding: var(--distance-lg);
+  border: 1px solid var(--color-outline-variant);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-container-lowest);
+  color: var(--color-on-surface);
+}
+
+.onboarding-title {
+  margin: 0 0 var(--distance-sm);
+  font-size: var(--text-lg);
+}
+
+.onboarding-steps {
+  margin: var(--distance-sm) 0 var(--distance-md);
+  padding-left: var(--distance-lg);
+  line-height: 1.6;
+}
+
+.onboarding .link-button {
+  margin: 0;
 }

@@ -66,6 +66,12 @@ const CAPACITY = [
   },
 ];
 
+/**
+ * The findings that a fix would release (an error in a dependency or a wait). Without a startable task and without
+ * one of these, nothing could run: few tracks is then expected, not LOW PARALLELISM.
+ */
+const RELEASING = new Set(['depends-on-cancelled', 'depends-on-unknown', 'dragged-with-paused', 'lose-waiting']);
+
 /** Cleanup: findings that do not block anything (an answered question that is still in waiting_on). */
 const isCleanup = (f) => f?.type === 'waiting-on-resolved';
 
@@ -214,7 +220,10 @@ function bottleneckRecommendation(o, queue) {
  * @param {object} queue the queue
  * @param {{ now?: number }} [option] now = the time (ms) the focus and parking are evaluated against
  * `empty` = no task is waiting to run; then `low` is always false (an empty queue is not an alarm).
- * @returns {{ activeOnes: number, max: number, threshold: number, share: number, low: boolean, empty: boolean, focus: boolean,
+ * `idle` = tasks are waiting, but none can start now and no finding would release one (they wait on running work, a
+ * limit or a pause); then `low` is false too.
+ * @returns {{ activeOnes: number, max: number, threshold: number, share: number, low: boolean, empty: boolean, idle: boolean,
+ *   focus: boolean,
  *   findings: Array<{ type: string, id: string, back: number, class: 'simple'|'complex', text: string,
  *   command?: string, option?: Array<{ text: string, command?: string }>, recommendation?: string, dep?: string,
  *   sp?: string }> }}
@@ -487,7 +496,9 @@ function parallelDiagnose(queue, { now = Date.now() } = {}) {
       y.back - x.back ||
       x.id.localeCompare(y.id),
   );
-  return { activeOnes, max, threshold, share, low, empty, focus: k.applies, findings };
+  // Nothing could run: no task can start now and no finding would release one (see RELEASING).
+  const idle = !empty && !tasks.some(canStart) && !findings.some((f) => RELEASING.has(f.type));
+  return { activeOnes, max, threshold, share, low: low && !idle, empty, idle, focus: k.applies, findings };
 }
 
 const pst = (x) => `${Math.round(x * 100)} %`;
@@ -495,6 +506,7 @@ const pst = (x) => `${Math.round(x * 100)} %`;
 /** The heading: "LOW PARALLELISM: 2 of 6 tracks (33 %, threshold 70 %). Quick diagnosis:". */
 function heading(d) {
   if (d.empty) return `Parallelism: ${d.activeOnes} of ${d.max} tracks (nothing waiting to run).`;
+  if (d.idle) return `Parallelism: ${d.activeOnes} of ${d.max} tracks (nothing can start now).`;
   return (
     `${d.low ? 'LOW PARALLELISM' : 'Parallelism'}: ${d.activeOnes} of ${d.max} tracks ` +
     `(${pst(d.share)}, threshold ${pst(d.threshold)}).${d.low ? ' Quick diagnosis:' : ''}`
@@ -540,9 +552,12 @@ function diagnoseFull(d) {
   out.push(
     d.empty
       ? 'Nothing waiting to run: low parallelism is expected, and the paragraph is not shown in fill, receive and pulse.'
-      : d.low
-        ? 'Below the threshold: the paragraph is shown in fill, receive, orchestrator pulse and state (the field parallel).'
-        : 'Above the threshold: the paragraph is not shown in fill, receive and pulse.',
+      : d.idle
+        ? 'Nothing can start now (the waiting tasks wait on running work, a limit or a pause): low parallelism is ' +
+          'expected, and the paragraph is not shown in fill, receive and pulse.'
+        : d.low
+          ? 'Below the threshold: the paragraph is shown in fill, receive, orchestrator pulse and state (the field parallel).'
+          : 'Above the threshold: the paragraph is not shown in fill, receive and pulse.',
   );
   if (!d.findings.length) {
     out.push('No findings.');

@@ -31,7 +31,7 @@ The Queue workspace has these tabs:
 - **Focus:** the order the queue takes work in, as Now, Next, Later and Waiting. Drag areas, projects and features
   between the columns. "Areas …" creates and names the areas.
 - **Dependencies:** a graph of which tasks wait on which.
-- **Cloud:** tasks that can run in a cloud session, and the cloud sessions.
+- **Cloud:** tasks that can run in a cloud session, and the cloud sessions (off by default, see [Modules](#modules)).
 - **Statistics:** done per day, added versus finished, time per class, cost per day (API-equivalent USD), context at
   the end of tracks, key figures (including usage today), and the legend for the badges on the cards.
 
@@ -59,6 +59,30 @@ takes the path to an agent file (`.md`) and an optional name, and posts to `/api
 `cq helpers add`: the file is copied, scanned and registered, and stays off. The board has no way to approve a
 helper: approval is `cq helpers approve`, after Claude has read the file and the owner has said yes (the `add-helper`
 skill), and `/api/helper` refuses to switch on a helper that is not approved.
+
+## Empty queue
+
+When the queue has no task that is not done or cancelled, Flat and Project lanes show a first-run card instead of
+empty columns: 1. add work (say "add to the queue" in Claude Code, or `cq add --file`), 2. start the queue with
+`/cq:queue`, 3. answer questions here under **Waiting on you**, plus a link to the help.
+
+## Modules
+
+Some parts of the board can be switched off with `features` in `queue.config.json` (see
+[configuration](queue.md#configuration)). The board server sends the resolved switches with the state, and the board
+hides what is off:
+
+| Key | Default | Hides when off |
+|---|---|---|
+| `plans` | on | The Plans button (and the room; a `?room=plans` link falls back to Queue) |
+| `plans.legal`, `plans.launch`, `plans.documents` | off | The Legal, Launch and Documents and agreements surfaces in Plans, with their counters (an old link shows the Overview) |
+| `focus` | on | The Focus tab |
+| `statistics` | on | The Statistics tab |
+| `cloud` | off | The Cloud tab, the "Suitable for cloud" filter and the Cloud row in the task detail |
+| `follow` | off | The `/follow` page and its link in the terminal |
+
+The gear's **General** tab has a read-only **Modules** section: each module, On or Off, and the key to set. There
+is no switch in the browser; change the file and restart the board.
 
 ## Update banner
 
