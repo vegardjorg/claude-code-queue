@@ -1147,6 +1147,39 @@ code {
   color: var(--color-on-surface-variant);
 }
 
+/* "Blockers last 7 days" in Statistics: a plain table (code, count, time), the same tokens as the tiles. */
+.blocker-stat {
+  margin-top: var(--distance-lg);
+  padding: var(--distance-md);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface-container-lowest);
+  border: 1px solid var(--color-outline-variant);
+}
+
+.blocker-table {
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  color: var(--color-on-surface);
+}
+
+.blocker-table th,
+.blocker-table td {
+  padding: var(--distance-xs) var(--distance-md) var(--distance-xs) 0;
+  text-align: left;
+  border-bottom: 1px solid var(--color-outline-variant);
+}
+
+.blocker-table thead th {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--color-on-surface-variant);
+}
+
+.blocker-table tbody th {
+  font-family: ui-monospace, monospace;
+  font-weight: 400;
+}
+
 .graphs {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));

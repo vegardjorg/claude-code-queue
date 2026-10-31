@@ -66,7 +66,8 @@
 //                                                                  maxPerDomain, maxDb (integer >= 0; maxDPlus at most
 //                                                                  maxConcurrent), dailyBudget <usd|off>,
 //                                                                  nightRun <on|off>, nightWindow <HH-HH>,
-//                                                                  autocompact <on|off>, parallelThreshold <0-1>)
+//                                                                  autocompact <on|off>, parallelThreshold <0-1>,
+//                                                                  silentMin <minutes, 0 = off>)
 //   node scripts/orchestrator/queue.mjs compact [auto|manual]        (show or set the compaction mode for
 //                                                                  the orchestrator session, limits.autocompact; prints which
 //                                                                  /autocompact line the owner pastes in)
@@ -174,6 +175,19 @@
 //         ("Migration block:" line and mentions); refuses a taken block. start, fill and pick skip taken blocks by
 //         themselves: a migration file, the block of a task that is not finished, or one named in an active prompt file.)
 //   Test: QUEUE_MERGE_RUNNING=<module> injects the runner into merge (no real merge, push or gates).
+//
+// Silent tracks and blocker reasons (the logic is in lib/queueLogic.js, the activity measurement in lib/trackActivity.js):
+//   SILENT: `show`, `state` (the field `silent`) and `orchestrator pulse` warn about a running track whose worktree
+//   has the branch but that has shown no sign of life (commit, worktree or track folder mtime, time log or transcript)
+//   for limits.silentMin minutes (default 20; `limit silentMin <n>`, 0 = off).
+//   node scripts/orchestrator/queue.mjs block <id> <code> [--note "..."]   (opens a blocker reason; code: merge-conflict,
+//                                                                  gate-red, context, quota, owner-question, dependency,
+//                                                                  no-agent, silent, other. One open per task; merge opens
+//                                                                  merge-conflict/gate-red when it stops there and closes
+//                                                                  the open one after a successful merge)
+//   node scripts/orchestrator/queue.mjs unblock <id>                  (closes the open blocker)
+//   node scripts/orchestrator/queue.mjs blockers [--days 7] [--json]   (per code: count and blocked time in the period,
+//                                                                  top first)
 //
 // Project, feature, picking and visual QA:
 //   node scripts/orchestrator/queue.mjs projects                    (per project: done/total, min left, active/picked,
@@ -2155,6 +2169,65 @@ function findWithoutAgent(queue) {
   }
 }
 
+/**
+ * Silent tracks (queueLogic.silentTracks): running, a worktree has the branch, but no sign of life for limits.silentMin
+ * minutes. The last activity is measured by lib/trackActivity.js (commit, track folder, time log and transcript,
+ * worktree mtime; it stops at the first fresh source). Read-only, like findWithoutAgent; an error never stops the command.
+ */
+function findSilent(queue) {
+  try {
+    const limitMin = L.silentMinFor(queue);
+    if (!(limitMin > 0)) return [];
+    const worktrees = G.readWorktrees(gitRead).filter((w) => w.branch);
+    const worktreeBranches = new Set(worktrees.map((w) => w.branch));
+    const candidates = L.silentCandidates(queue, worktreeBranches);
+    if (!candidates.length) return [];
+    const ACT = require('./lib/trackActivity.js');
+    const now = Date.now();
+    const freshMs = now - limitMin * 60_000;
+    const agents = ACT.agentsByTask(
+      readTimeLog(),
+      candidates.map((o) => o.id),
+    );
+    const lastActivity = {};
+    for (const o of candidates) {
+      lastActivity[o.id] = ACT.lastActivity({
+        branch: o.branch,
+        worktree: worktrees.find((w) => w.branch === o.branch)?.path ?? null,
+        trackDirs: trackRoots(o).map((r) => path.join(r, o.id)),
+        agents: agents.get(o.id) ?? null,
+        findTranscript,
+        git: gitRead,
+        freshMs,
+      }).ms;
+    }
+    return L.silentTracks(queue, {
+      worktreeBranches,
+      lastActivity,
+      hasReport: (o) => !!L.findTrackReport(o.id, trackRoots(o)).report,
+      now,
+      limitMin,
+    });
+  } catch (e) {
+    console.error(`(The silence check failed: ${e?.message ?? e})`);
+    return [];
+  }
+}
+
+/** `merge` stopped: open the blocker reason on the task (queueLogic.openBlock). Never stops the merge's own output. */
+function mergeBlock(id, code, note) {
+  try {
+    edit((queue) => {
+      const o = queue.tasks.find((x) => x.id === id);
+      if (o) L.openBlock(o, code, { note });
+      return null;
+    });
+    console.log(`Blocker ${code} opened on ${id} (cq blockers; the next successful merge closes it).`);
+  } catch (e) {
+    console.error(`(Could not record the blocker: ${e?.message ?? e})`);
+  }
+}
+
 /** The fields `start` and `fill` set (under the lock): status, branch and, if any, migration block. */
 function markStarted(queue, o, { agent = null, head = null, scratchpad = null } = {}) {
   // Past blocks that are already taken (a file, a task that is not finished, an active prompt file).
@@ -2477,6 +2550,9 @@ if (command === 'init') {
   // First, so it survives when the after-compact hook trims the show output.
   const withoutAgent = L.withoutAgentLines(findWithoutAgent(queue));
   if (withoutAgent.length) console.log(`${withoutAgent.join('\n')}\n`);
+  // Silent tracks (an agent worktree, but no sign of life), right after.
+  const silent = L.silentLines(findSilent(queue));
+  if (silent.length) console.log(`${silent.join('\n')}\n`);
   for (const l of L.summaryView(queue, {
     uncommitted: uncommittedPaths(),
     dailyUsage: dailyUsageFor(queue),
@@ -2526,6 +2602,8 @@ if (command === 'init') {
   // First, so it survives when the after-compact hook trims the show output.
   const withoutAgent = L.withoutAgentLines(findWithoutAgent(queue));
   if (withoutAgent.length) console.log(`${withoutAgent.join('\n')}\n`);
+  const silent = L.silentLines(findSilent(queue));
+  if (silent.length) console.log(`${silent.join('\n')}\n`);
   if (a.includes('--grouped')) {
     // Tree: project -> feature -> tasks, narrow enough for a narrow terminal window.
     for (const p of L.groups(
@@ -2966,6 +3044,9 @@ if (command === 'init') {
   console.log(`  ${'parallelThreshold'.padEnd(14)} ${D.thresholdFor(queue)}`);
   // The load limit (machine memory; the queue's value, otherwise queue.config.json) and the measurement now.
   console.log(`  ${'minFreeMemoryPct'.padEnd(14)} ${L.limitText('minFreeMemoryPct', L.minFreeMemoryFor(queue))}`);
+  // The silence limit for running tracks (SILENT; 0 = off).
+  const silentMin = L.silentMinFor(queue);
+  console.log(`  ${'silentMin'.padEnd(14)} ${silentMin > 0 ? `${silentMin} min` : 'off'}`);
   const lm = measureLoad();
   console.log(`  load now: free memory ${lm.freeMemoryPct ?? '?'} %`);
   const lg = L.loadGuard(queue, lm);
@@ -3212,6 +3293,8 @@ if (command === 'init') {
   t.resolveWaits = L.resolveWaits(queue);
   // Running tracks without an agent (always included; empty list when all is well).
   t.withoutAgent = findWithoutAgent(queue);
+  // Silent tracks: an agent worktree, but no sign of life for limits.silentMin (always included; empty when all is well).
+  t.silent = findSilent(queue);
   // The parallelism (active ones, max, share, threshold, low) always; the findings only when it is low.
   const par = D.parallelDiagnose(queue);
   t.parallel = { ...par, findings: par.low ? par.findings : [] };
@@ -3734,10 +3817,14 @@ if (command === 'init') {
         `If the change is intended: add the path to the task's owned_files/shared_patch, or run ` +
         `\`${CQ} merge ${id} --allow-guard\` (logged as "guard-overridden").`,
     );
+    mergeBlock(id, 'merge-conflict', 'merge guard');
     console.log(`Full log: ${logFile}`);
     process.exit(4);
   }
   if (!res.ok) {
+    // A stop in the merge or the gates step opens a blocker reason (cq blockers); the next successful merge closes it.
+    const code = { merge: 'merge-conflict', gates: 'gate-red' }[res.stop.step];
+    if (code) mergeBlock(id, code, res.stop.message);
     console.log(`STOP in the step ${res.stop.step}: ${res.stop.message}`);
     if (res.stop.excerpt.length) console.log(res.stop.excerpt.map((l) => `  | ${l}`).join('\n'));
     console.log(`Full log: ${logFile}`);
@@ -3755,9 +3842,46 @@ if (command === 'init') {
       from: ox.t_receive ?? null,
     });
     if (tReview && !ox.t_review) ox.t_review = tReview;
+    // The merge went through: an open blocker (merge-conflict, gate-red or one set by hand) is closed.
+    L.closeBlock(ox);
     return ox;
   });
   console.log(`Full log: ${logFile}`);
+} else if (command === 'block') {
+  // ---- Blocker reasons (queueLogic.BLOCK_CODES): open one by hand; at most one is open per task ----
+  const [id, code] = positional(1, ['--note']);
+  if (!id || !code)
+    die(`block <id> <code> [--note "..."]   (code: ${L.BLOCK_CODES.map((b) => b.code).join(', ')})`);
+  const r = edit((queue) => {
+    const o = queue.tasks.find((x) => x.id === id);
+    if (!o) die(`Unknown task ${id}`);
+    const x = L.openBlock(o, code, { note: val('--note') ?? null });
+    if ('error' in x) die(x.error);
+    return x;
+  });
+  if (r.kept) console.log(`${id}: already blocked by ${code} since ${r.block.from}${r.block.note ? ` (${r.block.note})` : ''}`);
+  else
+    console.log(
+      `${id}: blocked by ${code} from ${r.block.from}` +
+        `${r.closed ? ` (closed the open ${r.closed.code})` : ''}. Close it with ${CQ} unblock ${id}.`,
+    );
+} else if (command === 'unblock') {
+  const [id] = positional(1);
+  if (!id) die('unblock <id>');
+  const closed = edit((queue) => {
+    const o = queue.tasks.find((x) => x.id === id);
+    if (!o) die(`Unknown task ${id}`);
+    return L.closeBlock(o);
+  });
+  console.log(closed ? `${id}: ${closed.code} closed (${closed.from} to ${closed.to})` : `${id} has no open blocker.`);
+} else if (command === 'blockers') {
+  // ---- Per code: count and blocked time in the period, top first (read-only) ----
+  const raw = val('--days') ?? '7';
+  const days = Number(raw);
+  if (!(days > 0)) die('--days must be a number > 0');
+  const summary = L.blockerSummary(read(), { days });
+  if (a.includes('--json')) console.log(JSON.stringify({ days, blockers: summary }, null, 2));
+  else for (const l of L.blockerLines(summary, { days })) console.log(l);
 } else if (command === 'info') {
   // ---- Fixed lookups instead of `node -e` against queue.json ----
   const id = positional(1, ['--field'])[0];
@@ -4447,6 +4571,8 @@ if (command === 'init') {
     deliveryWarning({ update: true });
     // Tracks fill marked running whose agent was never started (fill run where nobody read the output).
     for (const l of L.withoutAgentLines(findWithoutAgent(read()))) console.log(l);
+    // Tracks with an agent worktree but no sign of life for limits.silentMin minutes.
+    for (const l of L.silentLines(findSilent(read()))) console.log(l);
     // Follow up: the pulse repeats due entries every time, until the report is written (cq follow report).
     for (const l of followLines({ pulse: true })) console.log(l);
     // The pulse runs every loop round, so low parallelism is checked now and then even without fill and receive.

@@ -12,6 +12,14 @@ and `package.json`.
   output (a background `merge`, a chained merge script), tracks could stand for hours without an agent. The
   after-compact resume text names the check, and `merge` ends its fill excerpt with a note to use `--without-fill`
   when the output is not read.
+- **Silent tracks**: `cq show`, `cq state` (`silent`) and `cq orchestrator pulse` print `SILENT` for a running track
+  whose agent has a worktree but has shown no sign of life (commit, worktree or track folder mtime, transcript or time
+  log) for `limits.silentMin` minutes (default 20, `cq limit silentMin <n>`, 0 = off), with the advice to check it and
+  `cq resume <id> --reason context` or stop it. The board marks the card "silent" (measured at most once a minute).
+- **Blocker reasons**: `cq block <id> <code> [--note]` and `cq unblock <id>` record `blocks` on a task from one fixed
+  code table; `cq merge` opens `merge-conflict` or `gate-red` when it stops there and closes it after the next
+  successful merge. `cq blockers [--days 7] [--json]` gives count and blocked time per code, and the board's
+  Statistics has the table "Blockers last 7 days".
 
 ## 0.4.0 (2026-10-31)
 

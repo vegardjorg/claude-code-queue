@@ -685,6 +685,15 @@
           `${duration(a.limit)} of starting. This one started ${duration(a.age)} ago.`;
   }
 
+  /** The tooltip and hidden text for a SILENT track (cq show says the same, with what to do). */
+  function silentText(k) {
+    if (!k.silent) return null;
+    return (
+      `Silent for ${duration(k.silent.minutes)}: no commit, file change or transcript write. Check the track, then ` +
+      `cq resume ${k.id} --reason context, or stop it.`
+    );
+  }
+
   function footerFor(k, col) {
     const footer = [];
     if (col === 'queue') {
@@ -733,6 +742,15 @@
           }),
         );
       if (k.old) footer.push(el('span', { class: 'badge old', text: 'old', title: 'Picked over 72 hours ago with no commits on its branch' }));
+      // SILENT: the agent has a worktree, but no commit, file change or transcript write for a while.
+      if (k.silent)
+        footer.push(
+          el('span', {
+            class: 'badge tone-warn silent-badge',
+            text: 'silent',
+            title: silentText(k),
+          }),
+        );
     } else if (col === 'review') {
       if (k.delivered)
         footer.push(
@@ -790,6 +808,7 @@
       col === 'batch' ? statusText : null,
       lockText,
       k.aging ? 'Older than usual for the class' : null,
+      k.silent ? silentText(k) : null,
     ]
       .filter(Boolean)
       .join('. ');
@@ -2324,6 +2343,7 @@
     ['badge locks', 'unlocks 3', 'This many tasks are waiting on this one via the chain.'],
     ['badge cloud-badge', 'Cloud', 'Running in a cloud session.'],
     ['badge old', 'old', 'Picked or registered outside the queue more than 72 hours ago.'],
+    ['badge tone-warn silent-badge', 'silent', 'Running with an agent, but no sign of life for a while (cq show says what to do).'],
     ['badge qa', 'Waiting for QA', 'Built, but the owner has not looked it over.'],
     ['badge deviation', 'QA deviation', 'The owner found something during the check.'],
   ];
@@ -2948,6 +2968,46 @@
     );
   }
 
+  /** "Blockers last 7 days": a plain table (code, count, time) from queueLogic.blockerSummary, top first. */
+  function blockerTable(rows) {
+    const list = Array.isArray(rows) ? rows : [];
+    return el(
+      'section',
+      { class: 'blocker-stat', 'aria-labelledby': 'blocker-stat-title' },
+      el('h3', { id: 'blocker-stat-title', class: 'setting-title', text: 'Blockers last 7 days' }),
+      list.length
+        ? el(
+            'table',
+            { class: 'blocker-table' },
+            el(
+              'thead',
+              null,
+              el(
+                'tr',
+                null,
+                el('th', { scope: 'col', text: 'Reason' }),
+                el('th', { scope: 'col', text: 'Count' }),
+                el('th', { scope: 'col', text: 'Blocked time' }),
+              ),
+            ),
+            el(
+              'tbody',
+              null,
+              list.map((r) =>
+                el(
+                  'tr',
+                  null,
+                  el('th', { scope: 'row', text: r.code }),
+                  el('td', { text: `${counts(r.count)}${r.open ? ` (${r.open} open)` : ''}` }),
+                  el('td', { text: duration(Math.round(r.ms / 60_000)) }),
+                ),
+              ),
+            ),
+          )
+        : el('p', { class: 'empty', text: 'No blockers recorded in the last 7 days (cq block <id> <code>).' }),
+    );
+  }
+
   function drawStatistics() {
     const d = t.stat.data;
     if (!d) {
@@ -3184,6 +3244,8 @@
           : null,
       ),
       el('div', { class: 'graphs' }, graph1, graphInOut, graph2, graph3, graph4),
+      // Blockers last 7 days (cq blockers): per reason code, count and blocked time, top first.
+      blockerTable(d.blockers),
       // The legend for the classes and badges (same as in the help).
       legend('stat'),
       // append() turns null into the text "null", so the remark is only added when it exists.

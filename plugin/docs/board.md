@@ -33,7 +33,10 @@ The Queue workspace has these tabs:
 - **Dependencies:** a graph of which tasks wait on which.
 - **Cloud:** tasks that can run in a cloud session, and the cloud sessions.
 - **Statistics:** done per day, added versus finished, time per class, cost per day (API-equivalent USD), context at
-  the end of tracks, key figures (including usage today), and the legend for the badges on the cards.
+  the end of tracks, key figures (including usage today), the table **Blockers last 7 days** (per blocker code: count
+  and blocked time, the same numbers as `cq blockers`), and the legend for the badges on the cards.
+- A running card gets the badge **silent** when the track has an agent worktree but no sign of life for
+  `limits.silentMin` minutes (the same rule as `SILENT` in `cq show`; the server measures it at most once a minute).
 
 **Waiting on you** (the button at the top) collects what needs the owner: owner questions, proposals to approve,
 QA (done tasks with the label `visual` that wait for a manual check, `qa ok` / `qa deviation`) and what is stuck.
