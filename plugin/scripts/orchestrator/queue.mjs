@@ -23,6 +23,14 @@
 //        Status: "proposed" when added_by is an agent (a track/task id, reviewer or investigation agent), otherwise
 //        "waiting". --approved (only orchestrator/the owner, e.g. a serious finding from review) gives waiting.
 //   node scripts/orchestrator/queue.mjs approve <id> [...]           (proposed -> waiting)
+//   node scripts/orchestrator/queue.mjs proposals [auto [on|off] [--classes K,U] [--max-estimate <min|none>]
+//        [--max-value <1-10|none>]]   (auto-accept of agent proposals by the owner's rules, default off; applied by add
+//         and orchestrator pulse; never D/D+, waiting_on, legal/owner labels, open legal points or protected paths)
+//   node scripts/orchestrator/queue.mjs proposals log [--json]       (what was auto-accepted, newest first)
+//   node scripts/orchestrator/queue.mjs proposals undo <id>          (back to proposed when it has not been started)
+//   node scripts/orchestrator/queue.mjs forecast [--project <pid>] [--days 28] [--json]   (Monte Carlo: when the
+//                                                                  remaining tasks (the focus stages, otherwise all open)
+//                                                                  are done at 50/85/95 %, from the daily throughput)
 //   node scripts/orchestrator/queue.mjs show                           (short: active ones, startable now and counts)
 //   node scripts/orchestrator/queue.mjs show --full [--all]           (table: status, class, estimate, priority, blocker;
 //                                                                  the proposals separately at the bottom; --all/--grouped/
@@ -453,6 +461,10 @@ const KK = require('./lib/queueConfig.js');
 const HELP = require('./lib/queueHelpers.js');
 const HO = require('./lib/queueHandover.js');
 const F = require('./lib/queueFollow.js');
+// The forecast (`forecast`) and auto-accept of proposals (`proposals`, add, orchestrator pulse).
+const FC = require('./lib/queueForecast.js');
+const PR = require('./lib/queueProposals.js');
+const MG = require('./lib/mergeGuard.js');
 
 // The project's settings (queue.config.json merged with the defaults in lib/queueConfig.js).
 const CONFIG = KK.config();
@@ -873,6 +885,31 @@ function writePlans(reg, { bump = true } = {}) {
 }
 /** The queue read-only (projects, areas, tasks, owner questions); empty when it does not exist. */
 const readQueueForPlan = () => (fs.existsSync(FILE) ? read() : {});
+
+// ---- Auto-accept of proposals (the rules in lib/queueProposals.js) -------------------------------------------
+/** The rules in force (the config's default with the queue's own on top). */
+const autoAcceptRules = (queue) => PR.rulesFor(CONFIG.proposals?.autoAccept, queue);
+/** What the hard rules need: the protected paths (with the custom helpers' files, like the merge guard) and the plan
+ * entries with open legal points (an unreadable plan register only means that check has nothing to stop). */
+function autoAcceptContext(queue) {
+  let reg = null;
+  try {
+    reg = readPlans();
+  } catch {
+    /* no plan register: no plan entry has open legal points */
+  }
+  const base = Array.isArray(CONFIG.protectedPaths) ? CONFIG.protectedPaths : undefined;
+  return {
+    protectedPaths: MG.withPaths(base, HELP.customPaths(HELP.helperSetup(CONFIG, queue))),
+    openLegalPlans: PR.openLegalPlans(reg),
+  };
+}
+/** Applies the rules inside an edit (the caller holds the lock); `ids` = only these. Returns the accepted ones. */
+function autoAcceptIn(queue, ids = null) {
+  const rules = autoAcceptRules(queue);
+  if (!rules.enabled) return [];
+  return PR.applyAutoAccept(queue, rules, autoAcceptContext(queue), { ids });
+}
 /** Does the source path exist under the source root? Never outside the root (queuePlan.sourcePathError already rejected .. and absolute paths). */
 function existsSource(filePath) {
   const full = path.resolve(SOURCE_ROOT, filePath);
@@ -2424,8 +2461,18 @@ if (command === 'init') {
       delete rest.phase;
       queue.projects[pid] = rest;
     }
+    // Auto-accept (default off): the new proposals that fit the owner's rules are approved in the same write.
+    const autoAccepted = autoAcceptIn(
+      queue,
+      result.filter((r) => r.status === 'proposed').map((r) => r.id),
+    );
+    for (const x of autoAccepted) {
+      const r = result.find((y) => y.id === x.id);
+      if (r) r.status = 'waiting';
+    }
     return {
       result,
+      autoAccepted,
       missing,
       question: sp.set,
       withoutText,
@@ -2437,6 +2484,8 @@ if (command === 'init') {
   const waiting = added.result.filter((r) => r.status === 'waiting').map((r) => r.id);
   const proposed = added.result.filter((r) => r.status === 'proposed').map((r) => r.id);
   if (waiting.length) console.log(`Added: ${waiting.join(', ')}`);
+  for (const x of added.autoAccepted)
+    console.log(`Auto-accepted ${x.id} by the owner's rules (${x.reason}); undo: ${CQ} proposals undo ${x.id}`);
   if (proposed.length)
     console.log(
       `Added as proposed (not started until the orchestrator or the owner approves: cq approve <id...>): ${proposed.join(', ')}`,
@@ -2947,6 +2996,87 @@ if (command === 'init') {
     return answer;
   });
   console.log(`Approved (waiting now): ${r.approved.join(', ')}`);
+} else if (command === 'forecast') {
+  // ---- Monte Carlo forecast: when are the remaining tasks done (lib/queueForecast.js) ----
+  const days = a.includes('--days') ? Number(val('--days')) : FC.WINDOW_DAYS;
+  if (!Number.isInteger(days) || days < 1 || days > 365) die('--days must be a whole number 1-365');
+  const project = a.includes('--project') ? val('--project') : null;
+  if (a.includes('--project') && (!project || project.startsWith('--')))
+    die('--project requires a project id (cq projects)');
+  const queue = read();
+  if (project && project !== L.WITHOUT_PROJECT && !Object.hasOwn(queue.projects ?? {}, project))
+    die(`Unknown project ${project} (cq projects).`);
+  // QUEUE_FORECAST_SEED gives a fixed random sequence (tests); otherwise Math.random.
+  const seed = process.env.QUEUE_FORECAST_SEED;
+  const f = FC.queueForecast(queue, {
+    project,
+    days,
+    rng: seed ? FC.seededRandom(Number(seed)) : undefined,
+  });
+  if (a.includes('--json')) console.log(JSON.stringify(f, null, 2));
+  else console.log(FC.forecastText(f));
+} else if (command === 'proposals') {
+  // ---- Auto-accept of agent proposals by the owner's rules (lib/queueProposals.js) ----
+  const [under, arg] = positional(1, ['--classes', '--max-estimate', '--max-value', '--max']);
+  const showRules = (queue) => {
+    const rules = autoAcceptRules(queue);
+    const ctx = { ...autoAcceptContext(queue), undone: PR.undoneIds(queue) };
+    const fit = (queue.tasks ?? []).filter(
+      (o) => o.status === 'proposed' && PR.autoAcceptDecision(o, { ...rules, enabled: true }, ctx).accept,
+    );
+    console.log(`Auto-accept of proposals: ${PR.rulesText(rules)}.`);
+    console.log(
+      `${fit.length} proposal(s) fit the rules now${fit.length ? `: ${fit.map((o) => o.id).join(', ')}` : ''}` +
+        (rules.enabled ? ' (accepted at the next orchestrator pulse).' : ' (nothing is accepted while it is off).'),
+    );
+    console.log(
+      'Never D or D+, never with waiting_on, legal/owner labels, a plan entry with open legal points or protected paths.',
+    );
+  };
+  if (!under || (under === 'auto' && !arg && !['--classes', '--max-estimate', '--max-value'].some((f) => a.includes(f)))) {
+    showRules(read());
+  } else if (under === 'auto') {
+    const change = {};
+    if (arg) {
+      if (arg !== 'on' && arg !== 'off') die('proposals auto [on|off] [--classes K,U] [--max-estimate <min|none>] [--max-value <1-10|none>]');
+      change.enabled = arg === 'on';
+    }
+    if (a.includes('--classes')) {
+      const v = String(val('--classes') ?? '');
+      change.classes = v === 'none' ? [] : v.split(',').map((x) => x.trim()).filter(Boolean);
+    }
+    for (const [flag, field] of [
+      ['--max-estimate', 'maxEstimateMin'],
+      ['--max-value', 'maxValue'],
+    ])
+      if (a.includes(flag)) {
+        const v = String(val(flag) ?? '');
+        change[field] = v === 'none' || v === 'off' ? null : /^\d+$/.test(v) ? Number(v) : v;
+      }
+    const error = PR.rulesError(change);
+    if (error.length) die(`Nothing changed:\n  ${error.join('\n  ')}`);
+    edit((queue) => {
+      const own = queue.proposals?.autoAccept ?? {};
+      queue.proposals = { ...(queue.proposals ?? {}), autoAccept: { ...own, ...change } };
+    });
+    showRules(read());
+  } else if (under === 'log') {
+    const queue = read();
+    if (a.includes('--json')) console.log(JSON.stringify(queue.auto_accepted ?? [], null, 2));
+    else {
+      const lines = PR.logLines(queue, { max: Number(val('--max')) || 50 });
+      console.log(lines.length ? lines.join('\n') : 'Nothing has been auto-accepted.');
+    }
+  } else if (under === 'undo') {
+    if (!arg) die('proposals undo <id>');
+    edit((queue) => {
+      const f = PR.undoAutoAccept(queue, arg);
+      if (f) die(`Nothing changed: ${f}.`);
+    });
+    console.log(`${arg} is back to proposed (cq approve ${arg} approves it by hand). It is never auto-accepted again.`);
+  } else {
+    die('proposals [auto [on|off] [--classes K,U] [--max-estimate <min|none>] [--max-value <1-10|none>] | log [--json] | undo <id>]');
+  }
 } else if (command === 'limit') {
   const [, name, raw] = a;
   if (name) {
@@ -4445,6 +4575,17 @@ if (command === 'init') {
       );
     // Adoption: report.md files that came since the last pulse (an adopted track does not notify this session).
     deliveryWarning({ update: true });
+    // Auto-accept (default off): older proposals that fit the owner's rules now. Only written when something is accepted.
+    if (autoAcceptRules(read()).enabled) {
+      const acc = withLock(() => {
+        const queue = read();
+        const r = autoAcceptIn(queue);
+        if (r.length) write(queue);
+        return r;
+      });
+      for (const x of acc)
+        console.log(`Auto-accepted ${x.id} by the owner's rules (${x.reason}); undo: ${CQ} proposals undo ${x.id}`);
+    }
     // Tracks fill marked running whose agent was never started (fill run where nobody read the output).
     for (const l of L.withoutAgentLines(findWithoutAgent(read()))) console.log(l);
     // Follow up: the pulse repeats due entries every time, until the report is written (cq follow report).

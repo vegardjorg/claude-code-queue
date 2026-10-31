@@ -47,6 +47,7 @@ a track adding a proposal) cannot corrupt the file. `cq undo` undoes the last ch
 
 Status flow: `proposed` → `waiting` (approved, ready to run) → `running` → `review` → `done`, or `cancelled`. Tasks
 added by an agent start as `proposed` and need `approve`; tasks the owner or the orchestrator adds start as `waiting`.
+With [auto-accept](#auto-accept-of-proposals) on, the queue approves the proposals that fit the owner's rules itself.
 
 ## Everyday commands
 
@@ -55,6 +56,8 @@ added by an agent start as `proposed` and need `approve`; tasks the owner or the
 | `init` | Creates an empty queue (run once per project) |
 | `add --file task.json` / `add --json '{…}'` | Adds one task or a list |
 | `approve <id>` | Approves a proposal |
+| `proposals [auto [on\|off] …]` / `proposals log` / `proposals undo <id>` | Auto-accept of proposals by the owner's rules (default off) / what was auto-accepted / back to proposed (see below) |
+| `forecast [--project <pid>] [--days 28] [--json]` | When the remaining tasks are done at 50, 85 and 95 % (Monte Carlo, see below) |
 | `show` / `show --full` | Short view (under about 3,000 characters) / full table |
 | `next` | What can start now, without changing anything |
 | `fill --scratchpad <dir>` | Starts as many tasks as the limits allow and writes the mission prompts |
@@ -80,6 +83,40 @@ added by an agent start as `proposed` and need `approve`; tasks the owner or the
 | `qa` / `qa ok <id…>` / `qa deviation <id> "…"` | The QA list (split into what to look at, a manual round and auto entries) / the owner approves / the owner finds a deviation (fix task `<id>-QA<n>`) |
 | `qa evidence <id> <type>[=<ref>]` / `qa auto [--run]` | Sets the QA evidence by hand (`receive` reads the `EVIDENCE` line in `report.md`) / runs `qa.autoCommand` for auto evidence and closes the green entries |
 | `follow [add\|log\|show\|report\|close\|extend]` | Follow-up entries: observations with a start, an end, goals, a log and a fixed report template (see below) |
+
+### Forecast
+
+`cq forecast` answers "when will the remaining tasks be done?" in one paragraph, for example: `Focus "X": 14 tasks
+left. 50 %: by Tue 4 Nov (4 days), 85 %: Thu 6 Nov, 95 %: Fri 7 Nov. Based on 31 done in the last 28 days. Expected
+cost about 42 USD.` The remaining tasks are the open ones in the current focus stages (with the dependencies they pull
+along) when a focus applies, otherwise every waiting, running, picked and review task; proposals, the done and the
+cancelled never count. `--project <pid>` narrows it to one project. The method is Monte Carlo: each of 2000 runs draws
+a day's throughput (done per calendar day in the last `--days` days, zero days included) with replacement until the
+remaining count is reached, and the 50/85/95 % answers are the day counts that share of runs finished within (day 1 is
+today). The expected cost is the remaining count times the median measured cost (`cost.usd`) per done task in the
+window, left out when nothing has a measured cost. With fewer than 5 done in the window it says "not enough data".
+The throughput is the whole queue's, also with `--project`. The board shows the same paragraph in the Focus view and
+in Statistics. The logic is `lib/queueForecast.js`.
+
+### Auto-accept of proposals
+
+Default off. With it on, a proposal that fits the owner's rules is approved by the queue itself, through the same path
+as `cq approve`: when it is added (`cq add`) and, for older ones, at every `cq orchestrator pulse`. Each one gets a
+remark and a row in the log (`auto_accepted` in queue.json, the last 200), and `cq proposals undo <id>` puts it back to
+proposed as long as it has not been started; an undone task is never auto-accepted again.
+
+- `cq proposals` shows the rules and which proposals fit them now.
+- `cq proposals auto on|off [--classes K,U] [--max-estimate <min|none>] [--max-value <1-10|none>]` sets the rules in
+  queue.json (`proposals.autoAccept`), which win over the config default (`proposals.autoAccept` in
+  queue.config.json: `{ enabled: false, classes: ["K"], maxEstimateMin: 60, maxValue: null }`). The estimate is
+  content_min times the class weight.
+- `cq proposals log [--json]` lists what was auto-accepted, newest first.
+
+The hard rules no setting overrides: never class D or D+, never a task with `waiting_on`, never one with a legal or
+owner label (`legal`, `lawyer`, `owner`, `owner-task`, `privacy`, `dpia`, or any label starting with `legal` or
+`owner`) or linked to a plan entry with open legal points, never one that owns a protected path (`protectedPaths`,
+the merge guard's list, also through a folder it owns as a whole), and never one whose auto-accept was undone. The
+board's gear has the switch, the rules and the log with an Undo button per row. The logic is `lib/queueProposals.js`.
 
 ### Follow-up entries
 
@@ -142,6 +179,7 @@ reviewer agents per class. Missing values fall back to safe defaults.
 | `cloudHidden` | `[]` | Paths a cloud session cannot see (missions pointing there are stopped) |
 | `capacity` | Tuesday 19:00 local time | Weekly quota reset for `cq capacity` |
 | `loadGuard.minFreeMemoryPct` | `null` (off) | Load guard: no new starts while free memory (percent) is below it; `cq limit minFreeMemoryPct` overrides per queue |
+| `proposals.autoAccept` | `{ enabled: false, classes: ["K"], maxEstimateMin: 60, maxValue: null }` | Auto-accept of agent proposals by the owner's rules (`cq proposals`); the queue's own rules win; never D/D+, `waiting_on`, legal/owner labels, open legal points or protected paths |
 | `qa.evidenceTypes`, `qa.autoTypes`, `qa.manualTypes` | `screenshot`, `test`, `manual`; auto `test`; manual `manual` | QA evidence types a track writes as `EVIDENCE <type>[=<ref>]`; auto types are closed by `qa auto --run`, manual ones gathered in one round |
 | `qa.autoCommand` | `null` | Shell command for auto evidence, e.g. `npx vitest run {refs}` (`{refs}`, `{id}`; or `{ "<type>": "<command>" }`); `null` = `qa auto` only lists |
 | `qa.evidenceLabels` | `["visual"]` | Labels for which `receive` warns when the `EVIDENCE` line is missing |

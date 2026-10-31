@@ -3183,6 +3183,10 @@
             )
           : null,
       ),
+      // The forecast (lib/queueForecast.js, the same as `cq forecast` and the box in Focus).
+      ...(d.forecast?.text
+        ? [el('p', { class: 'stat-forecast', text: `Forecast: ${d.forecast.text}` })]
+        : []),
       el('div', { class: 'graphs' }, graph1, graphInOut, graph2, graph3, graph4),
       // The legend for the classes and badges (same as in the help).
       legend('stat'),
@@ -3269,6 +3273,7 @@
           el('h3', { id: 'setting-queue', class: 'setting-title', text: 'The queue' }),
           d.field.map((f) => settingField(f, d)),
         ),
+        autoAcceptSection(d.autoAccept),
         undoSection(),
         el(
           'section',
@@ -3628,6 +3633,155 @@
       el('p', { class: 'setting-meta', text: meta }),
       error,
     );
+  }
+
+  /**
+   * "Auto-accept proposals": the switch and the rules (classes, max estimate, max value), saved together with
+   * /api/proposals (= `cq proposals auto ...`), and the log with an Undo button per row (/api/proposals-undo =
+   * `cq proposals undo <id>`). The hard rules (never D or D+, owner questions, legal, protected paths) are not settings.
+   */
+  function autoAcceptSection(a) {
+    if (!a?.rules) return null;
+    const r = a.rules;
+    const error = el('p', { id: 'aa-error', class: 'setting-error', role: 'alert', hidden: true });
+    const enabled = el('input', {
+      id: 'aa-enabled',
+      type: 'checkbox',
+      role: 'switch',
+      class: 'switch',
+      checked: r.enabled,
+      'aria-describedby': 'aa-help',
+    });
+    const classes = (a.allowedClasses ?? ['K', 'U']).map((k) =>
+      el('input', { id: `aa-class-${k}`, type: 'checkbox', value: k, checked: r.classes.includes(k) }),
+    );
+    const number = (id, v) =>
+      el('input', {
+        id,
+        type: 'text',
+        inputmode: 'numeric',
+        autocomplete: 'off',
+        value: v == null ? '' : String(v),
+        placeholder: 'no cap',
+        'aria-describedby': 'aa-help',
+      });
+    const maxEstimate = number('aa-max-estimate', r.maxEstimateMin);
+    const maxValue = number('aa-max-value', r.maxValue);
+    const save = el('button', {
+      type: 'button',
+      id: 'aa-save',
+      class: 'button button-muted',
+      text: 'Save',
+      'aria-label': 'Save the auto-accept rules',
+      onclick: () => saveAutoAccept({ enabled, classes, maxEstimate, maxValue }, error),
+    });
+    const log = Array.isArray(a.log) ? a.log : [];
+    return el(
+      'section',
+      { class: 'setting auto-accept', 'aria-labelledby': 'setting-auto-accept' },
+      el('h3', { id: 'setting-auto-accept', class: 'setting-title', text: 'Auto-accept proposals' }),
+      el('p', {
+        id: 'aa-help',
+        class: 'setting-explanation',
+        text:
+          'Proposals from agents that fit these rules are approved by the queue itself (when added, and at the ' +
+          'orchestrator pulse) and logged below, where you can undo them. Empty max = no cap. Never D or D+, never a ' +
+          'task waiting on you, with a legal or owner label, a plan entry with open legal points, or protected paths, ' +
+          'whatever is set here.',
+      }),
+      el(
+        'div',
+        { class: 'setting-field' },
+        el(
+          'div',
+          { class: 'helper-head' },
+          enabled,
+          el('label', { for: 'aa-enabled', text: 'Auto-accept proposals' }),
+        ),
+        el(
+          'fieldset',
+          { class: 'aa-classes' },
+          el('legend', { text: 'Classes' }),
+          classes.map((box) => el('label', { for: box.id }, box, ` ${box.value}`)),
+        ),
+        el('label', { for: 'aa-max-estimate', text: 'Max estimate (minutes)' }),
+        el('div', { class: 'setting-control' }, maxEstimate),
+        el('label', { for: 'aa-max-value', text: 'Max value (1-10)' }),
+        el('div', { class: 'setting-control' }, maxValue, save),
+        el('p', {
+          class: 'setting-meta',
+          text: `now: ${r.enabled ? 'on' : 'off'} · classes ${r.classes.join(', ') || 'none'} · default: off, K, 60 min`,
+        }),
+        error,
+      ),
+      el('h4', { class: 'aa-log-title', text: 'Auto-accepted' }),
+      log.length
+        ? el(
+            'ul',
+            { class: 'aa-log', 'aria-label': 'Auto-accepted proposals' },
+            log.map((x) =>
+              el(
+                'li',
+                { class: 'aa-row', 'data-id': x.id },
+                el('span', {
+                  class: 'aa-row-text',
+                  text:
+                    `${x.id}${x.title ? ` ${x.title}` : ''}: ${x.reason} (${age(x.at)} ago)` +
+                    (x.undone ? ', undone' : ''),
+                }),
+                x.canUndo
+                  ? el('button', {
+                      type: 'button',
+                      class: 'button button-outline button-small',
+                      text: 'Undo',
+                      'aria-label': `Undo the auto-accept of ${x.id}`,
+                      onclick: () => undoAutoAccept(x.id, error),
+                    })
+                  : null,
+              ),
+            ),
+          )
+        : el('p', { class: 'empty', text: 'Nothing has been auto-accepted.' }),
+    );
+  }
+
+  async function saveAutoAccept(c, errorEl) {
+    errorEl.hidden = true;
+    // Empty = no cap (null); anything else goes as a number, and queue.mjs validates it.
+    const num = (s) => {
+      const v = String(s ?? '').trim();
+      return v === '' ? null : Number(v);
+    };
+    try {
+      const answer = await writeWithGuard('/api/proposals', {
+        enabled: c.enabled.checked,
+        classes: c.classes.filter((b) => b.checked).map((b) => b.value),
+        maxEstimateMin: num(c.maxEstimate.value),
+        maxValue: num(c.maxValue.value),
+      });
+      if (!answer) return;
+      messageWithInfo('Auto-accept: saved', answer);
+      await getSettings();
+      $('aa-save')?.focus();
+    } catch (e) {
+      errorEl.textContent = e.message;
+      errorEl.hidden = false;
+    }
+  }
+
+  async function undoAutoAccept(id, errorEl) {
+    errorEl.hidden = true;
+    try {
+      const answer = await writeWithGuard('/api/proposals-undo', { id });
+      if (!answer) return;
+      messageWithInfo(`${id}: back to proposed`, answer);
+      await getSettings();
+      update(true);
+      $('aa-enabled')?.focus();
+    } catch (e) {
+      errorEl.textContent = e.message;
+      errorEl.hidden = false;
+    }
   }
 
   async function saveLimit(f, val, errorEl) {

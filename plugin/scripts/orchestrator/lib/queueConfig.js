@@ -128,6 +128,13 @@ const STANDARD = Object.freeze({
   loadGuard: {
     minFreeMemoryPct: null,
   },
+  // Auto-accept of agent proposals (lib/queueProposals.js): a proposal that fits the rules is approved by the queue
+  // itself (in `queue.mjs add` and `orchestrator pulse`), logged and can be undone. Default off. `queue.mjs proposals
+  // auto` and the board's gear write the queue's own rules (queue.json proposals.autoAccept), which win field by field.
+  // Never D or D+, never with waiting_on, legal/owner labels, open legal points or protected paths, whatever is set here.
+  proposals: {
+    autoAccept: { enabled: false, classes: ['K'], maxEstimateMin: 60, maxValue: null },
+  },
   // QA evidence: how the owner (or the queue itself) sees that a delivery works. A track writes one line
   // `EVIDENCE <type>[=<ref>[,<ref>...]]` in report.md, and `queue.mjs receive` stores it on the task (field `evidence`).
   qa: {

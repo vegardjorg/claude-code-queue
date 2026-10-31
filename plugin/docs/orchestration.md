@@ -180,6 +180,8 @@ started them. A new session adopts them without that notification:
 - **The signal:** `report.md` in the track folder (`<scratch>/<ID>/`, or `<scratch>/<ID>-r<N>/` for a fix round) with
   the `RESULT status=DONE|PARTIAL …` line as its first line. `queue-takeover.mjs` classifies the task DELIVERED on it;
   the old heuristic (commits, clean worktree, 20 min) is the fallback.
+- **`cq orchestrator pulse`** also applies [auto-accept](queue.md#auto-accept-of-proposals) to older proposals when
+  the owner has turned it on (default off), with one `Auto-accepted <ID>` line each.
 - **`cq orchestrator pulse`** prints `NEW DELIVERY (report.md): <ID> …` once per report (the task remembers it in
   `report_seen`), and **`cq deliveries [--json]`** lists every report that is not received yet. `cq receive <ID>`
   reads the newest report, also from a fix round folder, and saves `report_received`.
